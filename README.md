@@ -4,6 +4,8 @@
 
 CloudClub 출석체크 시스템은 Google Sheets와 Apps Script를 활용한 실시간 출석 관리 웹 애플리케이션입니다. 학생들이 휴대폰 번호를 통해 간편하게 출석 체크를 할 수 있으며, 관리자는 Google Sheets에서 모든 데이터를 실시간으로 확인하고 관리할 수 있습니다.
 
+기술문서는 [이곳](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/TECH_DOCS.md)을 참고하실 수 있습니다.
+
 ### 주요 특징
 - **실시간 출석 체크**: 30분 제한 시간이 있는 출석 세션
 - **자동 순위 시스템**: 출석률과 평균 체크인 시간 기반 랭킹
