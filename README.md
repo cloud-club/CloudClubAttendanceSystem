@@ -53,25 +53,32 @@ Google Sheets에서 다음과 같은 구조로 테이블을 생성하세요:
 
 ### 2. Google Apps Script 설정
 
-1. Google Sheets에서 **확장 프로그램 > Apps Script** 메뉴를 클릭합니다.
+0. Google Sheets에서, 아래 형식에 맞춘 테이블을 생성합니다.
+- [Cloud Club User DB](https://docs.google.com/spreadsheets/d/1nEBZz96gm4F5YYnX_7y_9IIt0d3pBqBv6C--goZuJM8/edit?gid=753952759#gid=753952759)
 
-2. 기본 생성된 `Code.gs` 파일의 내용을 모두 삭제하고, 저장소의 `Code.gs` 파일 내용을 그대로 붙여넣습니다.
+1. Google Sheets에서 **확장 프로그램 > Apps Script** 메뉴를 클릭합니다.
+    ![alt text](/images/image.png)
+
+2. 기본 생성된 `Code.gs` 파일의 내용을 모두 삭제하고, 저장소의 [Code.gs](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/Code.gs) 파일 내용을 그대로 붙여넣습니다.
 
 3. 새 파일을 추가합니다:
    - **파일 > 새로 만들기 > 스크립트 파일**을 클릭
    - 파일명을 `fortune`으로 입력
-   - 저장소의 `fortune.gs` 파일 내용을 그대로 붙여넣습니다.
+   - 저장소의 [fortune.gs](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/fortune.gs) 파일 내용을 그대로 붙여넣습니다.
 
 4. 새 파일을 추가합니다:
    - **파일 > 새로 만들기 > HTML 파일**을 클릭
    - 파일명을 `Index`로 입력
-   - 저장소의 `Index.html` 파일 내용을 그대로 붙여넣습니다.
+   - 저장소의 [Index.html](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/Index.html) 파일 내용을 그대로 붙여넣습니다.
+   - 이 과정까지 완료되면 Google Apps Script 편집기에서 `Code.gs`, `fortune.gs`, `Index.html` 파일이 모두 생성되어 있어야 합니다.
+   ![alt text](/images/image-1.png)
 
 5. **배포 > 새 배포**를 클릭합니다:
    - 유형: **웹 앱**
    - 실행 권한: **나**
    - 액세스 권한: **모든 사용자**
    - **배포** 버튼 클릭
+   ![alt text](/images/image-2.png)
 
 6. 권한 승인:
    - **권한 검토** 클릭
@@ -107,6 +114,8 @@ Google Sheets에서 다음과 같은 구조로 테이블을 생성하세요:
 | 홍길동 | 1기 | 010-1234-5678 | 2024-03-15 14:05:23 | | |
 | 김철수 | 2기 | 010-9876-5432 | | 2024-03-22 14:03:15 | |
 | 이영희 | 1기 | 010-1111-2222 | 2024-03-15 14:02:10 | 2024-03-22 14:01:45 | |
+
+![alt text](/images/image-3.png)
 
 **세션 생성 단계:**
 
@@ -147,6 +156,7 @@ Google Sheets에서 다음과 같은 구조로 테이블을 생성하세요:
 
 1. **관리자** 탭에서 현재 활성화된 시트를 선택할 수 있습니다.
 2. 여러 기수나 그룹을 위해 다른 시트를 생성하고 전환할 수 있습니다.
+![alt text](/images/image-4.png)
 
 ### QR 코드 생성
 
@@ -163,6 +173,7 @@ Google Sheets에서 다음과 같은 구조로 테이블을 생성하세요:
    - 출석률 = (출석한 세션 수 / 전체 진행된 세션 수) × 100
 2. **2차 기준**: 평균 체크인 시간 (빠른 순)
    - 세션 시작 시간부터 실제 체크인까지의 평균 시간
+![alt text](/images/image-5.png)
 
 ### 운세 기능
 
