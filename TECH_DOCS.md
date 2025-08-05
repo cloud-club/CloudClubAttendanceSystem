@@ -7,17 +7,31 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 ## 시스템 아키텍처
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Index.html    │◄──►│    Code.gs      │◄──►│ Google Sheets   │
-│  (프론트엔드)     │    │  (백엔드 로직)    │    │   (데이터베이스)  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌─────────────────┐
-                       │   fortune.gs    │
-                       │   (유틸리티)      │
-                       └─────────────────┘
+    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+    │ AdminInterface  │◄──►│    Code.gs      │◄──►│ Google Sheets   │
+    │   (관리자 UI)     │    │  (백엔드 로직)    │    │   (데이터베이스)  │
+    └─────────────────┘    └─────────────────┘    └─────────────────┘
+                                  │                         ▲
+┌──────────────────────────────────┼─────────────────────────┤
+│                                  ▼                         │
+│   ┌─────────────────┐    ┌─────────────────┐              │
+│   │StudentInterface │◄──►│ Season-specific │              │
+│   │   (학생 UI)      │    │   functions     │              │
+│   └─────────────────┘    └─────────────────┘              │
+│                                  │                         │
+└──────────────────────────────────┼─────────────────────────┘
+                                   ▼
+                            ┌─────────────────┐
+                            │   fortune.gs    │
+                            │   (유틸리티)      │
+                            └─────────────────┘
 ```
+
+### 새로운 이중 인터페이스 시스템
+- **AdminInterface.html**: 관리자용 전체 기능 (QR 코드 생성, 시트 관리, 모든 출석 기능)
+- **StudentInterface.html**: 학생용 제한된 기능 (출석하기, 출석현황만)
+- **URL 매개변수 라우팅**: `?mode=student&season=시트명`으로 인터페이스 분리
+- **시즌 기반 독립 처리**: 각 시즌의 QR 코드가 해당 시트 데이터만 처리
 
 ---
 
@@ -25,14 +39,28 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 
 ### 1. 웹 애플리케이션 진입점
 
-#### `doGet()`
-**목적**: Google Apps Script 웹앱의 진입점 함수
+#### `doGet(e)`
+**목적**: URL 매개변수 기반 라우팅을 지원하는 웹앱 진입점
 **로직**:
-- `HtmlService.createHtmlOutputFromFile('Index')`로 Index.html 파일을 웹페이지로 렌더링
-- 메타태그와 XFrame 옵션을 설정하여 반응형 웹 지원 및 보안 설정
-- 모든 HTTP GET 요청에 대해 자동으로 호출됨
+```javascript
+1. e.parameter.mode 확인하여 인터페이스 결정
+2. mode=student인 경우:
+   - StudentInterface.html 템플릿 로드
+   - season 매개변수를 템플릿에 전달
+   - 학생용 제목과 메타태그 설정
+3. mode가 없거나 다른 값인 경우:
+   - AdminInterface.html 로드
+   - 관리자용 전체 기능 제공
+4. 반응형 웹 지원을 위한 viewport 메타태그 설정
+```
 
-**구현 이유**: Google Apps Script에서 웹앱을 배포할 때 반드시 필요한 표준 진입점
+**매개변수**:
+- `mode`: 'student' 또는 기본값(관리자)
+- `season`: 시즌명(시트명), 학생 모드에서만 사용
+
+**구현 이유**: 
+- 보안 강화: 학생이 관리자 기능에 접근하지 못하도록 인터페이스 분리
+- 시즌별 독립성: 각 시즌 QR 코드가 해당 시트 데이터만 처리하도록 격리
 
 ---
 
@@ -71,7 +99,7 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 - 데이터 영속성을 위한 PropertiesService 활용
 
 #### `getActiveAttendanceSheet()`
-**목적**: 현재 활성화된 시트 객체를 반환하는 유틸리티 함수
+**목적**: 관리자용 현재 활성화된 시트 객체를 반환하는 유틸리티 함수
 **로직**:
 ```javascript
 1. PropertiesService에서 활성 시트명 조회
@@ -80,18 +108,57 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 ```
 
 **구현 이유**: 
-- 다른 함수들에서 공통으로 사용하는 시트 접근 로직을 중앙화
+- 관리자 인터페이스에서 공통으로 사용하는 시트 접근 로직을 중앙화
 - 코드 중복 제거 및 일관성 있는 시트 접근 보장
+
+#### `getSeasonSheet(seasonName)`
+**목적**: 학생용 시즌별 시트 객체를 반환하는 유틸리티 함수
+**로직**:
+```javascript
+1. seasonName이 없으면 관리자 활성 시트 반환 (후방 호환성)
+2. seasonName으로 해당 시트 검색
+3. 시트가 존재하지 않으면 에러 발생
+4. 유효한 시트 객체 반환
+```
+
+**매개변수**:
+- `seasonName`: 시즌명(시트명)
+
+**구현 이유**: 
+- 시즌별 독립적인 데이터 처리를 위한 시트 격리
+- 학생용 인터페이스에서 특정 시즌 데이터만 접근하도록 보장
+- URL 매개변수로 전달된 시즌과 실제 시트 데이터를 매핑
 
 ---
 
 ### 3. 출석 세션 관리
 
-#### `getAttendanceSession()`
-**목적**: 현재 진행 중인 출석 세션 정보를 클라이언트에 제공
+#### `getAttendanceSession()` (관리자용)
+**목적**: 관리자용 현재 진행 중인 출석 세션 정보를 제공
 **로직**:
 ```javascript
-1. 활성 시트의 헤더 행 (1행) 전체를 배열로 읽음
+1. getActiveAttendanceSheet()로 관리자 활성 시트 조회
+2. getAttendanceSessionFromSheet()로 세션 정보 추출
+```
+
+#### `getSeasonAttendanceSession(seasonName)` (학생용)
+**목적**: 시즌별 출석 세션 정보를 제공 (학생용 독립 처리)
+**로직**:
+```javascript
+1. getSeasonSheet(seasonName)으로 시즌별 시트 조회
+2. 시트가 없으면 에러 메시지 반환
+3. getAttendanceSessionFromSheet()로 세션 정보 추출
+4. currentSheet에 seasonName 설정하여 반환
+```
+
+**매개변수**:
+- `seasonName`: 시즌명(시트명)
+
+#### `getAttendanceSessionFromSheet(sheet)` (공통 로직)
+**목적**: 특정 시트에서 출석 세션 정보를 추출하는 공통 함수
+**로직**:
+```javascript
+1. 시트의 헤더 행 (1행) 전체를 배열로 읽음
 2. D열(4번째 컬럼)부터 순회하며 날짜 형식 헤더 검색
 3. 정규표현식 /(\d{4})-(\d{2})-(\d{2})-(\d{2}):(\d{2})/로 헤더 파싱
 4. 현재 시간이 [세션 시작시간, 세션 시작시간 + 30분] 범위 내인지 확인
@@ -110,16 +177,39 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 ```
 
 **구현 이유**:
+- 시즌별 독립적인 세션 처리로 데이터 격리 보장
+- 관리자/학생 인터페이스 공통 로직을 중앙화하여 코드 중복 제거
 - 클라이언트에서 실시간 카운트다운 타이머 구현을 위한 정확한 종료 시간 제공
-- 30분 제한 정책을 서버 사이드에서 엄격하게 관리
-- Unix 타임스탬프 사용으로 클라이언트-서버 간 시간 동기화 문제 해결
 
 ---
 
 ### 4. 출석 처리 시스템
 
-#### `markAttendance(phoneNumber)`
-**목적**: 학생의 출석을 처리하는 핵심 비즈니스 로직
+#### `markAttendance(phoneNumber)` (관리자용)
+**목적**: 관리자용 출석 처리 함수
+**로직**:
+```javascript
+1. 입력 검증
+2. getActiveAttendanceSheet()로 관리자 활성 시트 조회
+3. markAttendanceInSheet()로 실제 출석 처리
+```
+
+#### `markSeasonAttendance(phoneNumber, seasonName)` (학생용)
+**목적**: 시즌별 독립적인 출석 처리 함수 (학생용)
+**로직**:
+```javascript
+1. 전화번호와 시즌명 입력 검증
+2. getSeasonSheet(seasonName)으로 시즌별 시트 조회
+3. 시트가 없으면 에러 메시지 반환
+4. markAttendanceInSheet()로 실제 출석 처리
+```
+
+**매개변수**:
+- `phoneNumber`: 학생 전화번호
+- `seasonName`: 시즌명(시트명)
+
+#### `markAttendanceInSheet(phoneNumber, sheet)` (공통 로직)
+**목적**: 특정 시트에서 출석을 처리하는 핵심 비즈니스 로직
 **로직**:
 
 **1단계: 입력 검증**
@@ -192,8 +282,30 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 
 ### 5. 출석 조회 시스템
 
-#### `getAttendanceStatus(phoneNumber)`
-**목적**: 특정 사용자의 출석 현황을 상세히 조회
+#### `getAttendanceStatus(phoneNumber)` (관리자용)
+**목적**: 관리자용 출석 현황 조회
+**로직**:
+```javascript
+1. 입력 검증
+2. getActiveAttendanceSheet()로 관리자 활성 시트 조회
+3. getAttendanceStatusFromSheet()로 출석 현황 추출
+```
+
+#### `getSeasonAttendanceStatus(phoneNumber, seasonName)` (학생용)
+**목적**: 시즌별 출석 현황 조회 (학생용 독립 처리)
+**로직**:
+```javascript
+1. 전화번호와 시즌명 입력 검증
+2. getSeasonSheet(seasonName)으로 시즌별 시트 조회
+3. getAttendanceStatusFromSheet()로 출석 현황 추출
+```
+
+**매개변수**:
+- `phoneNumber`: 조회할 전화번호
+- `seasonName`: 시즌명(시트명)
+
+#### `getAttendanceStatusFromSheet(phoneNumber, sheet)` (공통 로직)
+**목적**: 특정 시트에서 사용자의 출석 현황을 상세히 조회
 **로직**:
 
 **1단계: 사용자 식별**
@@ -246,8 +358,28 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 
 ### 6. 순위 시스템
 
-#### `getAttendanceRanking()`
-**목적**: 모든 학생의 출석률 기반 순위를 계산하고 반환
+#### `getAttendanceRanking()` (관리자용)
+**목적**: 관리자용 출석률 순위 계산
+**로직**:
+```javascript
+1. getActiveAttendanceSheet()로 관리자 활성 시트 조회
+2. getAttendanceRankingFromSheet()로 순위 계산
+```
+
+#### `getSeasonAttendanceRanking(seasonName)` (학생용)
+**목적**: 시즌별 출석률 순위 계산 (학생용 독립 처리)
+**로직**:
+```javascript
+1. 시즌명 입력 검증
+2. getSeasonSheet(seasonName)으로 시즌별 시트 조회
+3. getAttendanceRankingFromSheet()로 순위 계산
+```
+
+**매개변수**:
+- `seasonName`: 시즌명(시트명)
+
+#### `getAttendanceRankingFromSheet(sheet)` (공통 로직)
+**목적**: 특정 시트에서 모든 학생의 출석률 기반 순위를 계산하고 반환
 **로직**:
 
 **1단계: 유효한 세션 식별**
@@ -326,13 +458,43 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 - 서버 요청 전에 기본적인 유효성 검사로 사용자 경험 향상
 
 #### `getQRCodeUrl()`
-**목적**: 현재 웹앱의 공개 URL을 반환
+**목적**: 현재 웹앱의 공개 URL을 반환 (기본 관리자 URL)
 **로직**:
 - `ScriptApp.getService().getUrl()`로 배포된 웹앱의 URL 반환
 
+#### `generateStudentQRCodeUrl(seasonName)`
+**목적**: 시즌별 학생용 QR 코드 URL을 생성
+**로직**:
+```javascript
+1. ScriptApp.getService().getUrl()로 기본 URL 조회
+2. mode=student&season={seasonName} 매개변수 추가
+3. encodeURIComponent()로 URL 안전한 형태로 인코딩
+4. 완성된 학생용 URL 반환
+```
+
+**매개변수**:
+- `seasonName`: 시즌명(시트명)
+
+**반환값**: `https://script.google.com/...?mode=student&season=시트명`
+
+#### `generateQRCodeImageUrl(seasonName)`
+**목적**: Google Charts API를 사용하여 QR 코드 이미지 URL을 생성
+**로직**:
+```javascript
+1. generateStudentQRCodeUrl()로 학생용 URL 생성
+2. Google Charts QR 코드 API URL 구성
+3. 300x300 크기의 QR 코드 이미지 URL 반환
+```
+
+**매개변수**:
+- `seasonName`: 시즌명(시트명)
+
+**반환값**: Google Charts API QR 코드 이미지 URL
+
 **구현 이유**: 
-- 관리자 페이지에서 QR 코드 생성을 위한 URL 제공
-- 모바일 기기에서 쉬운 접근을 위한 QR 코드 활용
+- 시즌별 독립적인 QR 코드 생성으로 데이터 격리 보장
+- 관리자가 각 시즌별로 전용 QR 코드를 생성할 수 있도록 지원
+- 학생들이 해당 시즌 데이터에만 접근하도록 URL 매개변수 활용
 
 #### `parseAttendanceTime(value)`
 **목적**: 다양한 형식의 출석 시간 데이터를 표준 Date 객체로 변환
@@ -352,11 +514,26 @@ CloudClub 출석체크 시스템은 Google Apps Script와 Google Sheets를 기�
 
 ---
 
-## Index.html - 프론트엔드
+## 프론트엔드 시스템
 
-Index.html은 단일 파일로 구성된 SPA(Single Page Application)입니다.
+### 이중 인터페이스 구조
 
-### 구조 개요
+시스템은 두 개의 독립적인 HTML 인터페이스로 구성됩니다:
+
+#### AdminInterface.html - 관리자 전용 인터페이스
+- **전체 기능 제공**: 출석하기, 출석현황, 관리자 기능 모두 포함
+- **시트 관리**: 활성 시트 선택 및 변경 기능
+- **QR 코드 생성**: 시즌별 학생용 QR 코드 생성 및 관리
+- **보안 기능**: QR 코드 블러 처리로 무단 접근 방지
+- **접근 방법**: 기본 URL 또는 `?mode=admin`
+
+#### StudentInterface.html - 학생 전용 인터페이스
+- **제한된 기능**: 출석하기, 출석현황만 제공
+- **시즌 기반**: URL 매개변수로 전달된 시즌 데이터만 처리
+- **관리자 기능 차단**: 시트 변경, QR 코드 생성 등 관리 기능 접근 불가
+- **접근 방법**: `?mode=student&season=시트명`
+
+### 공통 구조 개요
 
 1. **HTML 구조**: 기본 레이아웃과 탭 기반 네비게이션
 2. **CSS 스타일**: 다크 테마 기반의 모던한 디자인
@@ -365,6 +542,75 @@ Index.html은 단일 파일로 구성된 SPA(Single Page Application)입니다.
    - 실시간 카운트다운 타이머
    - 탭 전환 및 UI 상태 관리
    - 애니메이션 효과 (confetti)
+4. **시즌 매개변수 처리**: 
+   - StudentInterface에서 URL 매개변수 추출
+   - 시즌별 함수 호출로 독립적인 데이터 처리
+
+### StudentInterface.html 특별 기능
+
+#### 시즌 매개변수 처리
+```javascript
+// URL에서 시즌 매개변수 추출
+let currentSeason = '<?= season ?>' || '';
+
+// 시즌이 있을 때만 시즌별 함수 호출
+if (currentSeason) {
+    google.script.run.withSuccessHandler(handleResponse)
+                     .getSeasonAttendanceSession(currentSeason);
+} else {
+    // 시즌이 없으면 기본 함수 호출 (후방 호환성)
+    google.script.run.withSuccessHandler(handleResponse)
+                     .getAttendanceSession();
+}
+```
+
+#### 조건부 함수 호출 패턴
+모든 백엔드 호출에서 시즌 존재 여부에 따라 다른 함수를 호출:
+- 출석 처리: `markSeasonAttendance()` vs `markAttendance()`
+- 현황 조회: `getSeasonAttendanceStatus()` vs `getAttendanceStatus()`
+- 순위 조회: `getSeasonAttendanceRanking()` vs `getAttendanceRanking()`
+
+### AdminInterface.html 특별 기능
+
+#### QR 코드 보안 기능
+```css
+/* QR 코드 블러 처리 */
+#qrcode.blurred > * {
+    filter: blur(8px);
+    transition: filter 0.3s ease;
+}
+
+#qrcode:not(.blurred) > * {
+    filter: none;
+}
+```
+
+```javascript
+// QR 코드 토글 기능
+function toggleQRCodeBlur() {
+    const qrcode = document.getElementById('qrcode');
+    qrcode.classList.toggle('blurred');
+}
+```
+
+#### 시즌별 QR 코드 생성
+```javascript
+function generateQRCode() {
+    const seasonSelect = document.getElementById('seasonSelect');
+    const selectedSeason = seasonSelect.value;
+    
+    if (!selectedSeason) {
+        alert('시즌을 선택해주세요.');
+        return;
+    }
+    
+    google.script.run.withSuccessHandler(function(imageUrl) {
+        const qrcode = document.getElementById('qrcode');
+        qrcode.innerHTML = `<img src="${imageUrl}" alt="QR Code" onclick="toggleQRCodeBlur()" style="cursor: pointer;">`;
+        qrcode.classList.add('blurred'); // 기본적으로 블러 처리
+    }).generateQRCodeImageUrl(selectedSeason);
+}
+```
 
 ### 주요 JavaScript 함수들
 
@@ -480,9 +726,13 @@ sequenceDiagram
 ## 보안 및 성능 최적화
 
 ### 보안 조치
-1. **서버 사이드 검증**: 클라이언트 조작 방지를 위한 이중 검증
-2. **시간 기반 세션 제한**: 30분 타임아웃으로 부정 출석 방지
-3. **전화번호 기반 식별**: 익명성 보장하면서도 고유 식별 가능
+1. **인터페이스 분리**: 학생이 관리자 기능에 접근할 수 없도록 URL 기반 라우팅
+2. **시즌별 데이터 격리**: 각 시즌 QR 코드가 해당 시트 데이터만 처리하도록 독립적인 함수 체계
+3. **서버 사이드 검증**: 클라이언트 조작 방지를 위한 이중 검증
+4. **시간 기반 세션 제한**: 30분 타임아웃으로 부정 출석 방지
+5. **전화번호 기반 식별**: 익명성 보장하면서도 고유 식별 가능
+6. **QR 코드 보안**: 관리자 QR 코드 기본 블러 처리로 무단 스캔 방지
+7. **에러 처리**: 존재하지 않는 시즌 접근 시 명확한 에러 메시지 제공
 
 ### 성능 최적화
 1. **배치 데이터 읽기**: `getDataRange().getValues()`로 한 번에 모든 데이터 읽기
@@ -494,5 +744,15 @@ sequenceDiagram
 1. **멀티 시트 지원**: 여러 기수/그룹 동시 관리 가능
 2. **동적 컬럼 감지**: 새로운 세션 컬럼 자동 인식
 3. **유연한 데이터 형식**: 다양한 시간 형식 지원으로 호환성 확보
+4. **독립적인 시즌 처리**: 각 시즌이 서로 영향을 주지 않는 격리된 환경
+5. **후방 호환성**: 시즌 매개변수가 없는 경우 기존 방식으로 동작
+6. **확장 가능한 라우팅**: URL 매개변수 기반으로 새로운 모드 추가 용이
 
-이 시스템은 Google의 무료 서비스만을 활용하여 비용 효율적이면서도 안정적인 출석 관리 솔루션을 제공합니다.
+### 시스템 장점
+1. **보안 강화**: 역할별 인터페이스 분리로 무단 접근 방지
+2. **데이터 무결성**: 시즌별 독립 처리로 데이터 혼재 방지
+3. **사용자 경험**: 각 사용자 그룹에 최적화된 인터페이스 제공
+4. **관리 효율성**: 관리자가 여러 시즌을 체계적으로 관리 가능
+5. **비용 효율성**: Google의 무료 서비스만을 활용한 완전 서버리스 솔루션
+
+이 시스템은 교육 기관이나 동아리에서 여러 기수나 시즌을 독립적으로 관리하면서도 보안을 유지할 수 있는 완전한 출석 관리 솔루션을 제공합니다.

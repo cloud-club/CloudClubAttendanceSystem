@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Club 출석체크 관리자</title>
+  <!-- 라이브러리 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@2.5.0/fonts/remixicon.css">
+  
+  <style>
+    /* Reset & Base */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e0e0e0;
+      line-height: 1.6;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+    
+    /* Background Pattern */
+    .bg-pattern {
+      position: fixed;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, #1e40af20 1px, transparent 1px),
+        linear-gradient(to bottom, #1e40af20 1px, transparent 1px);
+      background-size: 80px 80px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      position: relative;
+      z-index: 10;
+    }
+    
+    /* Header */
+    .header {
+      text-align: center;
+      padding: 80px 0 60px;
+      position: relative;
+    }
+    
+    .sparkle-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: linear-gradient(to right, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.2));
+      border-radius: 9999px;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      margin-bottom: 32px;
+      animation: fadeInDown 0.6s ease-out;
+    }
+    
+    .sparkle-badge svg {
+      width: 16px;
+      height: 16px;
+      color: #60a5fa;
+    }
+    
+    .sparkle-badge span {
+      color: #93bbfc;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .main-title {
+      font-size: clamp(3rem, 8vw, 6rem);
+      font-weight: 900;
+      margin-bottom: 16px;
+      animation: fadeInUp 0.8s ease-out;
+      line-height: 1.1;
+    }
+    
+    .gradient-text {
+      background: linear-gradient(to right, #60a5fa, #93bbfc, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: inline-block;
+      transition: transform 0.3s ease;
+    }
+    
+    .gradient-text:hover {
+      transform: scale(1.05);
+    }
+    
+    .subtitle {
+      font-size: 1.25rem;
+      color: #94a3b8;
+      font-weight: 400;
+      margin-bottom: 16px;
+      animation: fadeInUp 1s ease-out;
+    }
+    
+    .divider {
+      width: 128px;
+      height: 4px;
+      background: linear-gradient(to right, #3b82f6, #60a5fa);
+      margin: 32px auto;
+      border-radius: 2px;
+      animation: fadeIn 1.2s ease-out;
+    }
+    
+    /* Tab Navigation */
+    .tab-nav {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 48px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 20px;
+      padding: 8px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+      animation: fadeInUp 0.8s ease-out;
+    }
+    
+    .tab-button {
+      background: transparent;
+      border: none;
+      padding: 14px 28px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: #94a3b8;
+      border-radius: 16px;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+    }
+    
+    .tab-button:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .tab-button.active {
+      background: linear-gradient(45deg, #3b82f6, #60a5fa);
+      color: white;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Tab Content */
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    /* Cards */
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 24px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+      padding: 32px;
+      margin-bottom: 32px;
+      position: relative;
+      overflow: visible;
+      transition: all 0.3s ease;
+      z-index: 1;
+    }
+    
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .card:hover::before {
+      opacity: 1;
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .card-icon {
+      font-size: 32px;
+      margin-right: 16px;
+      color: #60a5fa;
+    }
+    
+    .card-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+    
+    /* QR Code */
+    #qrcode, #seasonQrcode {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 32px auto;
+      padding: 20px;
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      max-width: 340px;
+      width: 100%;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    /* QR Code Blur Effect */
+    #qrcode.blurred > *,
+    #seasonQrcode.blurred > * {
+      filter: blur(8px);
+      transition: filter 0.3s ease;
+    }
+
+    #qrcode:not(.blurred) > *,
+    #seasonQrcode:not(.blurred) > * {
+      filter: blur(0px);
+      transition: filter 0.3s ease;
+    }
+
+    /* QR Code Click Overlay */
+    .qr-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(59, 130, 246, 0.1);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+      color: #3b82f6;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    #qrcode.blurred .qr-overlay,
+    #seasonQrcode.blurred .qr-overlay {
+      opacity: 1;
+    }
+
+    #qrcode:hover .qr-overlay,
+    #seasonQrcode:hover .qr-overlay {
+      opacity: 0.8;
+    }
+    
+    /* Forms */
+    .form-group {
+      margin: 32px auto;
+      max-width: 400px;
+      text-align: center;
+      position: relative;
+      z-index: 10;
+    }
+    
+    .form-label {
+      display: block;
+      margin-bottom: 12px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-size: 18px;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 16px 24px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      color: #fff;
+      font-size: 18px;
+      transition: all 0.3s ease;
+      text-align: center;
+      letter-spacing: 2px;
+      font-weight: 500;
+      position: relative;
+      z-index: 20;
+    }
+    
+    .form-input:focus {
+      outline: none;
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+      background: rgba(255, 255, 255, 0.08);
+      z-index: 30;
+    }
+    
+    .form-input::placeholder {
+      color: #64748b;
+      letter-spacing: 1px;
+    }
+    
+    /* Sheet Selector */
+    .sheet-selector {
+      margin: 24px 0;
+      text-align: center;
+    }
+    
+    .sheet-select {
+      width: 100%;
+      max-width: 400px;
+      padding: 16px 24px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      color: #fff;
+      font-size: 16px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+      background-size: 1.5em;
+      padding-right: 3rem;
+    }
+    
+    .sheet-select:focus {
+      outline: none;
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+    
+    .sheet-select option {
+      background: #1e293b;
+      color: #fff;
+    }
+    
+    /* Buttons */
+    .btn {
+      background: linear-gradient(45deg, #3b82f6, #60a5fa);
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      border-radius: 16px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 700;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+      z-index: 10;
+    }
+    
+    .btn:hover:enabled {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+      background: linear-gradient(45deg, #2563eb, #3b82f6);
+    }
+    
+    .btn:disabled {
+      background: #475569;
+      color: #94a3b8;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(45deg, #6b7280, #9ca3af);
+      box-shadow: 0 4px 12px rgba(107, 114, 128, 0.3);
+    }
+
+    .btn-secondary:hover:enabled {
+      background: linear-gradient(45deg, #4b5563, #6b7280);
+      box-shadow: 0 6px 20px rgba(107, 114, 128, 0.4);
+    }
+    
+    /* Status Messages */
+    #result, #statusResult {
+      margin: 24px auto;
+      padding: 16px 24px;
+      border-radius: 16px;
+      display: none;
+      animation: slideDown 0.3s ease-out;
+      max-width: 600px;
+      font-weight: 600;
+      text-align: center;
+    }
+    
+    .success {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    
+    .error {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    
+    /* Attendance Info */
+    .attendance-info {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 16px;
+      text-align: center;
+    }
+    
+    .attendance-info h3 {
+      color: #60a5fa;
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+    
+    .attendance-stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-top: 16px;
+    }
+    
+    .stat-item {
+      text-align: center;
+    }
+    
+    .stat-label {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    
+    .stat-value {
+      color: #e2e8f0;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    .stat-value.highlight {
+      color: #60a5fa;
+    }
+    
+    /* Fortune Card */
+    .fortune-card {
+      background: linear-gradient(135deg, rgba(147, 51, 234, 0.1), rgba(59, 130, 246, 0.1));
+      border: 1px solid rgba(147, 51, 234, 0.3);
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 16px;
+      text-align: center;
+      animation: fadeIn 0.5s ease-out;
+    }
+    
+    .fortune-card h4 {
+      color: #a78bfa;
+      font-size: 18px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .fortune-text {
+      color: #e9d5ff;
+      font-size: 16px;
+      line-height: 1.6;
+      font-style: italic;
+    }
+    
+    /* Attendance Details */
+    .attendance-details {
+      margin-top: 24px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .attendance-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+    }
+    
+    .attendance-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .attendance-item.future {
+      opacity: 0.5;
+    }
+    
+    .attendance-date {
+      color: #e2e8f0;
+      font-weight: 500;
+    }
+    
+    .attendance-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .attendance-status.present {
+      color: #4ade80;
+    }
+    
+    .attendance-status.absent {
+      color: #f87171;
+    }
+    
+    .attendance-status.future {
+      color: #64748b;
+    }
+    
+    /* Ranking Table */
+    .ranking-table {
+      width: 100%;
+      margin-top: 24px;
+      border-collapse: collapse;
+    }
+    
+    .ranking-table th,
+    .ranking-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .ranking-table th {
+      background: rgba(59, 130, 246, 0.1);
+      color: #60a5fa;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+    
+    .ranking-table tr:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .rank-medal {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    
+    .rank-1 {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: #fff;
+    }
+    
+    .rank-2 {
+      background: linear-gradient(135deg, #e5e7eb, #9ca3af);
+      color: #fff;
+    }
+    
+    .rank-3 {
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      color: #fff;
+    }
+    
+    /* Grade Badge */
+    .grade-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: rgba(59, 130, 246, 0.2);
+      color: #93bbfc;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-right: 8px;
+    }
+    
+    /* Info Cards */
+    .info-card {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    
+    .countdown-card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 32px;
+      margin-bottom: 32px;
+      text-align: center;
+    }
+    
+    #countdown {
+      font-size: 3rem;
+      font-weight: 900;
+      color: #60a5fa;
+      text-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
+      margin-top: 16px;
+    }
+    
+    .info-text {
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1.6;
+      margin: 16px 0;
+    }
+    
+    .highlight-text {
+      color: #60a5fa;
+      font-weight: 600;
+    }
+    
+    /* Loader */
+    .loader {
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top: 3px solid #60a5fa;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+    
+    /* Confetti Canvas */
+    #confetti-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* URL Display */
+    .url-display {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 16px 0;
+      font-family: monospace;
+      font-size: 14px;
+      word-break: break-all;
+      color: #60a5fa;
+    }
+
+    .copy-btn {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #60a5fa;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+
+    .copy-btn:hover {
+      background: rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    @keyframes fadeInUp {
+      from { 
+        opacity: 0; 
+        transform: translateY(30px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes fadeInDown {
+      from { 
+        opacity: 0; 
+        transform: translateY(-30px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes slideDown {
+      from { 
+        opacity: 0; 
+        transform: translateY(-10px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container {
+        padding: 15px;
+      }
+      
+      .main-title {
+        font-size: 3rem;
+      }
+      
+      .tab-nav {
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .tab-button {
+        justify-content: center;
+        width: 100%;
+      }
+      
+      .form-input {
+        width: 100%;
+      }
+      
+      #countdown {
+        font-size: 2rem;
+      }
+      
+      .attendance-stats {
+        flex-direction: column;
+        gap: 16px;
+      }
+      
+      .ranking-table {
+        font-size: 14px;
+      }
+      
+      .ranking-table th,
+      .ranking-table td {
+        padding: 8px 12px;
+      }
+    }
+    
+    /* Cloud Animation */
+    .cloud-animation {
+      position: absolute;
+      top: 20%;
+      opacity: 0.05;
+      animation: float 20s ease-in-out infinite;
+      pointer-events: none;
+    }
+    
+    .cloud-1 {
+      left: -100px;
+      animation-delay: 0s;
+    }
+    
+    .cloud-2 {
+      right: -100px;
+      animation-delay: 5s;
+    }
+    
+    .cloud-3 {
+      left: 50%;
+      animation-delay: 10s;
+    }
+    
+    @keyframes float {
+      0%, 100% {
+        transform: translateX(0) translateY(0);
+      }
+      25% {
+        transform: translateX(100px) translateY(-20px);
+      }
+      50% {
+        transform: translateX(-100px) translateY(20px);
+      }
+      75% {
+        transform: translateX(50px) translateY(-10px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-pattern"></div>
+  
+  <!-- Confetti Canvas -->
+  <canvas id="confetti-canvas"></canvas>
+  
+  <!-- Cloud Animations -->
+  <svg class="cloud-animation cloud-1" width="100" height="60" viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M80 40C80 51.0457 71.0457 60 60 60H20C8.95431 60 0 51.0457 0 40C0 28.9543 8.95431 20 20 20C20 8.95431 28.9543 0 40 0C51.0457 0 60 8.95431 60 20C71.0457 20 80 28.9543 80 40Z" fill="rgba(96, 165, 250, 0.1)"/>
+  </svg>
+  <svg class="cloud-animation cloud-2" width="80" height="50" viewBox="0 0 80 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M65 35C65 43.2843 58.2843 50 50 50H15C6.71573 50 0 43.2843 0 35C0 26.7157 6.71573 20 15 20C15 8.95431 23.9543 0 35 0C46.0457 0 55 8.95431 55 20C63.2843 20 70 26.7157 70 35Z" fill="rgba(59, 130, 246, 0.1)"/>
+  </svg>
+  <svg class="cloud-animation cloud-3" width="60" height="40" viewBox="0 0 60 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M50 25C50 33.2843 43.2843 40 35 40H10C4.47715 40 0 35.5228 0 30C0 24.4772 4.47715 20 10 20C10 8.95431 18.9543 0 30 0C41.0457 0 50 8.95431 50 20Z" fill="rgba(147, 187, 252, 0.1)"/>
+  </svg>
+  
+  <div class="container">
+    <header class="header">
+      <div class="sparkle-badge">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+        </svg>
+        <span>ADMIN DASHBOARD</span>
+      </div>
+      
+      <h1 class="main-title">
+        <span class="gradient-text">CLOUD</span> <span class="gradient-text">CLUB</span>
+      </h1>
+      <p class="subtitle">출석체크 관리자 시스템</p>
+      <div class="divider"></div>
+    </header>
+    
+    <nav class="tab-nav">
+      <button class="tab-button active" onclick="openTab('generate', event)">
+        <i class="fas fa-qrcode"></i>
+        <span>QR코드 관리</span>
+      </button>
+      <button class="tab-button" onclick="openTab('attend', event)">
+        <i class="fas fa-check-circle"></i>
+        <span>출석하기</span>
+      </button>
+      <button class="tab-button" onclick="openTab('status', event)">
+        <i class="fas fa-chart-line"></i>
+        <span>출석현황</span>
+      </button>
+    </nav>
+
+    <!-- QR코드 관리 탭 -->
+    <div id="generate" class="tab-content active">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-cog card-icon"></i>
+          <h2 class="card-title">시트 선택</h2>
+        </div>
+        <div class="sheet-selector">
+          <label for="sheetSelect" class="form-label">출석 시트 선택</label>
+          <select id="sheetSelect" class="sheet-select" onchange="changeSheet()">
+            <option value="">시트를 불러오는 중...</option>
+          </select>
+          <p class="info-text">선택한 시트의 명단으로 출석체크가 진행됩니다.</p>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-qrcode card-icon"></i>
+          <h2 class="card-title">시즌별 학생용 QR코드 생성</h2>
+        </div>
+        <p class="info-text">선택된 시트에 맞는 학생 전용 출석 QR코드를 생성합니다.</p>
+        
+        <div class="form-group">
+          <button onclick="generateSeasonQRCode()" class="btn">
+            <i class="fas fa-magic"></i>
+            <span>학생용 QR코드 생성</span>
+          </button>
+        </div>
+        
+        <div id="seasonQrcode" class="blurred" style="display: none;">
+          <div class="qr-overlay">
+            <span><i class="fas fa-eye"></i> 클릭하여 QR코드 보기</span>
+          </div>
+        </div>
+        <div id="studentUrl" style="display: none;">
+          <h4 style="color: #60a5fa; margin: 16px 0;">학생 접속 URL:</h4>
+          <div class="url-display" id="urlText"></div>
+          <button onclick="copyUrl()" class="copy-btn">
+            <i class="fas fa-copy"></i> URL 복사
+          </button>
+        </div>
+        
+        <p class="info-text" style="margin-top: 24px;">
+          <i class="fas fa-info-circle"></i> 이 QR코드를 스캔하면 학생들은 출석하기와 출석현황만 볼 수 있는 페이지로 이동합니다.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-qrcode card-icon"></i>
+          <h2 class="card-title">관리자용 QR코드</h2>
+        </div>
+        <p class="info-text">관리자 페이지로 접속하는 QR코드입니다.</p>
+        <div id="qrcode" class="blurred" onclick="toggleQRBlur('qrcode')">
+          <div class="qr-overlay">
+            <span><i class="fas fa-eye"></i> 클릭하여 QR코드 보기</span>
+          </div>
+        </div>
+        <p class="info-text" style="margin-top: 24px;">
+          <i class="fas fa-info-circle"></i> 이 QR코드를 스캔하면 관리자 페이지로 접속됩니다.
+        </p>
+      </div>
+    </div>
+    
+    <!-- 출석하기 탭 -->
+    <div id="attend" class="tab-content">
+      <div class="countdown-card">
+        <h2 id="countdown-title" class="card-title">출석 가능 시간 확인 중...</h2>
+        <div id="countdown"><span class="loader"></span></div>
+      </div>
+      
+      <div class="card">
+        <form onsubmit="doAttendance(event)" style="text-align: center;">
+          <div class="form-group">
+            <label for="phoneInput" class="form-label">전화번호 입력</label>
+            <input type="tel" 
+                   id="phoneInput" 
+                   class="form-input" 
+                   placeholder="-을 제외한 번호를 입력하세요" 
+                   pattern="[0-9]{10,11}"
+                   maxlength="11"
+                   oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                   required>
+            <p class="info-text">하이픈(-) 없이 숫자만 입력해주세요</p>
+          </div>
+          <button type="submit" id="attendBtn" class="btn" disabled>
+            <i class="fas fa-hand-point-up"></i>
+            <span>지금 출석하기</span>
+          </button>
+        </form>
+      </div>
+      
+      <div id="result"></div>
+    </div>
+    
+    <!-- 출석현황 탭 -->
+    <div id="status" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-chart-line card-icon"></i>
+          <h2 class="card-title">출석 현황 조회</h2>
+        </div>
+        <form onsubmit="checkAttendanceStatus(event)" style="text-align: center;">
+          <div class="form-group">
+            <label for="statusPhoneInput" class="form-label">전화번호 입력</label>
+            <input type="tel" 
+                   id="statusPhoneInput" 
+                   class="form-input" 
+                   placeholder="-을 제외한 번호를 입력하세요" 
+                   pattern="[0-9]{10,11}"
+                   maxlength="11"
+                   oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                   required>
+            <p class="info-text">하이픈(-) 없이 숫자만 입력해주세요</p>
+          </div>
+          <button type="submit" class="btn">
+            <i class="fas fa-search"></i>
+            <span>조회하기</span>
+          </button>
+        </form>
+      </div>
+      
+      <div id="statusResult"></div>
+      
+      <!-- 출석률 순위 대시보드 -->
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-trophy card-icon"></i>
+          <h2 class="card-title">출석률 순위</h2>
+        </div>
+        <div id="rankingBoard">
+          <div class="loader" style="margin: 32px auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer from provided HTML -->
+  <footer class="bg-gradient-to-r from-indigo-900 via-blue-900 to-indigo-900 text-white relative z-10" style="margin-top: 100px;">
+    <div class="max-w-7xl mx-auto px-6 py-12 md:py-16">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+        <div class="md:col-span-2">
+          <a class="flex items-center space-x-2 mb-6" href="https://www.cloudclub.kr/">
+            <img src="https://www.cloudclub.kr/images/logo.png" alt="CLOUD CLUB Logo" class="h-16 hover:opacity-80 transition-opacity"/>
+          </a>
+          <p class="text-blue-100 mb-6 max-w-md">Cloud Club은 클라우드 기술에 대한 열정을 가진 학생들이 모여, 클라우드 컴퓨팅, 인프라, 그리고 관련 IT 기술을 탐구하고 실습하며 함께 성장하는 커뮤니티입니다.</p>
+          <div class="flex space-x-4">
+            <a href="https://github.com/cloud-club" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="GitHub">
+              <i class="ri-github-fill text-xl"></i>
+            </a>
+            <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="Instagram">
+              <i class="ri-instagram-line text-xl"></i>
+            </a>
+            <a href="https://www.linkedin.com/company/cloudclub-kr" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="LinkedIn">
+              <i class="ri-linkedin-fill text-xl"></i>
+            </a>
+            <a href="https://www.youtube.com/@cloudclub-kr" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="YouTube">
+              <i class="ri-youtube-fill text-xl"></i>
+            </a>
+          </div>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-4">Contact</h3>
+          <ul class="space-y-3 text-blue-100">
+            <li class="flex items-center">
+              <i class="ri-mail-line mr-3 text-lg flex-shrink-0"></i>
+              <a href="mailto:cloudclub@cloudclub.kr" class="hover:text-white transition-colors">cloudclub@cloudclub.kr</a>
+            </li>
+            <li class="flex items-center">
+              <i class="ri-global-line mr-3 text-lg flex-shrink-0"></i>
+              <a href="https://www.cloudclub.kr/" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">www.cloudclub.kr</a>
+            </li>
+            <li class="flex items-center">
+              <i class="ri-instagram-line mr-3 text-lg flex-shrink-0"></i>
+              <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">@cloudclub.kr</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="mt-12 pt-8 text-center">
+        <p class="text-blue-200 text-sm">© 2025 Cloud Club. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    let countdownInterval;
+    let isAttendanceActive = false;
+    let currentSeasonUrl = '';
+    
+    // Confetti Effect
+    function createConfetti() {
+      const canvas = document.getElementById('confetti-canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      
+      const particles = [];
+      const colors = ['#60a5fa', '#3b82f6', '#93bbfc', '#dbeafe', '#fbbf24', '#f59e0b', '#a78bfa', '#e9d5ff'];
+      
+      for (let i = 0; i < 150; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height - canvas.height,
+          vx: Math.random() * 3 - 1.5,
+          vy: Math.random() * 3 + 2,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: Math.random() * 8 + 4,
+          angle: Math.random() * 360,
+          angleV: Math.random() * 6 - 3
+        });
+      }
+      
+      let animationId;
+      
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        particles.forEach((p, index) => {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.angle += p.angleV;
+          p.vy += 0.1;
+          
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.angle * Math.PI / 180);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+          ctx.restore();
+          
+          if (p.y > canvas.height) {
+            particles.splice(index, 1);
+          }
+        });
+        
+        if (particles.length > 0) {
+          animationId = requestAnimationFrame(animate);
+        } else {
+          canvas.style.display = 'none';
+        }
+      }
+      
+      canvas.style.display = 'block';
+      animate();
+      
+      setTimeout(() => {
+        cancelAnimationFrame(animationId);
+        canvas.style.display = 'none';
+      }, 5000);
+    }
+    
+    window.onload = function() {
+      // 출석 세션 정보 가져오기
+      google.script.run.withSuccessHandler(handleAttendanceSession).getAttendanceSession();
+      
+      // 관리자용 QR 코드 생성
+      google.script.run.withSuccessHandler(createQrCode).getQRCodeUrl();
+      
+      // 시트 목록 가져오기
+      google.script.run.withSuccessHandler(loadSheets).getAllSheets();
+      
+      // 출석률 순위 가져오기
+      loadRankings();
+      
+      // 로컬 스토리지에 저장된 전화번호가 있으면 자동 입력
+      const savedPhone = localStorage.getItem('lastUsedPhone');
+      if (savedPhone) {
+        document.getElementById('phoneInput').value = savedPhone;
+        document.getElementById('statusPhoneInput').value = savedPhone;
+      }
+      
+      // 입력 필드가 제대로 클릭되는지 확인
+      document.getElementById('phoneInput').addEventListener('click', function() {
+        this.focus();
+      });
+      document.getElementById('statusPhoneInput').addEventListener('click', function() {
+        this.focus();
+      });
+    };
+
+    function generateSeasonQRCode() {
+      const sheetSelect = document.getElementById('sheetSelect');
+      const selectedSeason = sheetSelect.value;
+      
+      if (!selectedSeason) {
+        alert('먼저 시트를 선택해주세요.');
+        return;
+      }
+      
+      // 학생용 URL과 QR코드 이미지 URL 생성
+      google.script.run
+        .withSuccessHandler(handleSeasonQRCode)
+        .withFailureHandler(handleSeasonQRCodeError)
+        .generateStudentQRCodeUrl(selectedSeason);
+    }
+    
+    function handleSeasonQRCode(studentUrl) {
+      currentSeasonUrl = studentUrl;
+      
+      // QR코드 생성
+      const qrContainer = document.getElementById('seasonQrcode');
+      qrContainer.innerHTML = ''; // 기존 QR코드 제거
+      
+      // 오버레이 다시 추가
+      const overlay = document.createElement('div');
+      overlay.className = 'qr-overlay';
+      overlay.innerHTML = '<span><i class="fas fa-eye"></i> 클릭하여 QR코드 보기</span>';
+      qrContainer.appendChild(overlay);
+      
+      // QR코드 생성
+      new QRCode(qrContainer, { 
+        text: studentUrl, 
+        width: 300, 
+        height: 300 
+      });
+      
+      // 클릭 이벤트 추가
+      qrContainer.onclick = () => toggleQRBlur('seasonQrcode');
+      qrContainer.classList.add('blurred');
+      qrContainer.style.display = 'flex';
+      
+      // URL 표시
+      document.getElementById('urlText').textContent = studentUrl;
+      document.getElementById('studentUrl').style.display = 'block';
+      
+      // 성공 메시지 표시
+      const successMsg = document.createElement('div');
+      successMsg.className = 'success';
+      successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 16px 24px; border-radius: 12px; z-index: 1000; max-width: 300px;';
+      successMsg.innerHTML = '<i class="fas fa-check-circle"></i> 학생용 QR코드가 생성되었습니다!';
+      document.body.appendChild(successMsg);
+      
+      setTimeout(() => {
+        successMsg.remove();
+      }, 3000);
+    }
+    
+    function handleSeasonQRCodeError(error) {
+      alert('QR코드 생성 중 오류가 발생했습니다: ' + error.message);
+    }
+    
+    function copyUrl() {
+      if (!currentSeasonUrl) {
+        alert('복사할 URL이 없습니다.');
+        return;
+      }
+      
+      navigator.clipboard.writeText(currentSeasonUrl).then(() => {
+        const copyBtn = document.querySelector('.copy-btn');
+        const originalText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-check"></i> 복사됨!';
+        copyBtn.style.background = 'rgba(34, 197, 94, 0.2)';
+        copyBtn.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+        copyBtn.style.color = '#4ade80';
+        
+        setTimeout(() => {
+          copyBtn.innerHTML = originalText;
+          copyBtn.style.background = 'rgba(59, 130, 246, 0.2)';
+          copyBtn.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+          copyBtn.style.color = '#60a5fa';
+        }, 2000);
+      }).catch(() => {
+        alert('URL 복사에 실패했습니다.');
+      });
+    }
+    
+    function loadRankings() {
+      google.script.run
+        .withSuccessHandler(displayRankings)
+        .withFailureHandler(handleRankingError)
+        .getAttendanceRanking();
+    }
+    
+    function displayRankings(response) {
+      const rankingBoard = document.getElementById('rankingBoard');
+      
+      if (!response.success) {
+        rankingBoard.innerHTML = `<div class="error">순위를 불러올 수 없습니다: ${response.message || ''}</div>`;
+        return;
+      }
+      
+      const rankings = response.data;
+      if (rankings.length === 0) {
+        rankingBoard.innerHTML = `<p class="info-text">아직 출석 데이터가 없습니다.</p>`;
+        return;
+      }
+      
+      let tableHTML = `
+        <table class="ranking-table">
+          <thead>
+            <tr>
+              <th>순위</th>
+              <th>이름</th>
+              <th>출석률</th>
+              <th>출석 횟수</th>
+              <th>평균 출석 시간</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      rankings.forEach(item => {
+        let rankDisplay = '';
+        if (item.rank <= 3) {
+          rankDisplay = `<span class="rank-medal rank-${item.rank}">${item.rank}</span>`;
+        } else {
+          rankDisplay = `<span style="color: #94a3b8;">${item.rank}</span>`;
+        }
+        
+        let avgTimeDisplay = item.avgAttendTime;
+        if (item.avgAttendTime === "미출석") {
+          avgTimeDisplay = `<span style="color: #64748b;">-</span>`;
+        } else {
+          avgTimeDisplay = `<span style="color: #60a5fa;">${item.avgAttendTime}</span>`;
+        }
+        
+        tableHTML += `
+          <tr>
+            <td>${rankDisplay}</td>
+            <td><span class="grade-badge">${item.grade}</span>${item.name}</td>
+            <td><span class="highlight-text">${item.attendanceRate}%</span></td>
+            <td>${item.attendedCount}/${item.totalSessions}</td>
+            <td>${avgTimeDisplay}</td>
+          </tr>
+        `;
+      });
+      
+      tableHTML += `
+          </tbody>
+        </table>
+      `;
+      
+      rankingBoard.innerHTML = tableHTML;
+    }
+    
+    function handleRankingError(error) {
+      const rankingBoard = document.getElementById('rankingBoard');
+      rankingBoard.innerHTML = `<div class="error">순위를 불러오는 중 오류가 발생했습니다.</div>`;
+      console.error('Ranking error:', error);
+    }
+    
+    function loadSheets(sheets) {
+      const sheetSelect = document.getElementById('sheetSelect');
+      sheetSelect.innerHTML = '';
+      
+      if (sheets.length === 0) {
+        sheetSelect.innerHTML = '<option value="">사용 가능한 시트가 없습니다</option>';
+        return;
+      }
+      
+      sheets.forEach(sheet => {
+        const option = document.createElement('option');
+        option.value = sheet.name;
+        option.textContent = sheet.name;
+        if (sheet.isActive) {
+          option.selected = true;
+        }
+        sheetSelect.appendChild(option);
+      });
+    }
+    
+    function changeSheet() {
+      const sheetName = document.getElementById('sheetSelect').value;
+      if (!sheetName) return;
+      
+      google.script.run
+        .withSuccessHandler(handleSheetChange)
+        .withFailureHandler(handleSheetChangeError)
+        .setActiveSheet(sheetName);
+    }
+    
+    function handleSheetChange(response) {
+      if (response.success) {
+        // 성공 메시지 표시
+        const resultDiv = document.createElement('div');
+        resultDiv.className = 'success';
+        resultDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 16px 24px; border-radius: 12px; z-index: 1000;';
+        resultDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${response.message}`;
+        document.body.appendChild(resultDiv);
+        
+        setTimeout(() => {
+          resultDiv.remove();
+        }, 3000);
+        
+        // 출석 세션 정보 다시 가져오기
+        google.script.run.withSuccessHandler(handleAttendanceSession).getAttendanceSession();
+        // 순위 다시 불러오기
+        loadRankings();
+        
+        // 시즌 QR코드 숨기기 및 블러 상태 리셋
+        const seasonQR = document.getElementById('seasonQrcode');
+        const studentUrlDiv = document.getElementById('studentUrl');
+        seasonQR.style.display = 'none';
+        seasonQR.classList.add('blurred');
+        studentUrlDiv.style.display = 'none';
+      } else {
+        alert(response.message);
+      }
+    }
+    
+    function handleSheetChangeError(error) {
+      alert('시트 변경 중 오류가 발생했습니다: ' + error.message);
+    }
+    
+    function createQrCode(url) {
+      const qrContainer = document.getElementById("qrcode");
+      
+      // 기존 QR코드 제거 (오버레이 제외)
+      const existingQR = qrContainer.querySelector('canvas, img');
+      if (existingQR) {
+        existingQR.remove();
+      }
+      
+      // QR코드 생성
+      new QRCode(qrContainer, { text: url, width: 300, height: 300 });
+      
+      // 블러 상태로 시작
+      qrContainer.classList.add('blurred');
+    }
+    
+    function toggleQRBlur(qrId) {
+      const qrContainer = document.getElementById(qrId);
+      const overlay = qrContainer.querySelector('.qr-overlay span');
+      
+      if (qrContainer.classList.contains('blurred')) {
+        qrContainer.classList.remove('blurred');
+        if (overlay) {
+          overlay.innerHTML = '<i class="fas fa-eye-slash"></i> 클릭하여 QR코드 숨기기';
+        }
+      } else {
+        qrContainer.classList.add('blurred');
+        if (overlay) {
+          overlay.innerHTML = '<i class="fas fa-eye"></i> 클릭하여 QR코드 보기';
+        }
+      }
+    }
+    
+    function handleAttendanceSession(session) {
+        const countdownTitle = document.getElementById('countdown-title');
+        const countdownDiv = document.getElementById('countdown');
+        const attendBtn = document.getElementById('attendBtn');
+
+        clearInterval(countdownInterval);
+
+        if (session.active) {
+            countdownTitle.textContent = "출석 마감까지 남은 시간";
+            isAttendanceActive = true;
+            attendBtn.disabled = false;
+            
+            const endTime = new Date(session.endTime);
+
+            countdownInterval = setInterval(() => {
+                const now = new Date();
+                const remainingTime = endTime - now;
+
+                if (remainingTime <= 0) {
+                    clearInterval(countdownInterval);
+                    countdownTitle.textContent = "출석 시간 종료";
+                    countdownDiv.textContent = "00분 00초";
+                    isAttendanceActive = false;
+                    attendBtn.disabled = true;
+                    attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 마감</span>';
+                } else {
+                    const minutes = Math.floor((remainingTime % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((remainingTime % (1000 * 60)) / 1000);
+                    countdownDiv.textContent = `${String(minutes).padStart(2, '0')}분 ${String(seconds).padStart(2, '0')}초`;
+                }
+            }, 1000);
+
+        } else {
+            countdownTitle.textContent = "출석 대기 중";
+            countdownDiv.textContent = session.message || "지금은 출석 가능한 시간이 아닙니다.";
+            isAttendanceActive = false;
+            attendBtn.disabled = true;
+            attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 불가</span>';
+        }
+    }
+
+    function openTab(tabName, evt) {
+      document.querySelectorAll(".tab-content").forEach(tc => tc.classList.remove("active"));
+      document.querySelectorAll(".tab-button").forEach(tb => tb.classList.remove("active"));
+      document.getElementById(tabName).classList.add("active");
+      evt.currentTarget.classList.add("active");
+      
+      if (tabName === 'status') {
+        loadRankings();
+      }
+    }
+
+    function doAttendance(event) {
+        event.preventDefault();
+        
+        const phoneNumber = document.getElementById('phoneInput').value.trim();
+        
+        if (!phoneNumber) {
+            alert("전화번호를 입력해주세요.");
+            return;
+        }
+        
+        const phoneRegex = /^010[0-9]{8}$/;
+        if (!phoneRegex.test(phoneNumber)) {
+            alert("올바른 전화번호 형식이 아닙니다. (예: 01012345678)");
+            return;
+        }
+        
+        if (!isAttendanceActive) {
+            alert("현재는 출석 가능한 시간이 아닙니다.");
+            return;
+        }
+        
+        document.getElementById('attendBtn').disabled = true;
+        document.getElementById('attendBtn').innerHTML = '<span class="loader"></span> <span>처리 중...</span>';
+        
+        localStorage.setItem('lastUsedPhone', phoneNumber);
+
+        google.script.run
+            .withSuccessHandler(handleAttendanceResponse)
+            .withFailureHandler(handleAttendanceError)
+            .markAttendance(phoneNumber);
+    }
+    
+    function handleAttendanceResponse(response) {
+      const resultDiv = document.getElementById('result');
+      const attendBtn = document.getElementById('attendBtn');
+      
+      if (response.success) {
+          createConfetti();
+          
+          let message = `✅ <span class="grade-badge">${response.grade}</span>${response.name}님, ${response.time} 출석 완료!`;
+          
+          if (response.attendanceInfo) {
+              const info = response.attendanceInfo;
+              message += `
+                  <div class="attendance-info">
+                      <h3><span class="grade-badge">${response.grade}</span>${response.name}님 출석 현황</h3>
+                      <div class="attendance-stats">
+                          <div class="stat-item">
+                              <div class="stat-label">출석 횟수</div>
+                              <div class="stat-value">${info.attended}/${info.total}</div>
+                          </div>
+                          <div class="stat-item">
+                              <div class="stat-label">출석률</div>
+                              <div class="stat-value highlight">${info.rate}%</div>
+                          </div>
+                      </div>
+                      <p class="info-text" style="margin-top: 12px; font-size: 14px;">
+                          현재까지 ${info.currentSession}회차 중 ${info.attended}회 출석
+                      </p>
+                  </div>
+              `;
+          }
+          
+          if (response.fortune) {
+              message += `
+                  <div class="fortune-card">
+                      <h4>
+                          <i class="fas fa-star"></i>
+                          오늘의 운세
+                          <i class="fas fa-star"></i>
+                      </h4>
+                      <p class="fortune-text">${response.fortune}</p>
+                  </div>
+              `;
+          }
+          
+          resultDiv.innerHTML = message;
+          resultDiv.className = 'success';
+          attendBtn.innerHTML = '<i class="fas fa-check-circle"></i> <span>출석 완료</span>';
+          clearInterval(countdownInterval);
+      } else {
+          resultDiv.innerHTML = `❌ ${response.message}`;
+          resultDiv.className = 'error';
+          attendBtn.disabled = false;
+          attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>지금 출석하기</span>';
+      }
+      
+      resultDiv.style.display = "block";
+      
+      setTimeout(() => { 
+          resultDiv.style.display = "none"; 
+          if (!response.success && isAttendanceActive) {
+              attendBtn.disabled = false;
+          }
+      }, response.success ? 15000 : 5000);
+    }
+    
+    function handleAttendanceError(error) {
+      const resultDiv = document.getElementById('result');
+      const attendBtn = document.getElementById('attendBtn');
+      
+      resultDiv.innerHTML = `❌ 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`;
+      resultDiv.className = 'error';
+      resultDiv.style.display = "block";
+      
+      attendBtn.disabled = false;
+      attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>지금 출석하기</span>';
+      
+      setTimeout(() => { resultDiv.style.display = "none"; }, 5000);
+    }
+    
+    function checkAttendanceStatus(event) {
+      event.preventDefault();
+      
+      const phoneNumber = document.getElementById('statusPhoneInput').value.trim();
+      
+      if (!phoneNumber) {
+        alert("전화번호를 입력해주세요.");
+        return;
+      }
+      
+      const phoneRegex = /^010[0-9]{8}$/;
+      if (!phoneRegex.test(phoneNumber)) {
+        alert("올바른 전화번호 형식이 아닙니다. (예: 01012345678)");
+        return;
+      }
+      
+      localStorage.setItem('lastUsedPhone', phoneNumber);
+      
+      const statusResult = document.getElementById('statusResult');
+      statusResult.innerHTML = '<div class="loader" style="margin: 32px auto;"></div>';
+      statusResult.style.display = 'block';
+      
+      google.script.run
+        .withSuccessHandler(handleStatusResponse)
+        .withFailureHandler(handleStatusError)
+        .getAttendanceStatus(phoneNumber);
+    }
+    
+    function handleStatusResponse(response) {
+      const statusResult = document.getElementById('statusResult');
+      
+      if (response.success) {
+        const data = response.data;
+        let detailsHTML = '';
+        
+        data.details.forEach(detail => {
+          const itemClass = detail.isPast ? '' : 'future';
+          let statusClass, statusIcon, statusText;
+          
+          if (!detail.isPast) {
+            statusClass = 'future';
+            statusIcon = '<i class="fas fa-clock"></i>';
+            statusText = '예정';
+          } else if (detail.attended) {
+            statusClass = 'present';
+            statusIcon = '<i class="fas fa-check-circle"></i>';
+            statusText = '출석';
+          } else {
+            statusClass = 'absent';
+            statusIcon = '<i class="fas fa-times-circle"></i>';
+            statusText = '결석';
+          }
+          
+          detailsHTML += `
+            <div class="attendance-item ${itemClass}">
+              <div class="attendance-date">${detail.date}</div>
+              <div class="attendance-status ${statusClass}">
+                ${statusIcon}
+                <span>${statusText}</span>
+              </div>
+            </div>
+          `;
+        });
+        
+        statusResult.innerHTML = `
+          <div class="card">
+            <div class="attendance-info">
+              <h3><span class="grade-badge">${data.grade}</span>${data.name}님 출석 현황</h3>
+              <div class="attendance-stats">
+                <div class="stat-item">
+                  <div class="stat-label">출석 횟수</div>
+                  <div class="stat-value">${data.attended}/${data.total}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">출석률</div>
+                  <div class="stat-value highlight">${data.rate}%</div>
+                </div>
+              </div>
+              <p class="info-text" style="margin-top: 12px;">
+                현재까지 ${data.currentSession}회차 중 ${data.attended}회 출석
+              </p>
+            </div>
+            <div class="attendance-details">
+              <h4 style="color: #e2e8f0; margin-bottom: 16px; font-size: 18px;">출석 상세 내역</h4>
+              ${detailsHTML}
+            </div>
+          </div>
+        `;
+      } else {
+        statusResult.innerHTML = `<div class="error">❌ ${response.message}</div>`;
+      }
+      
+      statusResult.style.display = 'block';
+    }
+    
+    function handleStatusError(error) {
+      const statusResult = document.getElementById('statusResult');
+      statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}</div>`;
+      statusResult.style.display = 'block';
+    }
+  </script>
+
+  <!-- Tailwind CSS for footer styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</body>
+</html>
