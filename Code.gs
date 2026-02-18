@@ -15,7 +15,7 @@ const ADMIN_TOKEN_CACHE_PREFIX = 'admin_token_';
 const VARIABLE_SHEET_NAME = 'variable';
 const VARIABLE_TABLE_HEADER_ROW = 1;
 const VARIABLE_TABLE_FIRST_DATA_ROW = 2;
-const VARIABLE_TABLE_HEADERS = ['key', 'value', 'type', 'description', 'editable', 'updated_at'];
+const VARIABLE_TABLE_HEADERS = ['key', 'value', 'type', 'description', 'editable', 'updated_at', 'applies_to', 'applies_when', 'used_in'];
 
 const SESSION_META_SHEET_NAME = '_session_meta';
 const SESSION_META_HEADERS = ['seasonSheet', 'sessionKey', 'openOffsetMin', 'lateThresholdMin', 'absenceThresholdMin', 'explicitEndAt', 'createdAt'];
@@ -23,110 +23,60 @@ const SESSION_META_HEADERS = ['seasonSheet', 'sessionKey', 'openOffsetMin', 'lat
 const VARIABLE_CATALOG = {
   attendance_open_offset_min: {
     labelKo: '출석 오픈 오프셋',
-    usageType: 'logic',
-    usedIn: ['collectSessionsFromSheet.openTime'],
-    unit: '분',
-    appliesTo: '출석 오픈 시각 계산',
-    appliesWhen: '회차 시작 시각 기준',
     formula: 'openTime = startTime + attendance_open_offset_min',
     example: '-30 이면 시작 30분 전 오픈',
     validation: { kind: 'number', min: -240, max: 0, required: true }
   },
   late_threshold_min: {
     labelKo: '지각 판정 기준',
-    usageType: 'logic',
-    usedIn: ['collectSessionsFromSheet.onTimeDeadline'],
-    unit: '분',
-    appliesTo: '정시/지각 구분 경계',
-    appliesWhen: '회차 시작 이후',
     formula: 'onTimeDeadline = startTime + late_threshold_min',
     example: '50 이면 시작 50분까지 정시',
     validation: { kind: 'number', min: 1, max: 360, required: true }
   },
   absence_threshold_min: {
     labelKo: '기본 출석 마감 기준',
-    usageType: 'logic',
-    usedIn: ['collectSessionsFromSheet.lateDeadline', 'web/admin.scheduleDefaultEndTime'],
-    unit: '분',
-    appliesTo: '종료시간 미입력 회차의 지각 마감',
-    appliesWhen: '회차 종료시간이 비어있을 때',
     formula: 'lateDeadline = startTime + absence_threshold_min',
     example: '180 이면 시작 3시간 후 마감',
     validation: { kind: 'number', min: 1, max: 600, required: true }
   },
   required_attendance_count: {
     labelKo: '수료 최소 출석 횟수',
-    usageType: 'logic',
-    usedIn: ['getGraduationReport.requiredAttendance'],
-    unit: '회',
-    appliesTo: '수료 판정',
-    appliesWhen: '수료 리포트 계산 시',
     formula: 'attendedCount >= required_attendance_count',
     example: '3 이면 최소 3회 출석 필요',
     validation: { kind: 'number', min: 0, max: 100, required: true }
   },
   late_to_absence_ratio: {
     labelKo: '지각 결석 환산비',
-    usageType: 'logic',
-    usedIn: ['getGraduationReport.absenceEquivalent'],
-    unit: '회',
-    appliesTo: '결석환산 계산',
-    appliesWhen: '수료 리포트 계산 시',
     formula: 'absenceEquivalent = absent + floor(late / ratio)',
     example: '3 이면 지각 3회 = 결석 1회',
     validation: { kind: 'number', min: 1, max: 20, required: true }
   },
   required_session_positions: {
     labelKo: '필참 회차 위치',
-    usageType: 'logic',
-    usedIn: ['evaluateRequiredSessions', 'getGraduationReport.requiredCheck'],
-    unit: '위치',
-    appliesTo: '수료 필참 조건',
-    appliesWhen: '수료 리포트 계산 시',
     formula: '허용값: first,last 조합',
     example: 'first,last',
     validation: { kind: 'required_positions', required: true }
   },
   max_absence_equivalent: {
     labelKo: '결석환산 상한',
-    usageType: 'logic',
-    usedIn: ['getGraduationReport.absenceThreshold'],
-    unit: '회',
-    appliesTo: '수료 불가 기준',
-    appliesWhen: '수료 리포트 계산 시',
     formula: 'absenceEquivalent <= max_absence_equivalent',
     example: '빈값이면 자동 계산',
     validation: { kind: 'number', min: 0, max: 100, required: false, allowEmpty: true }
   },
   official_session_min_recommended: {
     labelKo: '권장 최소 공식행사 수',
-    usageType: 'display',
-    usedIn: ['getGraduationReport.variables'],
-    unit: '회',
-    appliesTo: '운영 가이드',
-    appliesWhen: '수료 규칙 안내 표시',
     formula: '권장 구간 하한',
     example: '6',
     validation: { kind: 'number', min: 0, max: 100, required: true }
   },
   official_session_max_recommended: {
     labelKo: '권장 최대 공식행사 수',
-    usageType: 'display',
-    usedIn: ['getGraduationReport.variables'],
-    unit: '회',
-    appliesTo: '운영 가이드',
-    appliesWhen: '수료 규칙 안내 표시',
     formula: '권장 구간 상한',
     example: '8',
     validation: { kind: 'number', min: 0, max: 100, required: true }
   },
   default_session_start_time: {
     labelKo: '일정 기본 시작시간',
-    usageType: 'logic',
-    usedIn: ['getScheduleList.defaults', 'web/admin.getDefaultScheduleStartTime'],
-    unit: 'HH:mm',
-    appliesTo: '관리자 일정 등록 UI',
-    appliesWhen: '신규 일정 입력 시작값',
     formula: '신규 회차 시작 시각 기본값',
     example: '19:00',
     validation: { kind: 'hhmm', required: true }
@@ -134,16 +84,96 @@ const VARIABLE_CATALOG = {
 };
 
 const REQUIRED_VARIABLE_SPECS = [
-  { key: 'attendance_open_offset_min', value: -30, type: 'number', description: '행사 시작 n분 전 출석 오픈' },
-  { key: 'late_threshold_min', value: 50, type: 'number', description: '시작 후 지각 판정 분' },
-  { key: 'absence_threshold_min', value: 180, type: 'number', description: '시작 후 출석 마감 분(종료 공백시 기본)' },
-  { key: 'required_attendance_count', value: 3, type: 'number', description: '수료 최소 출석 횟수' },
-  { key: 'late_to_absence_ratio', value: 3, type: 'number', description: '지각 n회 = 결석 1회' },
-  { key: 'required_session_positions', value: 'first,last', type: 'string', description: '필참 회차 위치' },
-  { key: 'max_absence_equivalent', value: '', type: 'number', description: '빈값이면 자동 계산' },
-  { key: 'official_session_min_recommended', value: 6, type: 'number', description: '권장 최소 공식 행사 수' },
-  { key: 'official_session_max_recommended', value: 8, type: 'number', description: '권장 최대 공식 행사 수' },
-  { key: 'default_session_start_time', value: '19:00', type: 'string', description: '일정 관리 기본 시작시간' }
+  {
+    key: 'attendance_open_offset_min',
+    value: -30,
+    type: 'number',
+    description: '출석 오픈 오프셋(시작 n분 전)',
+    appliesTo: '출석 오픈 시각 계산',
+    appliesWhen: '회차 시작 시각 기준',
+    usedIn: 'collectSessionsFromSheet.openTime'
+  },
+  {
+    key: 'late_threshold_min',
+    value: 50,
+    type: 'number',
+    description: '지각 판정 기준(시작 후 n분)',
+    appliesTo: '정시/지각 경계 계산',
+    appliesWhen: '회차 시작 이후',
+    usedIn: 'collectSessionsFromSheet.onTimeDeadline'
+  },
+  {
+    key: 'absence_threshold_min',
+    value: 180,
+    type: 'number',
+    description: '기본 출석 마감 기준(종료 미입력 시)',
+    appliesTo: '종료시간 미입력 회차 마감 계산',
+    appliesWhen: '회차 종료시간이 비어 있을 때',
+    usedIn: 'collectSessionsFromSheet.lateDeadline;web/admin.suggestScheduleEndTime'
+  },
+  {
+    key: 'required_attendance_count',
+    value: 3,
+    type: 'number',
+    description: '수료 최소 출석 횟수',
+    appliesTo: '수료 최소 출석 조건 계산',
+    appliesWhen: '수료 판정 계산 시',
+    usedIn: 'getGraduationReport.requiredAttendance'
+  },
+  {
+    key: 'late_to_absence_ratio',
+    value: 3,
+    type: 'number',
+    description: '지각 n회 = 결석 1회',
+    appliesTo: '결석환산 계산',
+    appliesWhen: '수료 판정 계산 시',
+    usedIn: 'getGraduationReport.absenceEquivalent'
+  },
+  {
+    key: 'required_session_positions',
+    value: 'first,last',
+    type: 'string',
+    description: '필참 회차 위치',
+    appliesTo: '필참 회차 충족 여부 계산',
+    appliesWhen: '수료 판정 계산 시',
+    usedIn: 'evaluateRequiredSessions;getGraduationReport.requiredCheck'
+  },
+  {
+    key: 'max_absence_equivalent',
+    value: '',
+    type: 'number',
+    description: '결석환산 상한(빈값이면 자동 계산)',
+    appliesTo: '결석환산 임계치 계산',
+    appliesWhen: '수료 판정 계산 시',
+    usedIn: 'getGraduationReport.absenceThreshold'
+  },
+  {
+    key: 'official_session_min_recommended',
+    value: 6,
+    type: 'number',
+    description: '권장 최소 공식 행사 수',
+    appliesTo: '운영 가이드 표시값',
+    appliesWhen: '수료 규칙 안내 렌더링 시',
+    usedIn: 'getGraduationReport.variables'
+  },
+  {
+    key: 'official_session_max_recommended',
+    value: 8,
+    type: 'number',
+    description: '권장 최대 공식 행사 수',
+    appliesTo: '운영 가이드 표시값',
+    appliesWhen: '수료 규칙 안내 렌더링 시',
+    usedIn: 'getGraduationReport.variables'
+  },
+  {
+    key: 'default_session_start_time',
+    value: '19:00',
+    type: 'string',
+    description: '일정 관리 기본 시작시간(HH:mm)',
+    appliesTo: '신규 일정 시작시간 기본값',
+    appliesWhen: '일정 관리 탭 신규 회차 입력 시',
+    usedIn: 'getScheduleList.defaults;web/admin.getDefaultScheduleStartTime'
+  }
 ];
 
 const VARIABLE_DEFAULTS = {
@@ -351,6 +381,14 @@ function handleApiRequest(params) {
           return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
         }
         data = normalizeVariablesPayload();
+        break;
+      }
+
+      case 'variablesResetTemplate': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = resetVariablesTemplate(params.mode || 'preserve');
         break;
       }
 
@@ -910,7 +948,7 @@ function ensureVariableSheet(options) {
     const nowText = formatDateTime(new Date());
     const baseMap = {};
     ensureRequiredVariableEntries(baseMap, nowText);
-    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText, { includeRequired: false }));
+    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText, { includeRequired: false, includeExtras: false }));
     return sheet;
   }
 
@@ -918,7 +956,7 @@ function ensureVariableSheet(options) {
     const nowText = formatDateTime(new Date());
     const baseMap = {};
     ensureRequiredVariableEntries(baseMap, nowText);
-    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText, { includeRequired: false }));
+    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText, { includeRequired: false, includeExtras: false }));
     return sheet;
   }
 
@@ -984,6 +1022,95 @@ function isLegacyVariableHeaderRow(rowValues) {
     && headerC === '출석시작범위';
 }
 
+function getRequiredVariableSpecMap() {
+  const map = {};
+  REQUIRED_VARIABLE_SPECS.forEach(spec => {
+    map[canonicalVariableKey(spec.key)] = spec;
+  });
+  return map;
+}
+
+function toVariableStringCell(value) {
+  if (value === undefined || value === null) return '';
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return formatDateTime(value);
+  }
+  return String(value).trim();
+}
+
+function normalizeUsedInText(value) {
+  const text = toVariableStringCell(value);
+  if (!text) return '';
+  return text
+    .split(/[,;\n]/)
+    .map(item => String(item || '').trim())
+    .filter(item => !!item)
+    .join(';');
+}
+
+function parseTableHeaderMap(headers) {
+  const map = {};
+  headers.forEach((header, idx) => {
+    map[canonicalVariableKey(header)] = idx;
+  });
+  return map;
+}
+
+function toVariableRecordFromRow(row, headerMap, order, source) {
+  const keyIdx = headerMap.key;
+  const key = keyIdx === undefined ? '' : canonicalVariableKey(row[keyIdx]);
+  if (!key || key === 'key') return null;
+
+  const valueIdx = headerMap.value;
+  const typeIdx = headerMap.type;
+  const descIdx = headerMap.description;
+  const editableIdx = headerMap.editable;
+  const updatedIdx = headerMap.updated_at;
+  const appliesToIdx = headerMap.applies_to;
+  const appliesWhenIdx = headerMap.applies_when;
+  const usedInIdx = headerMap.used_in;
+
+  return {
+    key: key,
+    value: valueIdx === undefined ? '' : row[valueIdx],
+    type: String(typeIdx === undefined ? '' : row[typeIdx]).trim() || 'string',
+    description: String(descIdx === undefined ? '' : row[descIdx]).trim(),
+    editable: parseVariableEditable(editableIdx === undefined ? '' : row[editableIdx], true),
+    updatedAt: toVariableStringCell(updatedIdx === undefined ? '' : row[updatedIdx]),
+    appliesTo: String(appliesToIdx === undefined ? '' : row[appliesToIdx]).trim(),
+    appliesWhen: String(appliesWhenIdx === undefined ? '' : row[appliesWhenIdx]).trim(),
+    usedIn: normalizeUsedInText(usedInIdx === undefined ? '' : row[usedInIdx]),
+    order: order,
+    source: source || 'table'
+  };
+}
+
+function isStrictNumberLikeValue(value) {
+  if (typeof value === 'number' && isFinite(value)) return true;
+  const text = String(value || '').trim();
+  if (!text) return false;
+  return /^-?\d+(\.\d+)?$/.test(text);
+}
+
+function isVariableRecordValid(record) {
+  const key = canonicalVariableKey(record.key);
+  const type = String(record.type || 'string').trim() || 'string';
+  const value = record.value;
+  const rawText = toVariableStringCell(value);
+
+  if (type === 'number') {
+    if (value instanceof Date) {
+      return false;
+    }
+    if (rawText.indexOf(':') !== -1 && !isStrictNumberLikeValue(rawText)) {
+      return false;
+    }
+  }
+
+  const validation = validateVariableValue(key, value, type);
+  return !!validation.valid;
+}
+
 function collectVariableRecords(sheet) {
   const records = [];
   const lastRow = sheet.getLastRow();
@@ -1006,35 +1133,26 @@ function collectVariableRecords(sheet) {
   const allowLegacyRead = !isSingleTable && hasLegacyHeader;
 
   let rowOrder = 0;
-  const appendRows = (headerRow, firstDataRow) => {
+  const appendRows = (headerRow, firstDataRow, source) => {
     if (lastRow < firstDataRow) return;
-    const headers = sheet.getRange(headerRow, 1, 1, VARIABLE_TABLE_HEADERS.length).getValues()[0];
-    if (canonicalVariableKey(headers[0]) !== 'key') {
+    const width = Math.max(VARIABLE_TABLE_HEADERS.length, sheet.getLastColumn());
+    const headers = sheet.getRange(headerRow, 1, 1, width).getValues()[0];
+    const headerMap = parseTableHeaderMap(headers);
+    if (headerMap.key === undefined || canonicalVariableKey(headers[headerMap.key]) !== 'key') {
       return;
     }
 
-    const rows = sheet.getRange(firstDataRow, 1, lastRow - firstDataRow + 1, VARIABLE_TABLE_HEADERS.length).getValues();
+    const rows = sheet.getRange(firstDataRow, 1, lastRow - firstDataRow + 1, width).getValues();
     rows.forEach(row => {
-      const key = canonicalVariableKey(row[0]);
-      if (!key) return;
-      if (key === 'key') return;
-
       rowOrder++;
-      records.push({
-        key: key,
-        value: row[1],
-        type: String(row[2] || '').trim() || 'string',
-        description: String(row[3] || '').trim(),
-        editable: parseVariableEditable(row[4], true),
-        updatedAt: toVariableText(row[5]),
-        order: rowOrder,
-        source: 'table'
-      });
+      const record = toVariableRecordFromRow(row, headerMap, rowOrder, source || 'table');
+      if (!record) return;
+      records.push(record);
     });
   };
 
-  appendRows(1, 2);
-  appendRows(5, 6);
+  appendRows(1, 2, 'table');
+  appendRows(5, 6, 'legacy_table');
 
   // 구형 A2:C2 레거시 레이아웃은 레거시 헤더일 때만 읽는다.
   if (lastRow >= 2 && allowLegacyRead) {
@@ -1058,6 +1176,9 @@ function collectVariableRecords(sheet) {
         description: '',
         editable: true,
         updatedAt: '',
+        appliesTo: '',
+        appliesWhen: '',
+        usedIn: '',
         order: -100000 + rowOrder,
         source: 'legacy'
       });
@@ -1080,86 +1201,116 @@ function collectVariableRecords(sheet) {
 }
 
 function mergeVariableRecordsByLatest(records) {
+  const grouped = {};
   const map = {};
+  const specMap = getRequiredVariableSpecMap();
+  let invalidValueDroppedCount = 0;
+  let selectedLegacyCount = 0;
 
   records.forEach(record => {
     const key = canonicalVariableKey(record.key);
     if (!key) return;
+    if (!grouped[key]) {
+      grouped[key] = [];
+    }
+    grouped[key].push(record);
+  });
 
-    const candidate = {
-      key: key,
-      value: record.value,
-      type: String(record.type || '').trim() || 'string',
-      description: String(record.description || '').trim(),
-      editable: record.editable !== false,
-      updatedAt: String(record.updatedAt || '').trim(),
-      source: record.source || 'table'
-    };
-    const candidateTs = parseVariableUpdatedAtTimestamp(candidate.updatedAt, record.order);
+  Object.keys(grouped).forEach(key => {
+    const ordered = grouped[key].slice().sort((a, b) => {
+      const bTs = parseVariableUpdatedAtTimestamp(b.updatedAt, b.order);
+      const aTs = parseVariableUpdatedAtTimestamp(a.updatedAt, a.order);
+      if (bTs !== aTs) return bTs - aTs;
+      return b.order - a.order;
+    });
 
-    const existing = map[key];
-    if (!existing) {
-      map[key] = candidate;
-      map[key]._sortTs = candidateTs;
-      map[key]._sortOrder = record.order;
-      map[key]._source = candidate.source;
+    const validityFlags = ordered.map(candidate => isVariableRecordValid(candidate));
+    const invalidCountForKey = validityFlags.filter(flag => !flag).length;
+    let selected = null;
+    for (let i = 0; i < ordered.length; i++) {
+      if (validityFlags[i]) {
+        selected = ordered[i];
+        break;
+      }
+    }
+
+    invalidValueDroppedCount += invalidCountForKey;
+    if (!selected) {
       return;
     }
 
-    const shouldReplace = candidateTs > existing._sortTs
-      || (candidateTs === existing._sortTs && record.order > existing._sortOrder);
+    const spec = specMap[key] || {};
+    const catalog = getVariableCatalogEntry(key);
+    map[key] = {
+      key: key,
+      value: parseVariableValue(selected.value, selected.type, key),
+      type: String(selected.type || spec.type || 'string').trim() || 'string',
+      description: String(selected.description || spec.description || '').trim(),
+      editable: selected.editable !== false,
+      updatedAt: String(selected.updatedAt || '').trim(),
+      appliesTo: String(selected.appliesTo || spec.appliesTo || '').trim(),
+      appliesWhen: String(selected.appliesWhen || spec.appliesWhen || '').trim(),
+      usedIn: normalizeUsedInText(selected.usedIn || spec.usedIn || '')
+    };
 
-    if (shouldReplace) {
-      map[key] = candidate;
-      map[key]._sortTs = candidateTs;
-      map[key]._sortOrder = record.order;
-      map[key]._source = candidate.source;
-    }
-  });
-  let selectedLegacyCount = 0;
-
-  Object.keys(map).forEach(key => {
-    if (map[key]._source === 'legacy') {
+    if ((selected.source || '') === 'legacy') {
       selectedLegacyCount++;
     }
-    delete map[key].source;
-    delete map[key]._sortTs;
-    delete map[key]._sortOrder;
-    delete map[key]._source;
+    if (!map[key].description && catalog.description) {
+      map[key].description = String(catalog.description).trim();
+    }
   });
 
   return {
     map: map,
-    selectedLegacyCount: selectedLegacyCount
+    selectedLegacyCount: selectedLegacyCount,
+    invalidValueDroppedCount: invalidValueDroppedCount
   };
 }
 
 function ensureRequiredVariableEntries(dataMap, nowText) {
+  let filledByDefaultCount = 0;
+  const specMap = getRequiredVariableSpecMap();
+
   REQUIRED_VARIABLE_SPECS.forEach(spec => {
     const key = canonicalVariableKey(spec.key);
     const current = dataMap[key] || {};
+    const hasCurrent = Object.prototype.hasOwnProperty.call(dataMap, key);
+    if (!hasCurrent) {
+      filledByDefaultCount++;
+    }
+
     dataMap[key] = {
       key: key,
       value: current.value !== undefined ? current.value : spec.value,
       type: String(current.type || spec.type || 'string').trim() || 'string',
       description: String(current.description || spec.description || '').trim(),
       editable: current.editable === false ? false : true,
-      updatedAt: String(current.updatedAt || nowText).trim()
+      updatedAt: String(current.updatedAt || nowText).trim(),
+      appliesTo: String(current.appliesTo || spec.appliesTo || '').trim(),
+      appliesWhen: String(current.appliesWhen || spec.appliesWhen || '').trim(),
+      usedIn: normalizeUsedInText(current.usedIn || spec.usedIn || '')
     };
   });
 
   Object.keys(dataMap).forEach(key => {
     const current = dataMap[key] || {};
+    const spec = specMap[key] || {};
     const catalog = VARIABLE_CATALOG[key] || {};
     dataMap[key] = {
       key: key,
       value: current.value,
-      type: String(current.type || catalog.type || 'string').trim() || 'string',
-      description: String(current.description || catalog.description || '').trim(),
+      type: String(current.type || spec.type || 'string').trim() || 'string',
+      description: String(current.description || spec.description || catalog.description || '').trim(),
       editable: current.editable === false ? false : true,
-      updatedAt: String(current.updatedAt || nowText).trim()
+      updatedAt: String(current.updatedAt || nowText).trim(),
+      appliesTo: String(current.appliesTo || spec.appliesTo || '').trim(),
+      appliesWhen: String(current.appliesWhen || spec.appliesWhen || '').trim(),
+      usedIn: normalizeUsedInText(current.usedIn || spec.usedIn || '')
     };
   });
+
+  return filledByDefaultCount;
 }
 
 function buildVariableRowsFromMap(dataMap, nowText, options) {
@@ -1170,7 +1321,10 @@ function buildVariableRowsFromMap(dataMap, nowText, options) {
 
   const requiredOrder = REQUIRED_VARIABLE_SPECS.map(spec => canonicalVariableKey(spec.key));
   const presentRequiredKeys = requiredOrder.filter(key => Object.prototype.hasOwnProperty.call(dataMap, key));
-  const extraKeys = Object.keys(dataMap).filter(key => requiredOrder.indexOf(key) === -1).sort();
+  const includeExtras = opts.includeExtras !== false;
+  const extraKeys = includeExtras
+    ? Object.keys(dataMap).filter(key => requiredOrder.indexOf(key) === -1).sort()
+    : [];
   const orderedKeys = presentRequiredKeys.concat(extraKeys);
 
   return orderedKeys.map(key => {
@@ -1182,13 +1336,16 @@ function buildVariableRowsFromMap(dataMap, nowText, options) {
       type,
       String(item.description || '').trim(),
       item.editable === false ? 'false' : 'true',
-      String(item.updatedAt || nowText).trim()
+      String(item.updatedAt || nowText).trim(),
+      String(item.appliesTo || '').trim(),
+      String(item.appliesWhen || '').trim(),
+      normalizeUsedInText(item.usedIn || '')
     ];
   });
 }
 
 function writeVariableSheetRows(sheet, rows) {
-  const rowCount = Math.max(sheet.getLastRow(), VARIABLE_TABLE_FIRST_DATA_ROW + rows.length);
+  const rowCount = Math.max(sheet.getLastRow(), VARIABLE_TABLE_FIRST_DATA_ROW - 1 + rows.length);
   if (rowCount > 0) {
     sheet.getRange(1, 1, rowCount, VARIABLE_TABLE_HEADERS.length).clearContent();
   }
@@ -1207,13 +1364,15 @@ function getVariableDataSnapshot(sheet, options) {
   const rawRecords = collected.records || [];
   const mergedResult = mergeVariableRecordsByLatest(rawRecords);
   const mergedMap = mergedResult.map || {};
+  const dedupedCountBeforeDefaults = Object.keys(mergedMap).length;
+  let filledByDefaultCount = 0;
   const includeRequired = opts.includeRequired === true;
   if (includeRequired) {
-    ensureRequiredVariableEntries(mergedMap, nowText);
+    filledByDefaultCount = ensureRequiredVariableEntries(mergedMap, nowText);
   }
-  const rows = buildVariableRowsFromMap(mergedMap, nowText, { includeRequired: false });
+  const rows = buildVariableRowsFromMap(mergedMap, nowText, { includeRequired: false, includeExtras: opts.includeExtras !== false });
   const mergedCount = Object.keys(mergedMap).length;
-  const duplicateRemovedCount = Math.max(0, rawRecords.length - mergedCount);
+  const duplicateRemovedCount = Math.max(0, rawRecords.length - dedupedCountBeforeDefaults);
   const legacyRowsIgnoredCount = Math.max(
     0,
     toNumberWithDefault(collected.legacyRowsIgnoredCount, 0)
@@ -1228,6 +1387,8 @@ function getVariableDataSnapshot(sheet, options) {
     duplicateRemovedCount: duplicateRemovedCount,
     legacyRowsImportedCount: toNumberWithDefault(collected.legacyRowsImportedCount, 0),
     legacyRowsIgnoredCount: legacyRowsIgnoredCount,
+    invalidValueDroppedCount: toNumberWithDefault(mergedResult.invalidValueDroppedCount, 0),
+    filledByDefaultCount: filledByDefaultCount,
     normalizedFromLegacy: !!collected.normalizedFromLegacy,
     map: mergedMap,
     rows: rows
@@ -1237,7 +1398,7 @@ function getVariableDataSnapshot(sheet, options) {
 function normalizeVariableSheetData(options) {
   const opts = options || {};
   const sheet = opts.sheet || ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true });
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
   writeVariableSheetRows(sheet, snapshot.rows);
 
   return {
@@ -1245,7 +1406,9 @@ function normalizeVariableSheetData(options) {
     rowCount: snapshot.rows.length,
     duplicateRemovedCount: snapshot.duplicateRemovedCount,
     normalizedFromLegacy: !!snapshot.normalizedFromLegacy,
-    legacyRowsIgnoredCount: snapshot.legacyRowsIgnoredCount
+    legacyRowsIgnoredCount: snapshot.legacyRowsIgnoredCount,
+    invalidValueDroppedCount: snapshot.invalidValueDroppedCount,
+    filledByDefaultCount: snapshot.filledByDefaultCount
   };
 }
 
@@ -1253,11 +1416,73 @@ function normalizeVariablesPayload() {
   const sheet = ensureVariableSheet();
   const normalized = normalizeVariableSheetData({ sheet: sheet });
   const payload = getVariablesPayload();
-  payload.message = `variable 시트 정규화 완료 (중복 정리 ${normalized.duplicateRemovedCount}건, 레거시 무시 ${normalized.legacyRowsIgnoredCount}건)`;
+  payload.message = `variable 시트 정규화 완료 (중복 정리 ${normalized.duplicateRemovedCount}건, 무효값 폐기 ${normalized.invalidValueDroppedCount}건, 기본값 보정 ${normalized.filledByDefaultCount}건)`;
   payload.normalized = normalized;
   payload.normalizedFromLegacy = !!normalized.normalizedFromLegacy;
   payload.duplicateRemovedCount = normalized.duplicateRemovedCount;
   payload.legacyRowsIgnoredCount = normalized.legacyRowsIgnoredCount;
+  payload.invalidValueDroppedCount = normalized.invalidValueDroppedCount;
+  payload.filledByDefaultCount = normalized.filledByDefaultCount;
+  return payload;
+}
+
+function buildTemplateVariableMap(nowText) {
+  const map = {};
+  REQUIRED_VARIABLE_SPECS.forEach(spec => {
+    const key = canonicalVariableKey(spec.key);
+    map[key] = {
+      key: key,
+      value: spec.value,
+      type: String(spec.type || 'string').trim() || 'string',
+      description: String(spec.description || '').trim(),
+      editable: true,
+      updatedAt: nowText,
+      appliesTo: String(spec.appliesTo || '').trim(),
+      appliesWhen: String(spec.appliesWhen || '').trim(),
+      usedIn: normalizeUsedInText(spec.usedIn || '')
+    };
+  });
+  return map;
+}
+
+function resetVariablesTemplate(modeRaw) {
+  const mode = String(modeRaw || 'preserve').trim().toLowerCase();
+  if (mode !== 'preserve' && mode !== 'reset') {
+    return { success: false, message: 'mode 파라미터는 preserve 또는 reset 이어야 합니다.' };
+  }
+
+  const sheet = ensureVariableSheet();
+  const currentConfig = getVariableConfig();
+  seedSessionMetaForAllSeasonSheets(currentConfig);
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
+  const nowText = formatDateTime(new Date());
+  const templateMap = buildTemplateVariableMap(nowText);
+
+  if (mode === 'preserve') {
+    Object.keys(templateMap).forEach(key => {
+      const current = snapshot.map[key];
+      if (!current) return;
+      if (!isVariableRecordValid(current)) return;
+      templateMap[key].value = current.value;
+      templateMap[key].updatedAt = String(current.updatedAt || nowText).trim();
+    });
+  }
+
+  const rows = buildVariableRowsFromMap(templateMap, nowText, { includeRequired: false, includeExtras: false });
+  writeVariableSheetRows(sheet, rows);
+
+  const payload = getVariablesPayload();
+  payload.message = mode === 'reset'
+    ? '변수 템플릿 완전 초기화 완료'
+    : '변수 템플릿 복구 완료 (value 유지)';
+  payload.resetMode = mode;
+  payload.normalized = {
+    sheetName: sheet.getName(),
+    rowCount: rows.length,
+    duplicateRemovedCount: snapshot.duplicateRemovedCount,
+    invalidValueDroppedCount: snapshot.invalidValueDroppedCount,
+    filledByDefaultCount: snapshot.filledByDefaultCount
+  };
   return payload;
 }
 
@@ -1464,6 +1689,10 @@ function validateVariableValue(key, value, type) {
       return { valid: false, message: `${key}: 빈값을 허용하지 않습니다.` };
     }
 
+    if (value instanceof Date || (typeof value === 'string' && text.indexOf(':') !== -1 && !/^-?\d+(\.\d+)?$/.test(text))) {
+      return { valid: false, message: `${key}: 시간형식(예: 0:00) 대신 분 단위 숫자를 입력하세요.` };
+    }
+
     const parsed = parseVariableValue(value, 'number', key);
     const n = Number(parsed);
     if (parsed === '' || isNaN(n)) {
@@ -1489,22 +1718,24 @@ function validateVariableValue(key, value, type) {
 
 function getVariablesPayload() {
   const sheet = ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: false });
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
   const items = [];
   const config = Object.assign({}, VARIABLE_DEFAULTS);
+  const specMap = getRequiredVariableSpecMap();
 
   snapshot.rows.forEach((row, idx) => {
     const key = canonicalVariableKey(row[0]);
     if (!key) return;
+    if (!Object.prototype.hasOwnProperty.call(specMap, key)) return;
 
     const type = String(row[2] || '').trim() || 'string';
     const parsedValue = parseVariableValue(row[1], type, key);
     const editable = String(row[4] || '').trim();
     const catalog = getVariableCatalogEntry(key);
-    const usageType = catalog.usageType === 'display' ? 'display' : 'logic';
-    const usedIn = Array.isArray(catalog.usedIn)
-      ? catalog.usedIn.map(item => String(item || '').trim()).filter(item => !!item)
-      : [];
+    const spec = specMap[key] || {};
+    const appliesTo = String(row[6] || spec.appliesTo || '').trim();
+    const appliesWhen = String(row[7] || spec.appliesWhen || '').trim();
+    const usedIn = normalizeUsedInText(row[8] || spec.usedIn || '');
 
     items.push({
       key: key,
@@ -1515,13 +1746,11 @@ function getVariablesPayload() {
       updatedAt: String(row[5] || '').trim(),
       row: VARIABLE_TABLE_FIRST_DATA_ROW + idx,
       labelKo: String(catalog.labelKo || '').trim(),
-      unit: String(catalog.unit || '').trim(),
-      appliesTo: String(catalog.appliesTo || '').trim(),
-      appliesWhen: String(catalog.appliesWhen || '').trim(),
+      appliesTo: appliesTo,
+      appliesWhen: appliesWhen,
+      usedIn: usedIn,
       formula: String(catalog.formula || '').trim(),
       example: String(catalog.example || '').trim(),
-      usageType: usageType,
-      usedIn: usedIn,
       validation: catalog.validation || null,
       validationText: buildVariableValidationText(catalog.validation || null)
     });
@@ -1536,7 +1765,12 @@ function getVariablesPayload() {
     sheetName: VARIABLE_SHEET_NAME,
     items: items,
     catalog: VARIABLE_CATALOG,
-    config: normalizeVariableConfig(config)
+    config: normalizeVariableConfig(config),
+    stats: {
+      duplicateRemovedCount: snapshot.duplicateRemovedCount,
+      invalidValueDroppedCount: snapshot.invalidValueDroppedCount,
+      filledByDefaultCount: snapshot.filledByDefaultCount
+    }
   };
 }
 
@@ -1567,10 +1801,11 @@ function updateVariables(items) {
   seedSessionMetaForAllSeasonSheets(currentConfig);
 
   const sheet = ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet);
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
   const existingMap = snapshot.map;
 
   const nowText = formatDateTime(new Date());
+  const specMap = getRequiredVariableSpecMap();
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -1578,43 +1813,58 @@ function updateVariables(items) {
     if (!key) continue;
 
     const existing = existingMap[key] || null;
-    const type = String((item && item.type) || (existing && existing.type) || 'string').trim() || 'string';
-    const description = String((item && item.description) || (existing && existing.description) || '').trim();
-    const editable = item && item.editable !== undefined
-      ? !!item.editable
-      : (existing ? !!existing.editable : true);
+    const spec = specMap[key] || null;
+    if (!existing || !spec) {
+      return { success: false, message: `${key}: 템플릿에 없는 변수입니다. key 변경은 허용되지 않습니다.` };
+    }
 
     if (existing && existing.editable === false) {
       return { success: false, message: `${key}: 수정 불가 항목입니다.` };
     }
 
+    const expectedType = String(existing.type || spec.type || 'string').trim() || 'string';
+    if (item && item.type !== undefined && String(item.type || '').trim() && String(item.type).trim() !== expectedType) {
+      return { success: false, message: `${key}: type 변경은 허용되지 않습니다.` };
+    }
+    if (item && item.description !== undefined && String(item.description || '').trim() !== String(existing.description || '').trim()) {
+      return { success: false, message: `${key}: description 변경은 허용되지 않습니다.` };
+    }
+    if (item && item.editable !== undefined && parseBooleanParam(item.editable) !== (existing.editable !== false)) {
+      return { success: false, message: `${key}: editable 변경은 허용되지 않습니다.` };
+    }
+
     const rawValue = item ? item.value : '';
-    const validation = validateVariableValue(key, rawValue, type);
+    const validation = validateVariableValue(key, rawValue, expectedType);
     if (!validation.valid) {
       return { success: false, message: validation.message || `${key} 변수값 검증에 실패했습니다.` };
     }
 
-    const value = parseVariableValue(rawValue, type, key);
+    const value = parseVariableValue(rawValue, expectedType, key);
 
     existingMap[key] = {
       key: key,
       value: value,
-      type: type,
-      description: description,
-      editable: editable,
-      updatedAt: nowText
+      type: expectedType,
+      description: String(existing.description || spec.description || '').trim(),
+      editable: existing.editable !== false,
+      updatedAt: nowText,
+      appliesTo: String(existing.appliesTo || spec.appliesTo || '').trim(),
+      appliesWhen: String(existing.appliesWhen || spec.appliesWhen || '').trim(),
+      usedIn: normalizeUsedInText(existing.usedIn || spec.usedIn || '')
     };
   }
 
-  const rows = buildVariableRowsFromMap(existingMap, nowText);
+  const rows = buildVariableRowsFromMap(existingMap, nowText, { includeRequired: true, includeExtras: false });
   writeVariableSheetRows(sheet, rows);
 
   const payload = getVariablesPayload();
-  payload.message = `변수 저장 완료 (중복 정리 ${snapshot.duplicateRemovedCount}건)`;
+  payload.message = `변수 저장 완료 (중복 ${snapshot.duplicateRemovedCount}건 정리, 무효값 ${snapshot.invalidValueDroppedCount}건 제외)`;
   payload.normalized = {
     sheetName: sheet.getName(),
     rowCount: rows.length,
-    duplicateRemovedCount: snapshot.duplicateRemovedCount
+    duplicateRemovedCount: snapshot.duplicateRemovedCount,
+    invalidValueDroppedCount: snapshot.invalidValueDroppedCount,
+    filledByDefaultCount: snapshot.filledByDefaultCount
   };
   return payload;
 }
@@ -2516,10 +2766,6 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
   rankings.sort((a, b) => {
     if (b.attendedCount !== a.attendedCount) {
       return b.attendedCount - a.attendedCount;
-    }
-
-    if (b.attendanceRate !== a.attendanceRate) {
-      return b.attendanceRate - a.attendanceRate;
     }
 
     if (a.avgAttendOffsetSeconds === null) return 1;

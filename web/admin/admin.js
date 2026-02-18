@@ -17,6 +17,8 @@ let graduationSortState = { key: 'attendedCount', direction: 'desc' };
 let scheduleDeleteForceState = null;
 let scheduleEndAutoManaged = true;
 let scheduleDefaults = {};
+let excusedSearchKeyword = '';
+let excusedAbsentOnly = false;
 
 function normalizeSeasonAlias(raw) {
   const value = String(raw || '').trim();
@@ -1510,19 +1512,17 @@ function openScheduleDeleteForceModal(state) {
   setTimeout(() => input.focus(), 0);
 }
 
-function getVariableUsageTypeLabel(item) {
-  const usageType = String((item && item.usageType) || '').trim().toLowerCase();
-  if (usageType === 'display') {
-    return '표시용';
-  }
-  return '계산용';
-}
-
 function getVariableUsedInText(item) {
-  if (!item || !Array.isArray(item.usedIn) || item.usedIn.length === 0) {
+  if (!item) {
     return '-';
   }
-  return item.usedIn.join(', ');
+  if (Array.isArray(item.usedIn)) {
+    if (item.usedIn.length === 0) return '-';
+    return item.usedIn.map(v => String(v || '').trim()).filter(Boolean).join(', ');
+  }
+  const text = String(item.usedIn || '').trim();
+  if (!text) return '-';
+  return text.split(';').map(v => v.trim()).filter(Boolean).join(', ');
 }
 
 function closeScheduleDeleteForceModal() {
@@ -1573,12 +1573,10 @@ function renderVariablesTable(items) {
           <input class="table-input" id="var-value-${idx}" data-key="${escapeHtml(item.key)}" data-type="${escapeHtml(item.type || 'string')}" data-description="${escapeHtml(item.description || '')}" ${disabledAttr} value="${escapeHtml(valueText)}" oninput="onVariableInputChanged(${idx}, event)">
         </td>
         <td>${escapeHtml(item.type || 'string')}</td>
-        <td>${escapeHtml(item.unit || '-')}</td>
-        <td>${escapeHtml(getVariableUsageTypeLabel(item))}</td>
+        <td>${escapeHtml(item.description || '')}</td>
         <td>${escapeHtml(item.appliesTo || '-')}</td>
         <td>${escapeHtml(item.appliesWhen || '-')}</td>
         <td>${escapeHtml(getVariableUsedInText(item))}</td>
-        <td>${escapeHtml(item.description || '')}</td>
         <td>${item.editable ? 'Y' : 'N'}</td>
         <td>${escapeHtml(item.updatedAt || '')}</td>
       </tr>
@@ -1592,12 +1590,10 @@ function renderVariablesTable(items) {
           <th>key</th>
           <th>value</th>
           <th>type</th>
-          <th>unit</th>
-          <th>사용 유형</th>
+          <th>description</th>
           <th>적용 위치</th>
           <th>적용 시점</th>
           <th>실제 사용처</th>
-          <th>description</th>
           <th>editable</th>
           <th>updated_at</th>
         </tr>
@@ -1654,11 +1650,13 @@ function renderVariableHelpPanel(item) {
 
   panel.innerHTML = `
     <h4>${escapeHtml(item.labelKo || item.key)}</h4>
-    <p><strong>현재 입력값:</strong> ${escapeHtml(value || '(빈값)')} ${item.unit ? `(${escapeHtml(item.unit)})` : ''}</p>
-    <p><strong>사용 유형:</strong> ${escapeHtml(getVariableUsageTypeLabel(item))}</p>
-    <p><strong>어디에 적용:</strong> ${escapeHtml(item.appliesTo || '-')}</p>
-    <p><strong>언제 적용:</strong> ${escapeHtml(item.appliesWhen || '-')}</p>
+    <p><strong>현재 입력값:</strong> ${escapeHtml(value || '(빈값)')}</p>
+    <p><strong>설정 주체:</strong> 운영자(관리자)</p>
+    <p><strong>설정 위치:</strong> 관리자 페이지 &gt; 변수명 관리 탭</p>
+    <p><strong>어떤 효과:</strong> ${escapeHtml(item.appliesTo || '-')}</p>
+    <p><strong>언제 반영:</strong> ${escapeHtml(item.appliesWhen || '-')}</p>
     <p><strong>실제 사용처:</strong> ${escapeHtml(getVariableUsedInText(item))}</p>
+    <p><strong>영향 범위:</strong> 저장 즉시 계산 기준이 갱신됩니다. 이미 확정된 과거 회차는 메타 스냅샷 기준을 유지합니다.</p>
     <p><strong>설명:</strong> ${escapeHtml(item.description || '-')}</p>
     <p><strong>공식:</strong> ${escapeHtml(item.formula || '-')}</p>
     <p><strong>예시:</strong> ${escapeHtml(item.example || '-')}</p>
@@ -1765,7 +1763,9 @@ async function saveVariables() {
   }
 
   try {
-    const payload = variableItems.map((item, idx) => {
+    const payload = [];
+    variableItems.forEach((item, idx) => {
+      if (item.editable === false) return;
       const input = document.getElementById(`var-value-${idx}`);
       const value = input ? input.value : item.value;
 
@@ -1774,13 +1774,10 @@ async function saveVariables() {
         throw new Error(validation.message || `${item.key} 값이 올바르지 않습니다.`);
       }
 
-      return {
+      payload.push({
         key: item.key,
-        value,
-        type: item.type,
-        description: item.description,
-        editable: item.editable
-      };
+        value
+      });
     });
 
     const response = await CloudClubApi.call('variablesUpdate', {
@@ -1804,6 +1801,38 @@ async function saveVariables() {
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     showBoxMessage('variablesResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '변수 저장 중 오류'))}`, false);
+  }
+}
+
+async function resetVariablesTemplate(mode) {
+  const resetMode = mode === 'reset' ? 'reset' : 'preserve';
+  const confirmMessage = resetMode === 'reset'
+    ? '정말 변수 템플릿을 완전 초기화할까요? 현재 value 값이 기본값으로 바뀝니다.'
+    : '변수 템플릿 메타(설명/적용 위치/사용처)를 표준값으로 복구할까요? value는 유지됩니다.';
+  if (!confirm(confirmMessage)) return;
+
+  try {
+    const response = await CloudClubApi.call('variablesResetTemplate', {
+      adminToken,
+      mode: resetMode
+    });
+
+    if (!response.success) {
+      showBoxMessage('variablesResult', `❌ ${escapeHtml(response.message || '변수 템플릿 복구 실패')}`, false);
+      return;
+    }
+
+    showBoxMessage('variablesResult', `✅ ${escapeHtml(response.message || '변수 템플릿 복구 완료')}`, true);
+    showToast('<i class="fas fa-check-circle"></i> 변수 템플릿 반영 완료', true);
+
+    await Promise.all([
+      loadVariables(),
+      checkAttendanceSession(),
+      loadGraduationReport()
+    ]);
+  } catch (error) {
+    if (handleUnauthorizedError(error)) return;
+    showBoxMessage('variablesResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '변수 템플릿 복구 중 오류'))}`, false);
   }
 }
 
@@ -2073,15 +2102,66 @@ function getMatrixCellLabel(status) {
   }
 }
 
+function setExcusedSearchKeyword(value) {
+  excusedSearchKeyword = String(value || '').trim().toLowerCase();
+  if (graduationReportCache) {
+    renderGraduationMatrix(graduationReportCache);
+  }
+}
+
+function setExcusedAbsentOnly(value) {
+  excusedAbsentOnly = !!value;
+  if (graduationReportCache) {
+    renderGraduationMatrix(graduationReportCache);
+  }
+}
+
+function getFilteredExcusedMembers(report) {
+  const members = getSortedGraduationMembers(report);
+  const query = excusedSearchKeyword;
+
+  return members.filter(member => {
+    if (excusedAbsentOnly) {
+      const hasAbsent = (member.details || []).some(detail => detail.status === 'absent');
+      if (!hasAbsent) return false;
+    }
+
+    if (!query) return true;
+
+    const name = String(member.name || '').toLowerCase();
+    const grade = String(member.grade || '').toLowerCase();
+    const phone = String(member.phone || '').toLowerCase();
+    return name.includes(query) || grade.includes(query) || phone.includes(query);
+  });
+}
+
+function syncExcusedFilterUi() {
+  const keywordInput = document.getElementById('excusedMemberSearch');
+  const absentOnly = document.getElementById('excusedAbsentOnly');
+  if (keywordInput && keywordInput.value !== excusedSearchKeyword) {
+    keywordInput.value = excusedSearchKeyword;
+  }
+  if (absentOnly && absentOnly.checked !== excusedAbsentOnly) {
+    absentOnly.checked = excusedAbsentOnly;
+  }
+}
+
 function renderGraduationMatrix(report) {
   const wrap = document.getElementById('excusedMatrixWrap');
+  const meta = document.getElementById('excusedFilterMeta');
   if (!wrap) return;
 
   const sessions = report.sessions || [];
-  const members = getSortedGraduationMembers(report);
+  const allMembers = getSortedGraduationMembers(report);
+  const members = getFilteredExcusedMembers(report);
+
+  syncExcusedFilterUi();
+  if (meta) {
+    meta.textContent = `표시 ${members.length}명 / 전체 ${allMembers.length}명`;
+  }
 
   if (sessions.length === 0 || members.length === 0) {
-    wrap.innerHTML = '<p class="info-text">매트릭스를 표시할 데이터가 없습니다.</p>';
+    wrap.innerHTML = '<p class="info-text">조건에 맞는 회원이 없습니다.</p>';
     return;
   }
 
@@ -2153,10 +2233,12 @@ async function loadGraduationReport() {
   const tableWrap = document.getElementById('graduationTableWrap');
   const matrixWrap = document.getElementById('excusedMatrixWrap');
   const loadMoreWrap = document.getElementById('graduationLoadMoreWrap');
+  const matrixMeta = document.getElementById('excusedFilterMeta');
 
   if (tableWrap) tableWrap.innerHTML = '<div class="loader" style="margin: 24px auto;"></div>';
   if (matrixWrap) matrixWrap.innerHTML = '<div class="loader" style="margin: 24px auto;"></div>';
   if (loadMoreWrap) loadMoreWrap.innerHTML = '';
+  if (matrixMeta) matrixMeta.textContent = '불러오는 중...';
 
   try {
     const response = await CloudClubApi.call('graduationReport', {
@@ -2168,6 +2250,7 @@ async function loadGraduationReport() {
       if (tableWrap) tableWrap.innerHTML = `<div class="error">${escapeHtml(response.message || '수료 판정 조회 실패')}</div>`;
       if (matrixWrap) matrixWrap.innerHTML = '';
       if (loadMoreWrap) loadMoreWrap.innerHTML = '';
+      if (matrixMeta) matrixMeta.textContent = '표시 0명 / 전체 0명';
       return;
     }
 
@@ -2182,6 +2265,7 @@ async function loadGraduationReport() {
     if (tableWrap) tableWrap.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '수료 판정 조회 중 오류'))}</div>`;
     if (matrixWrap) matrixWrap.innerHTML = '';
     if (loadMoreWrap) loadMoreWrap.innerHTML = '';
+    if (matrixMeta) matrixMeta.textContent = '표시 0명 / 전체 0명';
   }
 }
 

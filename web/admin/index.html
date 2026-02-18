@@ -645,6 +645,44 @@
       flex-wrap: wrap;
     }
 
+    .excused-filter-row {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .excused-search-input {
+      min-width: 260px;
+      max-width: 360px;
+      width: 100%;
+      flex: 1 1 260px;
+      margin: 0;
+    }
+
+    .excused-filter-checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #dbeafe;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .excused-filter-checkbox input[type='checkbox'] {
+      width: 16px;
+      height: 16px;
+      accent-color: #60a5fa;
+    }
+
+    .excused-filter-meta {
+      color: #93bbfc;
+      font-size: 12px;
+      margin-left: auto;
+    }
+
     .schedule-form-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1584,6 +1622,7 @@
           <i class="fas fa-trophy card-icon"></i>
           <h2 class="card-title">출석률 순위</h2>
         </div>
+        <p class="info-text">정렬 기준: 출석 횟수 우선, 동률이면 평균 출석 오프셋이 빠른 순서입니다.</p>
         <div id="rankingBoard">
           <div class="loader" style="margin: 32px auto;"></div>
         </div>
@@ -1656,7 +1695,7 @@
           <i class="fas fa-cogs card-icon"></i>
           <h2 class="card-title">variable 시트 변수 편집</h2>
         </div>
-        <p class="info-text"><code>key | value | type | description | editable | updated_at</code> 단일 테이블 기준으로 변수값을 편집합니다. 각 변수의 적용 위치/시점/공식은 상세 패널에서 확인할 수 있습니다.</p>
+        <p class="info-text"><code>key | value | type | description | editable | updated_at | applies_to | applies_when | used_in</code> 단일 테이블(A:I) 기준입니다. 운영자는 <strong>value만 수정</strong>하며, 나머지 메타 정보는 템플릿 기준으로 유지됩니다.</p>
         <div class="table-wrap" id="variablesTableWrap">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
@@ -1672,6 +1711,14 @@
           <button type="button" class="btn btn-secondary" onclick="loadVariables()">
             <i class="fas fa-sync"></i>
             <span>다시 불러오기</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="resetVariablesTemplate('preserve')">
+            <i class="fas fa-tools"></i>
+            <span>템플릿 복구(value 유지)</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="resetVariablesTemplate('reset')">
+            <i class="fas fa-undo-alt"></i>
+            <span>템플릿 완전 초기화</span>
           </button>
         </div>
         <div id="variablesResult" style="display:none;"></div>
@@ -1718,6 +1765,20 @@
           색상 기준: 출석(연초록), 지각(연주황), 결석(연빨강), 유고(연파랑).<br>
           셀을 클릭하면 유고 설정/해제와 코멘트(Note) 저장이 가능합니다.
         </p>
+        <div class="excused-filter-row">
+          <input
+            id="excusedMemberSearch"
+            type="text"
+            class="form-input excused-search-input"
+            placeholder="회원 검색 (이름/기수/전화번호)"
+            oninput="setExcusedSearchKeyword(this.value)"
+          >
+          <label class="excused-filter-checkbox">
+            <input id="excusedAbsentOnly" type="checkbox" onchange="setExcusedAbsentOnly(this.checked)">
+            <span>결석 1회 이상만 보기</span>
+          </label>
+          <span class="excused-filter-meta" id="excusedFilterMeta">표시 0명 / 전체 0명</span>
+        </div>
         <div class="table-wrap" id="excusedMatrixWrap">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
