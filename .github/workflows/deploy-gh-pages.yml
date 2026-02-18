@@ -1,0 +1,82 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [ "gh-pages" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate APPS_SCRIPT_WEB_APP_URL secret
+        env:
+          APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPS_SCRIPT_WEB_APP_URL:-}" ]; then
+            echo "::error::APPS_SCRIPT_WEB_APP_URL secret is empty. Secret 갱신 후 다시 배포하세요."
+            exit 1
+          fi
+
+          case "$APPS_SCRIPT_WEB_APP_URL" in
+            https://script.google.com/macros/s/*/exec*)
+              ;;
+            *)
+              echo "::error::APPS_SCRIPT_WEB_APP_URL format is invalid: $APPS_SCRIPT_WEB_APP_URL"
+              exit 1
+              ;;
+          esac
+
+      - name: Inject API URL from secret
+        env:
+          APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+        run: |
+          set -euo pipefail
+          grep -q "__API_BASE_URL__" web/shared/env.js || { echo "::error::env.js placeholder(__API_BASE_URL__)를 찾지 못했습니다."; exit 1; }
+          sed -i "0,/__API_BASE_URL__/s|__API_BASE_URL__|$APPS_SCRIPT_WEB_APP_URL|" web/shared/env.js
+          grep -q "__API_BASE_URL__" web/shared/env.js && { echo "::error::env.js placeholder가 남아있습니다."; exit 1; }
+          grep -F "$APPS_SCRIPT_WEB_APP_URL" web/shared/env.js >/dev/null || { echo "::error::env.js에 API URL이 주입되지 않았습니다."; exit 1; }
+
+      - name: Health check Apps Script apiInfo
+        env:
+          APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+        run: |
+          set -euo pipefail
+          sep='?'
+          if [[ "$APPS_SCRIPT_WEB_APP_URL" == *\?* ]]; then
+            sep='&'
+          fi
+          health_url="${APPS_SCRIPT_WEB_APP_URL}${sep}api=apiInfo&callback=cb&_=$(date +%s)"
+          body="$(curl -fsSL "$health_url")"
+
+          echo "$body" | grep -q '"apiVersion"' || { echo "::error::apiInfo 응답에 apiVersion이 없습니다."; exit 1; }
+          echo "$body" | grep -q '"variablesResetTemplate"' || { echo "::error::apiInfo 응답에 variablesResetTemplate 지원 정보가 없습니다."; exit 1; }
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
