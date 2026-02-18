@@ -79,6 +79,22 @@ function buildSeasonParams(extraParams) {
   return params;
 }
 
+function formatDurationKorean(ms) {
+  const totalSec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+
+  if (days > 0) {
+    return `${days}일 ${hours}시간 ${minutes}분 ${String(seconds).padStart(2, '0')}초`;
+  }
+  if (hours > 0) {
+    return `${hours}시간 ${minutes}분 ${String(seconds).padStart(2, '0')}초`;
+  }
+  return `${minutes}분 ${String(seconds).padStart(2, '0')}초`;
+}
+
 function renderCountdown(session) {
   const countdownTitle = document.getElementById('countdown-title');
   const countdownDiv = document.getElementById('countdown');
@@ -107,10 +123,8 @@ function renderCountdown(session) {
           return;
         }
 
-        const minutes = Math.floor((remain % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((remain % (1000 * 60)) / 1000);
         countdownTitle.textContent = '출석 오픈까지 남은 시간';
-        countdownDiv.textContent = `${String(minutes).padStart(2, '0')}분 ${String(seconds).padStart(2, '0')}초`;
+        countdownDiv.textContent = formatDurationKorean(remain);
       };
 
       updateOpenCountdown();
@@ -158,9 +172,7 @@ function renderCountdown(session) {
     }
 
     const remaining = Math.max(0, target - now);
-    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-    countdownDiv.textContent = `${String(minutes).padStart(2, '0')}분 ${String(seconds).padStart(2, '0')}초`;
+    countdownDiv.textContent = formatDurationKorean(remaining);
   };
 
   updateClock();
