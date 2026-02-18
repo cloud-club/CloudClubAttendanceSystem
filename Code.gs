@@ -2764,18 +2764,23 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
   }
 
   rankings.sort((a, b) => {
-    if (b.attendedCount !== a.attendedCount) {
-      return b.attendedCount - a.attendedCount;
+    const aAttended = Number(a.attendedCount || 0);
+    const bAttended = Number(b.attendedCount || 0);
+    if (bAttended !== aAttended) {
+      return bAttended - aAttended;
     }
 
-    if (a.avgAttendOffsetSeconds === null) return 1;
-    if (b.avgAttendOffsetSeconds === null) return -1;
-
-    if (a.avgAttendOffsetSeconds !== b.avgAttendOffsetSeconds) {
-      return a.avgAttendOffsetSeconds - b.avgAttendOffsetSeconds;
+    const aOffset = a.avgAttendOffsetSeconds === null || a.avgAttendOffsetSeconds === undefined
+      ? Number.POSITIVE_INFINITY
+      : Number(a.avgAttendOffsetSeconds);
+    const bOffset = b.avgAttendOffsetSeconds === null || b.avgAttendOffsetSeconds === undefined
+      ? Number.POSITIVE_INFINITY
+      : Number(b.avgAttendOffsetSeconds);
+    if (aOffset !== bOffset) {
+      return aOffset - bOffset;
     }
 
-    return String(a.name).localeCompare(String(b.name));
+    return String(a.name || '').localeCompare(String(b.name || ''));
   });
 
   rankings.forEach((item, index) => {

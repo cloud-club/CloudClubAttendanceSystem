@@ -185,6 +185,30 @@ async function loadRankings() {
   }
 }
 
+function normalizeAndSortRankings(items) {
+  const list = Array.isArray(items) ? items.slice() : [];
+
+  list.sort((a, b) => {
+    const aAttended = Number(a && a.attendedCount || 0);
+    const bAttended = Number(b && b.attendedCount || 0);
+    if (bAttended !== aAttended) {
+      return bAttended - aAttended;
+    }
+
+    const aOffsetRaw = a && a.avgAttendOffsetSeconds;
+    const bOffsetRaw = b && b.avgAttendOffsetSeconds;
+    const aOffset = aOffsetRaw === null || aOffsetRaw === undefined ? Number.POSITIVE_INFINITY : Number(aOffsetRaw);
+    const bOffset = bOffsetRaw === null || bOffsetRaw === undefined ? Number.POSITIVE_INFINITY : Number(bOffsetRaw);
+    if (aOffset !== bOffset) {
+      return aOffset - bOffset;
+    }
+
+    return String(a && a.name || '').localeCompare(String(b && b.name || ''), 'ko');
+  });
+
+  return list.map((item, index) => Object.assign({}, item, { rank: index + 1 }));
+}
+
 function displayRankings(response) {
   const rankingBoard = document.getElementById('rankingBoard');
 
@@ -193,7 +217,7 @@ function displayRankings(response) {
     return;
   }
 
-  const rankings = response.data;
+  const rankings = normalizeAndSortRankings(response.data);
   if (!rankings || rankings.length === 0) {
     rankingBoard.innerHTML = '<p class="info-text">아직 출석 데이터가 없습니다.</p>';
     return;
