@@ -270,11 +270,13 @@ async function initializeDashboard() {
 
   await Promise.all([
     loadAdminQrCode(),
-    loadSheets(),
-    loadVariables()
+    loadSheets()
   ]);
 
-  await refreshSeasonData();
+  await Promise.all([
+    refreshSessionAndRanking(),
+    loadSheetLinkInfo()
+  ]);
 
   const savedPhone = localStorage.getItem('lastUsedPhone');
   if (savedPhone) {
@@ -320,11 +322,28 @@ async function initializeDashboard() {
 async function refreshSeasonData() {
   await Promise.all([
     refreshSessionAndRanking(),
-    loadScheduleList(),
-    loadMembers(),
-    loadSheetLinkInfo(),
-    loadGraduationReport()
+    loadSheetLinkInfo()
   ]);
+
+  const activeTab = getActiveTabName();
+  if (activeTab === 'schedule' || activeTab === 'attend') {
+    await loadScheduleList();
+    return;
+  }
+
+  if (activeTab === 'variables') {
+    await loadVariables();
+    return;
+  }
+
+  if (activeTab === 'graduation' || activeTab === 'excused') {
+    await loadGraduationReport();
+  }
+}
+
+function getActiveTabName() {
+  const activeTab = document.querySelector('.tab-content.active');
+  return activeTab ? activeTab.id : 'generate';
 }
 
 async function loadAdminQrCode() {
@@ -1491,6 +1510,21 @@ function openScheduleDeleteForceModal(state) {
   setTimeout(() => input.focus(), 0);
 }
 
+function getVariableUsageTypeLabel(item) {
+  const usageType = String((item && item.usageType) || '').trim().toLowerCase();
+  if (usageType === 'display') {
+    return '표시용';
+  }
+  return '계산용';
+}
+
+function getVariableUsedInText(item) {
+  if (!item || !Array.isArray(item.usedIn) || item.usedIn.length === 0) {
+    return '-';
+  }
+  return item.usedIn.join(', ');
+}
+
 function closeScheduleDeleteForceModal() {
   const modal = document.getElementById('scheduleDeleteForceModal');
   if (modal) {
@@ -1540,8 +1574,10 @@ function renderVariablesTable(items) {
         </td>
         <td>${escapeHtml(item.type || 'string')}</td>
         <td>${escapeHtml(item.unit || '-')}</td>
+        <td>${escapeHtml(getVariableUsageTypeLabel(item))}</td>
         <td>${escapeHtml(item.appliesTo || '-')}</td>
         <td>${escapeHtml(item.appliesWhen || '-')}</td>
+        <td>${escapeHtml(getVariableUsedInText(item))}</td>
         <td>${escapeHtml(item.description || '')}</td>
         <td>${item.editable ? 'Y' : 'N'}</td>
         <td>${escapeHtml(item.updatedAt || '')}</td>
@@ -1557,8 +1593,10 @@ function renderVariablesTable(items) {
           <th>value</th>
           <th>type</th>
           <th>unit</th>
+          <th>사용 유형</th>
           <th>적용 위치</th>
           <th>적용 시점</th>
+          <th>실제 사용처</th>
           <th>description</th>
           <th>editable</th>
           <th>updated_at</th>
@@ -1617,8 +1655,10 @@ function renderVariableHelpPanel(item) {
   panel.innerHTML = `
     <h4>${escapeHtml(item.labelKo || item.key)}</h4>
     <p><strong>현재 입력값:</strong> ${escapeHtml(value || '(빈값)')} ${item.unit ? `(${escapeHtml(item.unit)})` : ''}</p>
+    <p><strong>사용 유형:</strong> ${escapeHtml(getVariableUsageTypeLabel(item))}</p>
     <p><strong>어디에 적용:</strong> ${escapeHtml(item.appliesTo || '-')}</p>
     <p><strong>언제 적용:</strong> ${escapeHtml(item.appliesWhen || '-')}</p>
+    <p><strong>실제 사용처:</strong> ${escapeHtml(getVariableUsedInText(item))}</p>
     <p><strong>설명:</strong> ${escapeHtml(item.description || '-')}</p>
     <p><strong>공식:</strong> ${escapeHtml(item.formula || '-')}</p>
     <p><strong>예시:</strong> ${escapeHtml(item.example || '-')}</p>

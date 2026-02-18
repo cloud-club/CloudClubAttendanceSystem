@@ -23,6 +23,8 @@ const SESSION_META_HEADERS = ['seasonSheet', 'sessionKey', 'openOffsetMin', 'lat
 const VARIABLE_CATALOG = {
   attendance_open_offset_min: {
     labelKo: '출석 오픈 오프셋',
+    usageType: 'logic',
+    usedIn: ['collectSessionsFromSheet.openTime'],
     unit: '분',
     appliesTo: '출석 오픈 시각 계산',
     appliesWhen: '회차 시작 시각 기준',
@@ -32,6 +34,8 @@ const VARIABLE_CATALOG = {
   },
   late_threshold_min: {
     labelKo: '지각 판정 기준',
+    usageType: 'logic',
+    usedIn: ['collectSessionsFromSheet.onTimeDeadline'],
     unit: '분',
     appliesTo: '정시/지각 구분 경계',
     appliesWhen: '회차 시작 이후',
@@ -41,6 +45,8 @@ const VARIABLE_CATALOG = {
   },
   absence_threshold_min: {
     labelKo: '기본 출석 마감 기준',
+    usageType: 'logic',
+    usedIn: ['collectSessionsFromSheet.lateDeadline', 'web/admin.scheduleDefaultEndTime'],
     unit: '분',
     appliesTo: '종료시간 미입력 회차의 지각 마감',
     appliesWhen: '회차 종료시간이 비어있을 때',
@@ -50,6 +56,8 @@ const VARIABLE_CATALOG = {
   },
   required_attendance_count: {
     labelKo: '수료 최소 출석 횟수',
+    usageType: 'logic',
+    usedIn: ['getGraduationReport.requiredAttendance'],
     unit: '회',
     appliesTo: '수료 판정',
     appliesWhen: '수료 리포트 계산 시',
@@ -59,6 +67,8 @@ const VARIABLE_CATALOG = {
   },
   late_to_absence_ratio: {
     labelKo: '지각 결석 환산비',
+    usageType: 'logic',
+    usedIn: ['getGraduationReport.absenceEquivalent'],
     unit: '회',
     appliesTo: '결석환산 계산',
     appliesWhen: '수료 리포트 계산 시',
@@ -68,6 +78,8 @@ const VARIABLE_CATALOG = {
   },
   required_session_positions: {
     labelKo: '필참 회차 위치',
+    usageType: 'logic',
+    usedIn: ['evaluateRequiredSessions', 'getGraduationReport.requiredCheck'],
     unit: '위치',
     appliesTo: '수료 필참 조건',
     appliesWhen: '수료 리포트 계산 시',
@@ -77,6 +89,8 @@ const VARIABLE_CATALOG = {
   },
   max_absence_equivalent: {
     labelKo: '결석환산 상한',
+    usageType: 'logic',
+    usedIn: ['getGraduationReport.absenceThreshold'],
     unit: '회',
     appliesTo: '수료 불가 기준',
     appliesWhen: '수료 리포트 계산 시',
@@ -86,6 +100,8 @@ const VARIABLE_CATALOG = {
   },
   official_session_min_recommended: {
     labelKo: '권장 최소 공식행사 수',
+    usageType: 'display',
+    usedIn: ['getGraduationReport.variables'],
     unit: '회',
     appliesTo: '운영 가이드',
     appliesWhen: '수료 규칙 안내 표시',
@@ -95,6 +111,8 @@ const VARIABLE_CATALOG = {
   },
   official_session_max_recommended: {
     labelKo: '권장 최대 공식행사 수',
+    usageType: 'display',
+    usedIn: ['getGraduationReport.variables'],
     unit: '회',
     appliesTo: '운영 가이드',
     appliesWhen: '수료 규칙 안내 표시',
@@ -104,6 +122,8 @@ const VARIABLE_CATALOG = {
   },
   default_session_start_time: {
     labelKo: '일정 기본 시작시간',
+    usageType: 'logic',
+    usedIn: ['getScheduleList.defaults', 'web/admin.getDefaultScheduleStartTime'],
     unit: 'HH:mm',
     appliesTo: '관리자 일정 등록 UI',
     appliesWhen: '신규 일정 입력 시작값',
@@ -890,7 +910,15 @@ function ensureVariableSheet(options) {
     const nowText = formatDateTime(new Date());
     const baseMap = {};
     ensureRequiredVariableEntries(baseMap, nowText);
-    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText));
+    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText, { includeRequired: false }));
+    return sheet;
+  }
+
+  if (sheet.getLastRow() < 1) {
+    const nowText = formatDateTime(new Date());
+    const baseMap = {};
+    ensureRequiredVariableEntries(baseMap, nowText);
+    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText, { includeRequired: false }));
     return sheet;
   }
 
@@ -902,7 +930,10 @@ function ensureVariableSheet(options) {
 }
 
 function canonicalVariableKey(key) {
-  return String(key || '').trim().toLowerCase();
+  return String(key || '')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .trim()
+    .toLowerCase();
 }
 
 function toVariableText(value) {
@@ -936,12 +967,43 @@ function parseVariableEditable(value, defaultValue) {
   return parseBooleanParam(value);
 }
 
+function normalizeLegacyHeaderToken(value) {
+  return String(value || '')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+function isLegacyVariableHeaderRow(rowValues) {
+  if (!rowValues || rowValues.length < 3) return false;
+  const headerA = normalizeLegacyHeaderToken(rowValues[0]);
+  const headerB = normalizeLegacyHeaderToken(rowValues[1]);
+  const headerC = normalizeLegacyHeaderToken(rowValues[2]);
+  return headerA === '지각한계범위'
+    && headerB === '결석한계범위'
+    && headerC === '출석시작범위';
+}
+
 function collectVariableRecords(sheet) {
   const records = [];
   const lastRow = sheet.getLastRow();
+  let legacyRowsImportedCount = 0;
+  let legacyRowsIgnoredCount = 0;
+  let normalizedFromLegacy = false;
+
   if (lastRow < 1) {
-    return records;
+    return {
+      records: records,
+      legacyRowsImportedCount: legacyRowsImportedCount,
+      legacyRowsIgnoredCount: legacyRowsIgnoredCount,
+      normalizedFromLegacy: normalizedFromLegacy
+    };
   }
+
+  const firstRow = sheet.getRange(1, 1, 1, 3).getValues()[0];
+  const isSingleTable = canonicalVariableKey(firstRow[0]) === 'key';
+  const hasLegacyHeader = isLegacyVariableHeaderRow(firstRow);
+  const allowLegacyRead = !isSingleTable && hasLegacyHeader;
 
   let rowOrder = 0;
   const appendRows = (headerRow, firstDataRow) => {
@@ -965,7 +1027,8 @@ function collectVariableRecords(sheet) {
         description: String(row[3] || '').trim(),
         editable: parseVariableEditable(row[4], true),
         updatedAt: toVariableText(row[5]),
-        order: rowOrder
+        order: rowOrder,
+        source: 'table'
       });
     });
   };
@@ -973,8 +1036,8 @@ function collectVariableRecords(sheet) {
   appendRows(1, 2);
   appendRows(5, 6);
 
-  // 구형 A2:C2를 단일 테이블로 읽기 전용 마이그레이션(쓰기 없음)
-  if (lastRow >= 2) {
+  // 구형 A2:C2 레거시 레이아웃은 레거시 헤더일 때만 읽는다.
+  if (lastRow >= 2 && allowLegacyRead) {
     const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
     const legacyKeyMap = [
       { key: 'late_threshold_min', value: legacyValues[0] },
@@ -986,6 +1049,8 @@ function collectVariableRecords(sheet) {
       const raw = toVariableText(item.value);
       if (!raw) return;
       rowOrder++;
+      legacyRowsImportedCount++;
+      normalizedFromLegacy = true;
       records.push({
         key: item.key,
         value: item.value,
@@ -993,15 +1058,28 @@ function collectVariableRecords(sheet) {
         description: '',
         editable: true,
         updatedAt: '',
-        order: -100000 + rowOrder
+        order: -100000 + rowOrder,
+        source: 'legacy'
       });
+    });
+  } else if (lastRow >= 2 && hasLegacyHeader) {
+    const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
+    legacyValues.forEach(value => {
+      if (toVariableText(value)) {
+        legacyRowsIgnoredCount++;
+      }
     });
   }
 
-  return records;
+  return {
+    records: records,
+    legacyRowsImportedCount: legacyRowsImportedCount,
+    legacyRowsIgnoredCount: legacyRowsIgnoredCount,
+    normalizedFromLegacy: normalizedFromLegacy
+  };
 }
 
-function mergeVariableRecordsByLatest(records, nowText) {
+function mergeVariableRecordsByLatest(records) {
   const map = {};
 
   records.forEach(record => {
@@ -1014,7 +1092,8 @@ function mergeVariableRecordsByLatest(records, nowText) {
       type: String(record.type || '').trim() || 'string',
       description: String(record.description || '').trim(),
       editable: record.editable !== false,
-      updatedAt: String(record.updatedAt || '').trim()
+      updatedAt: String(record.updatedAt || '').trim(),
+      source: record.source || 'table'
     };
     const candidateTs = parseVariableUpdatedAtTimestamp(candidate.updatedAt, record.order);
 
@@ -1023,6 +1102,7 @@ function mergeVariableRecordsByLatest(records, nowText) {
       map[key] = candidate;
       map[key]._sortTs = candidateTs;
       map[key]._sortOrder = record.order;
+      map[key]._source = candidate.source;
       return;
     }
 
@@ -1033,17 +1113,25 @@ function mergeVariableRecordsByLatest(records, nowText) {
       map[key] = candidate;
       map[key]._sortTs = candidateTs;
       map[key]._sortOrder = record.order;
+      map[key]._source = candidate.source;
     }
   });
-
-  ensureRequiredVariableEntries(map, nowText);
+  let selectedLegacyCount = 0;
 
   Object.keys(map).forEach(key => {
+    if (map[key]._source === 'legacy') {
+      selectedLegacyCount++;
+    }
+    delete map[key].source;
     delete map[key]._sortTs;
     delete map[key]._sortOrder;
+    delete map[key]._source;
   });
 
-  return map;
+  return {
+    map: map,
+    selectedLegacyCount: selectedLegacyCount
+  };
 }
 
 function ensureRequiredVariableEntries(dataMap, nowText) {
@@ -1074,12 +1162,16 @@ function ensureRequiredVariableEntries(dataMap, nowText) {
   });
 }
 
-function buildVariableRowsFromMap(dataMap, nowText) {
-  ensureRequiredVariableEntries(dataMap, nowText);
+function buildVariableRowsFromMap(dataMap, nowText, options) {
+  const opts = options || {};
+  if (opts.includeRequired === true) {
+    ensureRequiredVariableEntries(dataMap, nowText);
+  }
 
   const requiredOrder = REQUIRED_VARIABLE_SPECS.map(spec => canonicalVariableKey(spec.key));
+  const presentRequiredKeys = requiredOrder.filter(key => Object.prototype.hasOwnProperty.call(dataMap, key));
   const extraKeys = Object.keys(dataMap).filter(key => requiredOrder.indexOf(key) === -1).sort();
-  const orderedKeys = requiredOrder.concat(extraKeys);
+  const orderedKeys = presentRequiredKeys.concat(extraKeys);
 
   return orderedKeys.map(key => {
     const item = dataMap[key];
@@ -1108,17 +1200,35 @@ function writeVariableSheetRows(sheet, rows) {
   }
 }
 
-function getVariableDataSnapshot(sheet) {
+function getVariableDataSnapshot(sheet, options) {
+  const opts = options || {};
   const nowText = formatDateTime(new Date());
-  const rawRecords = collectVariableRecords(sheet);
-  const mergedMap = mergeVariableRecordsByLatest(rawRecords, nowText);
-  const rows = buildVariableRowsFromMap(mergedMap, nowText);
+  const collected = collectVariableRecords(sheet);
+  const rawRecords = collected.records || [];
+  const mergedResult = mergeVariableRecordsByLatest(rawRecords);
+  const mergedMap = mergedResult.map || {};
+  const includeRequired = opts.includeRequired === true;
+  if (includeRequired) {
+    ensureRequiredVariableEntries(mergedMap, nowText);
+  }
+  const rows = buildVariableRowsFromMap(mergedMap, nowText, { includeRequired: false });
+  const mergedCount = Object.keys(mergedMap).length;
+  const duplicateRemovedCount = Math.max(0, rawRecords.length - mergedCount);
+  const legacyRowsIgnoredCount = Math.max(
+    0,
+    toNumberWithDefault(collected.legacyRowsIgnoredCount, 0)
+      + toNumberWithDefault(collected.legacyRowsImportedCount, 0)
+      - toNumberWithDefault(mergedResult.selectedLegacyCount, 0)
+  );
 
   return {
     nowText: nowText,
     rawCount: rawRecords.length,
-    dedupedCount: Object.keys(mergedMap).length,
-    duplicateRemovedCount: Math.max(0, rawRecords.length - Object.keys(mergedMap).length),
+    dedupedCount: mergedCount,
+    duplicateRemovedCount: duplicateRemovedCount,
+    legacyRowsImportedCount: toNumberWithDefault(collected.legacyRowsImportedCount, 0),
+    legacyRowsIgnoredCount: legacyRowsIgnoredCount,
+    normalizedFromLegacy: !!collected.normalizedFromLegacy,
     map: mergedMap,
     rows: rows
   };
@@ -1127,13 +1237,15 @@ function getVariableDataSnapshot(sheet) {
 function normalizeVariableSheetData(options) {
   const opts = options || {};
   const sheet = opts.sheet || ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet);
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true });
   writeVariableSheetRows(sheet, snapshot.rows);
 
   return {
     sheetName: sheet.getName(),
     rowCount: snapshot.rows.length,
-    duplicateRemovedCount: snapshot.duplicateRemovedCount
+    duplicateRemovedCount: snapshot.duplicateRemovedCount,
+    normalizedFromLegacy: !!snapshot.normalizedFromLegacy,
+    legacyRowsIgnoredCount: snapshot.legacyRowsIgnoredCount
   };
 }
 
@@ -1141,8 +1253,11 @@ function normalizeVariablesPayload() {
   const sheet = ensureVariableSheet();
   const normalized = normalizeVariableSheetData({ sheet: sheet });
   const payload = getVariablesPayload();
-  payload.message = `variable 시트 정규화 완료 (중복 정리 ${normalized.duplicateRemovedCount}건)`;
+  payload.message = `variable 시트 정규화 완료 (중복 정리 ${normalized.duplicateRemovedCount}건, 레거시 무시 ${normalized.legacyRowsIgnoredCount}건)`;
   payload.normalized = normalized;
+  payload.normalizedFromLegacy = !!normalized.normalizedFromLegacy;
+  payload.duplicateRemovedCount = normalized.duplicateRemovedCount;
+  payload.legacyRowsIgnoredCount = normalized.legacyRowsIgnoredCount;
   return payload;
 }
 
@@ -1291,7 +1406,9 @@ function normalizeHhmm(value, defaultValue) {
 }
 
 function getVariableCatalogEntry(key) {
-  return VARIABLE_CATALOG[key] || {};
+  const normalizedKey = canonicalVariableKey(key);
+  const entry = VARIABLE_CATALOG[normalizedKey] || {};
+  return Object.assign({}, entry);
 }
 
 function buildVariableValidationText(validation) {
@@ -1372,7 +1489,7 @@ function validateVariableValue(key, value, type) {
 
 function getVariablesPayload() {
   const sheet = ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet);
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: false });
   const items = [];
   const config = Object.assign({}, VARIABLE_DEFAULTS);
 
@@ -1384,6 +1501,10 @@ function getVariablesPayload() {
     const parsedValue = parseVariableValue(row[1], type, key);
     const editable = String(row[4] || '').trim();
     const catalog = getVariableCatalogEntry(key);
+    const usageType = catalog.usageType === 'display' ? 'display' : 'logic';
+    const usedIn = Array.isArray(catalog.usedIn)
+      ? catalog.usedIn.map(item => String(item || '').trim()).filter(item => !!item)
+      : [];
 
     items.push({
       key: key,
@@ -1399,6 +1520,8 @@ function getVariablesPayload() {
       appliesWhen: String(catalog.appliesWhen || '').trim(),
       formula: String(catalog.formula || '').trim(),
       example: String(catalog.example || '').trim(),
+      usageType: usageType,
+      usedIn: usedIn,
       validation: catalog.validation || null,
       validationText: buildVariableValidationText(catalog.validation || null)
     });
@@ -1517,9 +1640,18 @@ function ensureSessionMetaSheet() {
   return sheet;
 }
 
-function getSessionMetaPack(seasonSheetName) {
-  const metaSheet = ensureSessionMetaSheet();
+function getSessionMetaPack(seasonSheetName, options) {
+  const opts = options || {};
+  const createIfMissing = opts.createIfMissing !== false;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const metaSheet = createIfMissing
+    ? ensureSessionMetaSheet()
+    : ss.getSheetByName(SESSION_META_SHEET_NAME);
   const map = {};
+
+  if (!metaSheet) {
+    return { metaSheet: null, map: map };
+  }
 
   const lastRow = metaSheet.getLastRow();
   if (lastRow < 2) {
@@ -1575,7 +1707,7 @@ function collectSessionsFromSheet(sheet, options) {
   }
 
   const seasonSheetName = sheet.getName();
-  const metaPack = getSessionMetaPack(seasonSheetName);
+  const metaPack = getSessionMetaPack(seasonSheetName, { createIfMissing: createMissingMeta });
   const nowText = formatDateTime(new Date());
 
   const pendingMetaRows = [];
@@ -1596,13 +1728,13 @@ function collectSessionsFromSheet(sheet, options) {
       return;
     }
 
-    if (existing && parsed.explicitEndAt && existing.explicitEndAt !== parsed.explicitEndAt) {
+    if (createMissingMeta && existing && parsed.explicitEndAt && existing.explicitEndAt !== parsed.explicitEndAt) {
       existing.explicitEndAt = parsed.explicitEndAt;
       updateRows.push({ row: existing.rowIndex, explicitEndAt: parsed.explicitEndAt });
     }
   });
 
-  if (pendingMetaRows.length > 0) {
+  if (createMissingMeta && metaPack.metaSheet && pendingMetaRows.length > 0) {
     appendSessionMetaRows(metaPack.metaSheet, pendingMetaRows);
 
     pendingMetaRows.forEach((row, idx) => {
@@ -1620,9 +1752,11 @@ function collectSessionsFromSheet(sheet, options) {
     });
   }
 
-  updateRows.forEach(item => {
-    metaPack.metaSheet.getRange(item.row, 6).setValue(item.explicitEndAt);
-  });
+  if (createMissingMeta && metaPack.metaSheet && updateRows.length > 0) {
+    updateRows.forEach(item => {
+      metaPack.metaSheet.getRange(item.row, 6).setValue(item.explicitEndAt);
+    });
+  }
 
   return parsedSessions.map(parsed => {
     const meta = metaPack.map[parsed.sessionKey] || {
@@ -1804,7 +1938,7 @@ function getSeasonAttendanceSession(seasonName) {
  */
 function getAttendanceSessionFromSheet(sheet, seasonAlias) {
   const now = new Date();
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
+  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false });
   const activeSession = findActiveSession(sessions, now);
 
   if (activeSession) {
@@ -2076,7 +2210,7 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
   }
 
   const values = sheet.getDataRange().getValues();
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
+  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false });
 
   const targetRowIndex = findMemberRowIndex(values, cleanedInputPhone);
   if (targetRowIndex === -1) {
@@ -2302,7 +2436,7 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
   const values = sheet.getDataRange().getValues();
   const now = new Date();
 
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
+  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false });
   const closedSessions = sessions.filter(session => session.lateDeadline <= now);
 
   if (closedSessions.length === 0) {
@@ -2437,7 +2571,7 @@ function getScheduleList(seasonName) {
     const info = getRequestedSeasonSheetInfo(seasonName);
     const now = new Date();
     const variableConfig = getVariableConfig();
-    const sessions = collectSessionsFromSheet(info.sheet, { variableConfig: variableConfig, createMissingMeta: true });
+    const sessions = collectSessionsFromSheet(info.sheet, { variableConfig: variableConfig, createMissingMeta: false });
 
     return {
       success: true,
@@ -2924,7 +3058,7 @@ function getGraduationReport(seasonName) {
     const values = sheet.getDataRange().getValues();
 
     const variableConfig = getVariableConfig();
-    const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: true });
+    const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: false });
     const now = new Date();
 
     const requiredPositions = parseRequiredSessionPositions(variableConfig.required_session_positions);
