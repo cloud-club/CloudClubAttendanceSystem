@@ -4,9 +4,36 @@
   var pending = {};
   var sequence = 0;
 
+  function getConfig() {
+    return global.CLOUDCLUB_CONFIG || {};
+  }
+
   function getApiBaseUrl() {
-    var cfg = global.CLOUDCLUB_CONFIG || {};
+    var cfg = getConfig();
     return String(cfg.API_BASE_URL || '').trim();
+  }
+
+  function getTimeoutMs(options) {
+    if (options && typeof options.timeoutMs === 'number' && options.timeoutMs > 0) {
+      return options.timeoutMs;
+    }
+
+    var configured = parseInt(getConfig().API_TIMEOUT_MS, 10);
+    if (!isNaN(configured) && configured > 0) {
+      return configured;
+    }
+
+    return 12000;
+  }
+
+  function getJsonpCrossOrigin() {
+    var value = String(getConfig().JSONP_CROSSORIGIN || 'anonymous').trim();
+    return value || 'anonymous';
+  }
+
+  function getJsonpReferrerPolicy() {
+    var value = String(getConfig().JSONP_REFERRER_POLICY || 'no-referrer').trim();
+    return value || 'no-referrer';
   }
 
   function toQueryString(params) {
@@ -19,10 +46,35 @@
     return pairs.join('&');
   }
 
-  function createError(message, code) {
+  function sanitizeUrl(url) {
+    try {
+      var parsed = new URL(url, global.location && global.location.href ? global.location.href : undefined);
+      ['adminKey', 'adminToken', 'phone'].forEach(function (key) {
+        if (parsed.searchParams.has(key)) {
+          parsed.searchParams.set(key, 'REDACTED');
+        }
+      });
+      return parsed.toString();
+    } catch (err) {
+      return '[unavailable]';
+    }
+  }
+
+  function createError(message, code, details) {
     var err = new Error(message || '요청 중 오류가 발생했습니다.');
     err.code = code || 'UNKNOWN';
+
+    if (details && typeof details === 'object') {
+      Object.keys(details).forEach(function (key) {
+        err[key] = details[key];
+      });
+    }
+
     return err;
+  }
+
+  function buildNetworkErrorMessage(action) {
+    return 'API 서버 응답 스크립트를 불러오지 못했습니다. (action: ' + action + ') Google 리다이렉트/ORB 차단 여부를 확인하세요.';
   }
 
   function call(action, params, options) {
@@ -31,7 +83,7 @@
       return Promise.reject(createError('API_BASE_URL이 설정되지 않았습니다. web/shared/config.js를 확인하세요.', 'MISSING_API_BASE_URL'));
     }
 
-    var timeoutMs = (options && options.timeoutMs) || 12000;
+    var timeoutMs = getTimeoutMs(options);
     var callbackName = '__ccJsonpCb_' + Date.now() + '_' + (sequence++);
     var query = Object.assign({}, params || {}, {
       api: action,
@@ -40,6 +92,7 @@
     });
 
     var url = baseUrl + (baseUrl.indexOf('?') === -1 ? '?' : '&') + toQueryString(query);
+    var debugUrl = sanitizeUrl(url);
 
     return new Promise(function (resolve, reject) {
       var script = document.createElement('script');
@@ -69,7 +122,10 @@
         if (!payload || payload.ok !== true) {
           var message = payload && payload.error ? payload.error.message : 'API 응답 형식이 올바르지 않습니다.';
           var code = payload && payload.error ? payload.error.code : 'INVALID_RESPONSE';
-          reject(createError(message, code));
+          reject(createError(message, code, {
+            action: action,
+            debugUrl: debugUrl
+          }));
           return;
         }
 
@@ -80,14 +136,22 @@
 
       script.onerror = function () {
         cleanup();
-        reject(createError('네트워크 오류가 발생했습니다.', 'NETWORK_ERROR'));
+        reject(createError(buildNetworkErrorMessage(action), 'NETWORK_ERROR', {
+          action: action,
+          debugUrl: debugUrl
+        }));
       };
 
       timeoutId = setTimeout(function () {
         cleanup();
-        reject(createError('요청 시간이 초과되었습니다.', 'TIMEOUT'));
+        reject(createError('요청 시간이 초과되었습니다. (action: ' + action + ')', 'TIMEOUT', {
+          action: action,
+          debugUrl: debugUrl
+        }));
       }, timeoutMs);
 
+      script.crossOrigin = getJsonpCrossOrigin();
+      script.referrerPolicy = getJsonpReferrerPolicy();
       script.src = url;
       script.async = true;
       document.head.appendChild(script);

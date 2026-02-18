@@ -9,6 +9,14 @@ function getSelectedSheetName() {
   return sheetSelect ? sheetSelect.value : '';
 }
 
+function getDisplayErrorMessage(error, fallbackMessage) {
+  if (error && error.code === 'NETWORK_ERROR') {
+    return 'API 서버 응답 스크립트를 불러오지 못했습니다. (리다이렉트/ORB 가능성) 잠시 후 다시 시도해주세요.';
+  }
+
+  return (error && error.message) ? error.message : fallbackMessage;
+}
+
 function createConfetti() {
   const canvas = document.getElementById('confetti-canvas');
   const ctx = canvas.getContext('2d');
@@ -124,7 +132,8 @@ async function ensureAdminAccess() {
         backdrop.remove();
         resolve();
       } catch (error) {
-        alert(error.message || '관리자 인증 중 오류가 발생했습니다.');
+        alert(getDisplayErrorMessage(error, '관리자 인증 중 오류가 발생했습니다.'));
+        console.error('관리자 인증 오류:', error);
         submitButton.disabled = false;
         submitButton.textContent = '확인';
         input.focus();
@@ -227,7 +236,7 @@ function handleSeasonQRCode(studentUrl) {
 }
 
 function handleSeasonQRCodeError(error) {
-  alert('QR코드 생성 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류'));
+  alert('QR코드 생성 중 오류가 발생했습니다: ' + getDisplayErrorMessage(error, '알 수 없는 오류'));
 }
 
 function copyUrl() {
@@ -320,7 +329,7 @@ function displayRankings(response) {
 
 function handleRankingError(error) {
   const rankingBoard = document.getElementById('rankingBoard');
-  rankingBoard.innerHTML = '<div class="error">순위를 불러오는 중 오류가 발생했습니다.</div>';
+  rankingBoard.innerHTML = `<div class="error">${getDisplayErrorMessage(error, '순위를 불러오는 중 오류가 발생했습니다.')}</div>`;
   console.error('Ranking error:', error);
 }
 
@@ -401,7 +410,7 @@ function handleSheetChangeError(error) {
     return;
   }
 
-  alert('시트 변경 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류'));
+  alert('시트 변경 중 오류가 발생했습니다: ' + getDisplayErrorMessage(error, '알 수 없는 오류'));
 }
 
 function createQrCode(url) {
@@ -492,7 +501,7 @@ async function checkAttendanceSession() {
     const session = await CloudClubApi.call('session', season ? { season } : {});
     renderCountdown(session);
   } catch (error) {
-    renderCountdown({ active: false, message: error.message || '세션 정보를 불러올 수 없습니다.' });
+    renderCountdown({ active: false, message: getDisplayErrorMessage(error, '세션 정보를 불러올 수 없습니다.') });
   }
 }
 
@@ -626,7 +635,7 @@ function handleAttendanceError(error) {
   const resultDiv = document.getElementById('result');
   const attendBtn = document.getElementById('attendBtn');
 
-  resultDiv.innerHTML = `❌ 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`;
+  resultDiv.innerHTML = `❌ 오류가 발생했습니다: ${getDisplayErrorMessage(error, '알 수 없는 오류')}`;
   resultDiv.className = 'error';
   resultDiv.style.display = 'block';
 
@@ -750,13 +759,13 @@ function handleStatusResponse(response) {
 
 function handleStatusError(error) {
   const statusResult = document.getElementById('statusResult');
-  statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}</div>`;
+  statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${getDisplayErrorMessage(error, '알 수 없는 오류')}</div>`;
   statusResult.style.display = 'block';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   initializeDashboard().catch((error) => {
-    alert(error.message || '초기화 중 오류가 발생했습니다.');
+    alert(getDisplayErrorMessage(error, '초기화 중 오류가 발생했습니다.'));
     console.error(error);
   });
 });
