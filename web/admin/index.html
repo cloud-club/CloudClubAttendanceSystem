@@ -550,13 +550,212 @@
     .attendance-status.present {
       color: #4ade80;
     }
-    
+
+    .attendance-status.late {
+      color: #f6ad55;
+    }
+
     .attendance-status.absent {
       color: #f87171;
     }
-    
+
+    .attendance-status.excused {
+      color: #93c5fd;
+    }
+
     .attendance-status.future {
       color: #64748b;
+    }
+
+    .sheet-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+
+    .management-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 820px;
+    }
+
+    .management-table th,
+    .management-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .management-table th {
+      color: #93bbfc;
+      font-size: 13px;
+      background: rgba(59, 130, 246, 0.08);
+      white-space: nowrap;
+    }
+
+    .management-table td {
+      color: #dbeafe;
+      font-size: 14px;
+    }
+
+    .table-input {
+      width: 100%;
+      min-width: 120px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    .table-input:focus {
+      outline: none;
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #0f172a;
+      min-width: 56px;
+    }
+
+    .status-chip.pass {
+      background: #d9ead3;
+    }
+
+    .status-chip.possible {
+      background: #fce5cd;
+    }
+
+    .status-chip.fail {
+      background: #f4cccc;
+    }
+
+    .matrix-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1000px;
+    }
+
+    .matrix-table th,
+    .matrix-table td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: center;
+      font-size: 12px;
+      color: #dbeafe;
+    }
+
+    .matrix-table th.sticky-col,
+    .matrix-table td.sticky-col {
+      position: sticky;
+      left: 0;
+      background: #0f172a;
+      z-index: 2;
+      text-align: left;
+      min-width: 160px;
+    }
+
+    .matrix-cell {
+      width: 100%;
+      min-width: 76px;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #0f172a;
+    }
+
+    .matrix-cell.on_time {
+      background: #d9ead3;
+    }
+
+    .matrix-cell.late {
+      background: #fce5cd;
+    }
+
+    .matrix-cell.absent {
+      background: #f4cccc;
+    }
+
+    .matrix-cell.excused {
+      background: #d9e2f3;
+    }
+
+    .matrix-cell.future {
+      background: rgba(255, 255, 255, 0.16);
+      color: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.72);
+      z-index: 9998;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-panel {
+      width: 100%;
+      max-width: 520px;
+      border-radius: 16px;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .modal-panel h3 {
+      color: #e2e8f0;
+      margin-bottom: 8px;
+      font-size: 18px;
+    }
+
+    .modal-panel p {
+      color: #94a3b8;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+
+    .modal-panel textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+      padding: 10px;
+      font-size: 14px;
+    }
+
+    .modal-actions {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
     }
     
     /* Ranking Table */
@@ -886,6 +1085,18 @@
         <i class="fas fa-chart-line"></i>
         <span>출석현황</span>
       </button>
+      <button class="tab-button" onclick="openTab('schedule', event)">
+        <i class="fas fa-calendar-alt"></i>
+        <span>일정 관리</span>
+      </button>
+      <button class="tab-button" onclick="openTab('variables', event)">
+        <i class="fas fa-sliders-h"></i>
+        <span>변수명 관리</span>
+      </button>
+      <button class="tab-button" onclick="openTab('graduation', event)">
+        <i class="fas fa-user-check"></i>
+        <span>수료 판정</span>
+      </button>
     </nav>
 
     <!-- QR코드 관리 탭 -->
@@ -900,6 +1111,13 @@
           <select id="sheetSelect" class="sheet-select" onchange="changeSheet()">
             <option value="">시트를 불러오는 중...</option>
           </select>
+          <div class="sheet-actions">
+            <button type="button" class="btn btn-secondary" onclick="openCurrentSheet()">
+              <i class="fas fa-external-link-alt"></i>
+              <span>Google Sheets 바로가기</span>
+            </button>
+          </div>
+          <p class="info-text" id="sheetLinkInfo">현재 선택된 시즌 탭으로 이동합니다.</p>
           <p class="info-text">선택한 시트의 명단으로 출석체크가 진행됩니다.</p>
         </div>
       </div>
@@ -982,6 +1200,39 @@
       </div>
       
       <div id="result"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-user-shield card-icon"></i>
+          <h2 class="card-title">관리자 수동 출석 승인</h2>
+        </div>
+        <p class="info-text">지정한 회차에 수동 승인하면 해당 회차의 출석 가능 최종 시각으로 기록됩니다.</p>
+
+        <form onsubmit="manualApprove(event)" style="text-align: center;">
+          <div class="form-group">
+            <label for="manualPhoneInput" class="form-label">회원 전화번호</label>
+            <input type="tel"
+                   id="manualPhoneInput"
+                   class="form-input"
+                   placeholder="01012345678"
+                   pattern="[0-9]{10,11}"
+                   maxlength="11"
+                   oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                   required>
+          </div>
+          <div class="form-group">
+            <label for="manualSessionSelect" class="form-label">승인할 회차</label>
+            <select id="manualSessionSelect" class="sheet-select" required>
+              <option value="">회차를 불러오는 중...</option>
+            </select>
+          </div>
+          <button type="submit" class="btn" id="manualApproveBtn">
+            <i class="fas fa-user-check"></i>
+            <span>수동 승인 실행</span>
+          </button>
+        </form>
+        <div id="manualApproveResult" style="display:none;"></div>
+      </div>
     </div>
     
     <!-- 출석현황 탭 -->
@@ -1021,6 +1272,125 @@
         </div>
         <div id="rankingBoard">
           <div class="loader" style="margin: 32px auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 일정 관리 탭 -->
+    <div id="schedule" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-calendar-plus card-icon"></i>
+          <h2 class="card-title">시즌 일정 등록/수정</h2>
+        </div>
+        <p class="info-text">행사 시작 시각과 종료 시각(선택)을 저장합니다. 종료 시각이 비어 있으면 variable 기본값이 적용됩니다.</p>
+        <form onsubmit="saveSchedule(event)" style="text-align:center;">
+          <div class="form-group">
+            <label class="form-label" for="scheduleSessionSelect">수정 대상 회차</label>
+            <select id="scheduleSessionSelect" class="sheet-select">
+              <option value="">새 회차 추가</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="scheduleStartInput">시작 시각</label>
+            <input id="scheduleStartInput" type="datetime-local" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="scheduleEndInput">종료 시각 (선택)</label>
+            <input id="scheduleEndInput" type="time" class="form-input">
+          </div>
+          <div class="sheet-actions">
+            <button type="submit" class="btn" id="scheduleSaveBtn">
+              <i class="fas fa-save"></i>
+              <span>일정 저장</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="deleteSelectedSchedule()">
+              <i class="fas fa-trash"></i>
+              <span>선택 회차 삭제</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="resetScheduleForm()">
+              <i class="fas fa-eraser"></i>
+              <span>입력 초기화</span>
+            </button>
+          </div>
+        </form>
+        <div id="scheduleActionResult" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-list card-icon"></i>
+          <h2 class="card-title">현재 시즌 일정 목록</h2>
+        </div>
+        <div class="table-wrap" id="scheduleTableWrap">
+          <div class="loader" style="margin: 24px auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 변수명 관리 탭 -->
+    <div id="variables" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-cogs card-icon"></i>
+          <h2 class="card-title">variable 시트 변수 편집</h2>
+        </div>
+        <p class="info-text">A5:F 확장 테이블을 기준으로 변수값을 편집하며, 공통 3개 값은 A2:C2에도 동기화됩니다.</p>
+        <div class="table-wrap" id="variablesTableWrap">
+          <div class="loader" style="margin: 24px auto;"></div>
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" onclick="saveVariables()">
+            <i class="fas fa-save"></i>
+            <span>변수 저장</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="loadVariables()">
+            <i class="fas fa-sync"></i>
+            <span>다시 불러오기</span>
+          </button>
+        </div>
+        <div id="variablesResult" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- 수료 판정 탭 -->
+    <div id="graduation" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-graduation-cap card-icon"></i>
+          <h2 class="card-title">수료 판정 대시보드</h2>
+        </div>
+        <p class="info-text">필참/최소 출석/결석환산 조건을 기반으로 현재 수료 가능 여부를 계산합니다.</p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" onclick="loadGraduationReport()">
+            <i class="fas fa-sync-alt"></i>
+            <span>수료 판정 새로고침</span>
+          </button>
+        </div>
+        <div id="graduationSummary" style="margin-top:16px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-table card-icon"></i>
+          <h2 class="card-title">회원별 수료 판정표</h2>
+        </div>
+        <div class="table-wrap" id="graduationTableWrap">
+          <div class="loader" style="margin: 24px auto;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-border-all card-icon"></i>
+          <h2 class="card-title">회차별 상태 매트릭스</h2>
+        </div>
+        <p class="info-text">
+          색상 기준: 출석(연초록), 지각(연주황), 결석(연빨강), 유고(연파랑).<br>
+          셀을 클릭하면 유고 설정/해제와 코멘트(Note) 저장이 가능합니다.
+        </p>
+        <div class="table-wrap" id="graduationMatrixWrap">
+          <div class="loader" style="margin: 24px auto;"></div>
         </div>
       </div>
     </div>
@@ -1073,6 +1443,18 @@
       </div>
     </div>
   </footer>
+
+  <div id="excuseModal" class="modal-backdrop">
+    <div class="modal-panel">
+      <h3>유고 사유 입력</h3>
+      <p id="excuseModalTargetText">선택된 회원/회차에 유고 코멘트를 남깁니다. 저장 시 원본 시트 셀 메모(Note)에 기록됩니다.</p>
+      <textarea id="excuseCommentInput" placeholder="예: 공결(학과 행사 참여)"></textarea>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeExcuseModal()">취소</button>
+        <button type="button" class="btn" onclick="submitExcuseModal()">유고 저장</button>
+      </div>
+    </div>
+  </div>
 
   <script src="../shared/config.js"></script>
   <script src="../shared/api-jsonp.js"></script>

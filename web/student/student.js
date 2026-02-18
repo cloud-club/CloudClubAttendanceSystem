@@ -87,6 +87,40 @@ function renderCountdown(session) {
   clearInterval(countdownInterval);
 
   if (!session.active) {
+    if (session.nextOpenTime) {
+      const nextOpenTime = Number(session.nextOpenTime || 0);
+
+      const updateOpenCountdown = () => {
+        const now = Date.now();
+        const remain = Math.max(0, nextOpenTime - now);
+
+        if (remain <= 0) {
+          clearInterval(countdownInterval);
+          countdownTitle.textContent = '출석 가능 시간 확인 중...';
+          countdownDiv.textContent = '잠시 후 자동 갱신됩니다.';
+          isAttendanceActive = false;
+          attendBtn.disabled = true;
+          attendBtn.innerHTML = '<i class="fas fa-clock"></i> <span>오픈 대기</span>';
+          setTimeout(() => {
+            checkAttendanceSession();
+          }, 1000);
+          return;
+        }
+
+        const minutes = Math.floor((remain % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((remain % (1000 * 60)) / 1000);
+        countdownTitle.textContent = '출석 오픈까지 남은 시간';
+        countdownDiv.textContent = `${String(minutes).padStart(2, '0')}분 ${String(seconds).padStart(2, '0')}초`;
+      };
+
+      updateOpenCountdown();
+      countdownInterval = setInterval(updateOpenCountdown, 1000);
+      isAttendanceActive = false;
+      attendBtn.disabled = true;
+      attendBtn.innerHTML = '<i class="fas fa-clock"></i> <span>오픈 대기</span>';
+      return;
+    }
+
     countdownTitle.textContent = '출석 대기 중';
     countdownDiv.textContent = session.message || '지금은 출석 가능한 시간이 아닙니다.';
     isAttendanceActive = false;
@@ -388,11 +422,15 @@ function handleStatusResponse(response) {
       } else if (detail.attendanceType === 'on_time') {
         statusClass = 'present';
         statusIcon = '<i class="fas fa-check-circle"></i>';
-        statusText = '정시';
+        statusText = '출석';
       } else if (detail.attendanceType === 'late') {
         statusClass = 'late';
         statusIcon = '<i class="fas fa-hourglass-half"></i>';
         statusText = '지각';
+      } else if (detail.attendanceType === 'excused') {
+        statusClass = 'excused';
+        statusIcon = '<i class="fas fa-notes-medical"></i>';
+        statusText = '유고';
       } else {
         statusClass = 'absent';
         statusIcon = '<i class="fas fa-times-circle"></i>';
