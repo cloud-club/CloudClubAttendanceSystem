@@ -1975,17 +1975,114 @@ function openScheduleDeleteForceModal(state) {
   setTimeout(() => input.focus(), 0);
 }
 
+const variableUsageTabOrder = [
+  'QR코드 관리',
+  '출석하기',
+  '출석현황',
+  '일정 관리',
+  '변수명 관리',
+  '유고 처리',
+  '수료 판정'
+];
+
+const variableTabMapByKey = {
+  attendance_open_offset_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  late_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  absence_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  required_attendance_count: ['유고 처리', '수료 판정'],
+  late_to_absence_ratio: ['유고 처리', '수료 판정'],
+  required_session_positions: ['유고 처리', '수료 판정'],
+  max_absence_equivalent: ['유고 처리', '수료 판정'],
+  official_session_min_recommended: ['수료 판정'],
+  official_session_max_recommended: ['수료 판정'],
+  default_session_start_time: ['일정 관리']
+};
+
+function getFallbackVariableMetaText(value) {
+  return String(value || '').trim() || '미정(템플릿 복구 필요)';
+}
+
+function sortVariableTabsForDisplay(tabs) {
+  const orderMap = {};
+  variableUsageTabOrder.forEach((tab, idx) => {
+    orderMap[tab] = idx;
+  });
+
+  const seen = {};
+  const unique = [];
+  (tabs || []).forEach(tab => {
+    const t = String(tab || '').trim();
+    if (!t || seen[t]) return;
+    seen[t] = true;
+    unique.push(t);
+  });
+
+  unique.sort((a, b) => {
+    const aOrder = Object.prototype.hasOwnProperty.call(orderMap, a) ? orderMap[a] : 999;
+    const bOrder = Object.prototype.hasOwnProperty.call(orderMap, b) ? orderMap[b] : 999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return a.localeCompare(b, 'ko');
+  });
+
+  return unique;
+}
+
+function mapVariableUsedTabs(key, usedInText) {
+  const normalizedKey = String(key || '').trim().toLowerCase();
+  const usedIn = String(usedInText || '').trim();
+  const tabs = ['변수명 관리'].concat(variableTabMapByKey[normalizedKey] || []);
+
+  if (usedIn) {
+    if (/getgraduationreport|evaluaterequiredsessions/i.test(usedIn)) {
+      tabs.push('수료 판정', '유고 처리');
+    }
+    if (/getschedulelist|schedulesave|suggestscheduleendtime|defaults/i.test(usedIn)) {
+      tabs.push('일정 관리');
+    }
+    if (/collectsessionsfromsheet|markattendance|getattendancesession|getattendancestatus|getattendanceranking/i.test(usedIn)) {
+      tabs.push('출석하기', '출석현황');
+    }
+  }
+
+  return sortVariableTabsForDisplay(tabs);
+}
+
+function normalizeVariableItemMeta(item) {
+  const normalized = Object.assign({}, item || {});
+  const appliesToRaw = normalized.appliesTo !== undefined ? normalized.appliesTo : normalized.applies_to;
+  const appliesWhenRaw = normalized.appliesWhen !== undefined ? normalized.appliesWhen : normalized.applies_when;
+  const usedInRaw = normalized.usedIn !== undefined ? normalized.usedIn : normalized.used_in;
+  const usedTabsRaw = Array.isArray(normalized.usedTabs)
+    ? normalized.usedTabs
+    : (Array.isArray(normalized.used_tabs) ? normalized.used_tabs : []);
+  const usedTabsTextRaw = normalized.usedTabsText !== undefined
+    ? normalized.usedTabsText
+    : normalized.used_tabs_text;
+
+  const appliesTo = String(appliesToRaw || '').trim();
+  const appliesWhen = String(appliesWhenRaw || '').trim();
+  const usedIn = String(usedInRaw || '').trim();
+  const usedTabs = usedTabsRaw.length > 0
+    ? sortVariableTabsForDisplay(usedTabsRaw)
+    : mapVariableUsedTabs(normalized.key, usedIn);
+  const usedTabsText = String(usedTabsTextRaw || '').trim() || usedTabs.join(', ');
+
+  normalized.appliesTo = appliesTo;
+  normalized.appliesWhen = appliesWhen;
+  normalized.usedIn = usedIn;
+  normalized.usedTabs = usedTabs;
+  normalized.usedTabsText = usedTabsText;
+  return normalized;
+}
+
 function getVariableUsedInText(item) {
-  if (!item) {
-    return '-';
-  }
-  if (Array.isArray(item.usedIn)) {
-    if (item.usedIn.length === 0) return '-';
-    return item.usedIn.map(v => String(v || '').trim()).filter(Boolean).join(', ');
-  }
-  const text = String(item.usedIn || '').trim();
-  if (!text) return '-';
-  return text.split(';').map(v => v.trim()).filter(Boolean).join(', ');
+  if (!item) return '미정(템플릿 복구 필요)';
+  const text = String(item.usedTabsText || '').trim();
+  if (text) return text;
+
+  const tabs = Array.isArray(item.usedTabs) ? item.usedTabs : mapVariableUsedTabs(item.key, item.usedIn || '');
+  if (!tabs || tabs.length === 0) return '미정(템플릿 복구 필요)';
+  return tabs.join(', ');
 }
 
 function closeScheduleDeleteForceModal() {
@@ -2037,8 +2134,8 @@ function renderVariablesTable(items) {
         </td>
         <td>${escapeHtml(item.type || 'string')}</td>
         <td>${escapeHtml(item.description || '')}</td>
-        <td>${escapeHtml(item.appliesTo || '-')}</td>
-        <td>${escapeHtml(item.appliesWhen || '-')}</td>
+        <td>${escapeHtml(getFallbackVariableMetaText(item.appliesTo))}</td>
+        <td>${escapeHtml(getFallbackVariableMetaText(item.appliesWhen))}</td>
         <td>${escapeHtml(getVariableUsedInText(item))}</td>
         <td>${item.editable ? 'Y' : 'N'}</td>
         <td>${escapeHtml(item.updatedAt || '')}</td>
@@ -2116,8 +2213,8 @@ function renderVariableHelpPanel(item) {
     <p><strong>현재 입력값:</strong> ${escapeHtml(value || '(빈값)')}</p>
     <p><strong>설정 주체:</strong> 운영자(관리자)</p>
     <p><strong>설정 위치:</strong> 관리자 페이지 &gt; 변수명 관리 탭</p>
-    <p><strong>어떤 효과:</strong> ${escapeHtml(item.appliesTo || '-')}</p>
-    <p><strong>언제 반영:</strong> ${escapeHtml(item.appliesWhen || '-')}</p>
+    <p><strong>어떤 효과:</strong> ${escapeHtml(getFallbackVariableMetaText(item.appliesTo))}</p>
+    <p><strong>언제 반영:</strong> ${escapeHtml(getFallbackVariableMetaText(item.appliesWhen))}</p>
     <p><strong>실제 사용처:</strong> ${escapeHtml(getVariableUsedInText(item))}</p>
     <p><strong>영향 범위:</strong> 저장 즉시 계산 기준이 갱신됩니다. 이미 확정된 과거 회차는 메타 스냅샷 기준을 유지합니다.</p>
     <p><strong>설명:</strong> ${escapeHtml(item.description || '-')}</p>
@@ -2203,7 +2300,7 @@ async function loadVariables() {
       return;
     }
 
-    variableItems = response.items || [];
+    variableItems = (response.items || []).map(item => normalizeVariableItemMeta(item));
     variableConfig = response.config || {};
     selectedVariableIndex = variableItems.length > 0 ? 0 : -1;
     renderVariablesTable(variableItems);

@@ -195,6 +195,29 @@ const MINUTE_VARIABLE_KEYS = {
   absence_threshold_min: true
 };
 
+const VARIABLE_USAGE_TAB_ORDER = [
+  'QR코드 관리',
+  '출석하기',
+  '출석현황',
+  '일정 관리',
+  '변수명 관리',
+  '유고 처리',
+  '수료 판정'
+];
+
+const VARIABLE_KEY_TAB_MAP = {
+  attendance_open_offset_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  late_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  absence_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  required_attendance_count: ['유고 처리', '수료 판정'],
+  late_to_absence_ratio: ['유고 처리', '수료 판정'],
+  required_session_positions: ['유고 처리', '수료 판정'],
+  max_absence_equivalent: ['유고 처리', '수료 판정'],
+  official_session_min_recommended: ['수료 판정'],
+  official_session_max_recommended: ['수료 판정'],
+  default_session_start_time: ['일정 관리']
+};
+
 /**
  * 웹앱 진입점
  * - api 파라미터가 있으면 JSONP API 라우팅
@@ -1056,6 +1079,54 @@ function normalizeUsedInText(value) {
     .join(';');
 }
 
+function dedupeVariableTabs(tabs) {
+  const seen = {};
+  const ordered = [];
+  (tabs || []).forEach(tab => {
+    const label = String(tab || '').trim();
+    if (!label) return;
+    if (seen[label]) return;
+    seen[label] = true;
+    ordered.push(label);
+  });
+  return ordered;
+}
+
+function sortVariableTabsByOrder(tabs) {
+  const uniqueTabs = dedupeVariableTabs(tabs);
+  const orderMap = {};
+  VARIABLE_USAGE_TAB_ORDER.forEach((tab, idx) => {
+    orderMap[tab] = idx;
+  });
+
+  return uniqueTabs.sort((a, b) => {
+    const aOrder = Object.prototype.hasOwnProperty.call(orderMap, a) ? orderMap[a] : 999;
+    const bOrder = Object.prototype.hasOwnProperty.call(orderMap, b) ? orderMap[b] : 999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return a.localeCompare(b, 'ko');
+  });
+}
+
+function resolveVariableUsedTabs(key, usedInText) {
+  const normalizedKey = canonicalVariableKey(key);
+  const tabs = ['변수명 관리'].concat(VARIABLE_KEY_TAB_MAP[normalizedKey] || []);
+  const rawUsedIn = normalizeUsedInText(usedInText || '');
+
+  if (rawUsedIn) {
+    if (/getgraduationreport|evaluaterequiredsessions/i.test(rawUsedIn)) {
+      tabs.push('수료 판정', '유고 처리');
+    }
+    if (/getschedulelist|schedulesave|suggestscheduleendtime|defaults/i.test(rawUsedIn)) {
+      tabs.push('일정 관리');
+    }
+    if (/collectsessionsfromsheet|markattendance|getattendancesession|getattendancestatus|getattendanceranking/i.test(rawUsedIn)) {
+      tabs.push('출석하기', '출석현황');
+    }
+  }
+
+  return sortVariableTabsByOrder(tabs);
+}
+
 function parseTableHeaderMap(headers) {
   const map = {};
   headers.forEach((header, idx) => {
@@ -1744,6 +1815,8 @@ function getVariablesPayload() {
     const appliesTo = String(row[6] || spec.appliesTo || '').trim();
     const appliesWhen = String(row[7] || spec.appliesWhen || '').trim();
     const usedIn = normalizeUsedInText(row[8] || spec.usedIn || '');
+    const usedTabs = resolveVariableUsedTabs(key, usedIn);
+    const usedTabsText = usedTabs.join(', ');
 
     items.push({
       key: key,
@@ -1756,7 +1829,12 @@ function getVariablesPayload() {
       labelKo: String(catalog.labelKo || '').trim(),
       appliesTo: appliesTo,
       appliesWhen: appliesWhen,
+      applies_to: appliesTo,
+      applies_when: appliesWhen,
       usedIn: usedIn,
+      used_in: usedIn,
+      usedTabs: usedTabs,
+      usedTabsText: usedTabsText,
       formula: String(catalog.formula || '').trim(),
       example: String(catalog.example || '').trim(),
       validation: catalog.validation || null,
