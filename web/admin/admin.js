@@ -17,6 +17,12 @@ let graduationSortState = { key: 'attendedCount', direction: 'desc' };
 let scheduleDeleteForceState = null;
 let scheduleEndAutoManaged = true;
 let scheduleDefaults = {};
+let scheduleByDateMap = {};
+let scheduleDateConflicts = [];
+let calendarCursorYear = new Date().getFullYear();
+let calendarCursorMonth = new Date().getMonth();
+let calendarSelectedDateKey = '';
+let scheduleCalendarModalState = null;
 let excusedSearchKeyword = '';
 let excusedAbsentOnly = false;
 
@@ -96,6 +102,51 @@ function formatDatetimeLocal(ms) {
   const min = String(date.getMinutes()).padStart(2, '0');
 
   return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+function getDateKeyFromDate(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getDateKeyFromMs(ms) {
+  const date = new Date(Number(ms));
+  if (isNaN(date.getTime())) return '';
+  return getDateKeyFromDate(date);
+}
+
+function parseDateKeyToDate(dateKey) {
+  const match = String(dateKey || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return new Date(
+    parseInt(match[1], 10),
+    parseInt(match[2], 10) - 1,
+    parseInt(match[3], 10),
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+function formatMonthTitle(year, month) {
+  return `${year}년 ${month + 1}월`;
+}
+
+function formatDateKeyLabel(dateKey) {
+  const date = parseDateKeyToDate(dateKey);
+  if (!date) return dateKey;
+  const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} (${weekdays[date.getDay()]})`;
+}
+
+function formatHhmmFromMs(ms) {
+  const date = new Date(Number(ms));
+  if (isNaN(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function showBoxMessage(targetId, message, success) {
@@ -317,6 +368,10 @@ async function initializeDashboard() {
   document.getElementById('statusPhoneInput').addEventListener('click', function () {
     this.focus();
   });
+
+  if (!calendarSelectedDateKey) {
+    calendarSelectedDateKey = getDateKeyFromDate(new Date());
+  }
 
   resetScheduleForm();
 }
@@ -1302,14 +1357,20 @@ async function loadScheduleList() {
 
     if (!response.success) {
       document.getElementById('scheduleTableWrap').innerHTML = `<div class="error">${escapeHtml(response.message || '일정 조회 실패')}</div>`;
+      const calendarGrid = document.getElementById('scheduleCalendarGrid');
+      if (calendarGrid) {
+        calendarGrid.innerHTML = `<div class="error">${escapeHtml(response.message || '캘린더 조회 실패')}</div>`;
+      }
       return;
     }
 
     scheduleDefaults = response.defaults || {};
     scheduleItems = response.items || [];
+    buildScheduleCalendarModel(scheduleItems, response.dateConflicts || []);
     renderScheduleTable(scheduleItems);
     populateScheduleSelect(scheduleItems);
     populateManualSessionSelect(scheduleItems);
+    renderScheduleCalendar();
     if (!document.getElementById('scheduleSessionSelect').value) {
       resetScheduleForm();
     } else {
@@ -1322,7 +1383,292 @@ async function loadScheduleList() {
     if (wrap) {
       wrap.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '일정 조회 중 오류'))}</div>`;
     }
+    const calendarGrid = document.getElementById('scheduleCalendarGrid');
+    if (calendarGrid) {
+      calendarGrid.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '캘린더 조회 중 오류'))}</div>`;
+    }
   }
+}
+
+function buildScheduleCalendarModel(items, serverConflicts) {
+  const grouped = {};
+
+  (items || []).forEach(item => {
+    const dateKey = String(item.dateKey || getDateKeyFromMs(item.startTime) || '').trim();
+    if (!dateKey) return;
+    if (!grouped[dateKey]) {
+      grouped[dateKey] = [];
+    }
+    grouped[dateKey].push(item);
+  });
+
+  scheduleByDateMap = {};
+  Object.keys(grouped).forEach(dateKey => {
+    const sorted = grouped[dateKey].slice().sort((a, b) => Number(a.startTime || 0) - Number(b.startTime || 0));
+    scheduleByDateMap[dateKey] = sorted[0];
+  });
+
+  const serverList = Array.isArray(serverConflicts) ? serverConflicts : [];
+  if (serverList.length > 0) {
+    scheduleDateConflicts = serverList
+      .filter(item => item && item.dateKey && Array.isArray(item.sessionKeys) && item.sessionKeys.length > 1)
+      .map(item => ({
+        dateKey: String(item.dateKey),
+        sessionKeys: item.sessionKeys.map(v => String(v || ''))
+      }));
+  } else {
+    scheduleDateConflicts = Object.keys(grouped)
+      .filter(dateKey => grouped[dateKey].length > 1)
+      .sort()
+      .map(dateKey => ({
+        dateKey: dateKey,
+        sessionKeys: grouped[dateKey].map(item => String(item.sessionKey || ''))
+      }));
+  }
+
+  if (!calendarSelectedDateKey) {
+    calendarSelectedDateKey = getDateKeyFromDate(new Date());
+  }
+  const selectedDate = parseDateKeyToDate(calendarSelectedDateKey);
+  if (selectedDate) {
+    calendarCursorYear = selectedDate.getFullYear();
+    calendarCursorMonth = selectedDate.getMonth();
+  }
+}
+
+function renderScheduleConflictBox() {
+  const wrap = document.getElementById('scheduleCalendarConflictWrap');
+  if (!wrap) return;
+
+  if (!scheduleDateConflicts || scheduleDateConflicts.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  const lines = scheduleDateConflicts.map(conflict => (
+    `<li><button type="button" class="schedule-conflict-link-btn" onclick="selectConflictDate('${escapeHtml(conflict.dateKey)}')">${escapeHtml(conflict.dateKey)}</button>: ${escapeHtml(conflict.sessionKeys.join(', '))}</li>`
+  )).join('');
+
+  wrap.innerHTML = `
+    <div class="schedule-calendar-conflict-box">
+      <strong>동일 날짜 회차 중복 ${scheduleDateConflicts.length}건</strong><br>
+      먼저 중복 날짜 회차를 정리한 뒤 저장 가능합니다.
+      <ul>${lines}</ul>
+    </div>
+  `;
+}
+
+function selectConflictDate(dateKey) {
+  const conflict = (scheduleDateConflicts || []).find(item => item.dateKey === dateKey);
+  selectCalendarDate(dateKey);
+  if (!conflict) return;
+  const message = `${dateKey} 중복 회차: ${conflict.sessionKeys.join(', ')}`;
+  showToast(escapeHtml(message), true);
+}
+
+function renderScheduleCalendar() {
+  const monthTitle = document.getElementById('scheduleCalendarMonthTitle');
+  const grid = document.getElementById('scheduleCalendarGrid');
+  if (!grid) return;
+
+  renderScheduleConflictBox();
+
+  if (monthTitle) {
+    monthTitle.textContent = formatMonthTitle(calendarCursorYear, calendarCursorMonth);
+  }
+
+  const weekdayCells = ['일', '월', '화', '수', '목', '금', '토']
+    .map(name => `<div class="schedule-calendar-weekday">${name}</div>`)
+    .join('');
+
+  const firstDay = new Date(calendarCursorYear, calendarCursorMonth, 1);
+  const startOffset = firstDay.getDay();
+  const gridStartDate = new Date(calendarCursorYear, calendarCursorMonth, 1 - startOffset);
+  const todayKey = getDateKeyFromDate(new Date());
+  let dayCells = '';
+
+  for (let i = 0; i < 42; i++) {
+    const cellDate = new Date(
+      gridStartDate.getFullYear(),
+      gridStartDate.getMonth(),
+      gridStartDate.getDate() + i
+    );
+    const dateKey = getDateKeyFromDate(cellDate);
+    const isCurrentMonth = cellDate.getMonth() === calendarCursorMonth;
+    const isToday = dateKey === todayKey;
+    const isSelected = dateKey === calendarSelectedDateKey;
+    const hasSchedule = !!scheduleByDateMap[dateKey];
+    const item = scheduleByDateMap[dateKey] || null;
+    const dayClass = [
+      'schedule-calendar-day',
+      isCurrentMonth ? 'current-month' : 'other-month',
+      isToday ? 'today' : '',
+      isSelected ? 'selected' : '',
+      hasSchedule ? 'has-schedule' : ''
+    ].filter(Boolean).join(' ');
+    const timeLabel = item ? escapeHtml(item.startHhmm || formatHhmmFromMs(item.startTime)) : '';
+    const statusLabel = item
+      ? (item.isActive ? '진행중' : (item.isPast ? '종료' : '예정'))
+      : '';
+
+    dayCells += `
+      <div class="${dayClass}" onclick="selectCalendarDate('${dateKey}')">
+        <div class="schedule-calendar-day-head">
+          <span class="schedule-calendar-day-num">${cellDate.getDate()}</span>
+          <button type="button" class="schedule-calendar-plus-btn" onclick="openScheduleCalendarModal('${dateKey}'); event.stopPropagation();">+</button>
+        </div>
+        ${hasSchedule ? `
+          <div class="schedule-calendar-item-time">${timeLabel}</div>
+          <div class="schedule-calendar-item-status">${escapeHtml(statusLabel)}</div>
+        ` : '<div class="schedule-calendar-item-empty">일정 없음</div>'}
+      </div>
+    `;
+  }
+
+  grid.innerHTML = `
+    <div class="schedule-calendar-weekdays">${weekdayCells}</div>
+    <div class="schedule-calendar-days">${dayCells}</div>
+  `;
+}
+
+function moveCalendarMonth(delta) {
+  const next = new Date(calendarCursorYear, calendarCursorMonth + Number(delta || 0), 1);
+  calendarCursorYear = next.getFullYear();
+  calendarCursorMonth = next.getMonth();
+  renderScheduleCalendar();
+}
+
+function goCalendarToday() {
+  const today = new Date();
+  calendarCursorYear = today.getFullYear();
+  calendarCursorMonth = today.getMonth();
+  calendarSelectedDateKey = getDateKeyFromDate(today);
+  renderScheduleCalendar();
+}
+
+function selectCalendarDate(dateKey) {
+  const selected = parseDateKeyToDate(dateKey);
+  if (!selected) return;
+  calendarSelectedDateKey = dateKey;
+  calendarCursorYear = selected.getFullYear();
+  calendarCursorMonth = selected.getMonth();
+  renderScheduleCalendar();
+}
+
+function openScheduleCalendarModal(dateKey) {
+  const modal = document.getElementById('scheduleCalendarModal');
+  const title = document.getElementById('scheduleCalendarModalTitle');
+  const targetDate = document.getElementById('scheduleCalendarModalTargetDate');
+  const sessionInfo = document.getElementById('scheduleCalendarModalSessionInfo');
+  const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
+  const endInput = document.getElementById('scheduleCalendarModalEndInput');
+  const saveBtn = document.getElementById('scheduleCalendarModalSaveBtn');
+  const deleteBtn = document.getElementById('scheduleCalendarModalDeleteBtn');
+  if (!modal || !title || !targetDate || !sessionInfo || !startInput || !endInput || !saveBtn || !deleteBtn) return;
+
+  const item = scheduleByDateMap[dateKey] || null;
+  scheduleCalendarModalState = {
+    dateKey: dateKey,
+    isEdit: !!item,
+    sessionKey: item ? item.sessionKey : '',
+    endAutoManaged: !(item && item.explicitEndAt)
+  };
+  calendarSelectedDateKey = dateKey;
+  const selectedDate = parseDateKeyToDate(dateKey);
+  if (selectedDate) {
+    calendarCursorYear = selectedDate.getFullYear();
+    calendarCursorMonth = selectedDate.getMonth();
+  }
+
+  title.textContent = item ? '일정 수정' : '새 회차 추가';
+  targetDate.textContent = formatDateKeyLabel(dateKey);
+  sessionInfo.textContent = item
+    ? `기존 회차: ${item.sessionKey}`
+    : '해당 날짜에 등록된 회차가 없습니다.';
+  startInput.value = item ? (item.startHhmm || formatHhmmFromMs(item.startTime)) : getDefaultScheduleStartTime();
+  endInput.value = item ? (item.explicitEndAt || suggestScheduleEndTime(startInput.value)) : suggestScheduleEndTime(startInput.value);
+  saveBtn.innerHTML = `<i class="fas fa-save"></i> <span>${item ? '일정 수정' : '일정 추가'}</span>`;
+  deleteBtn.style.display = item ? 'inline-flex' : 'none';
+
+  updateScheduleCalendarModalPreview();
+  renderScheduleCalendar();
+
+  modal.style.display = 'flex';
+  setTimeout(() => startInput.focus(), 0);
+}
+
+function closeScheduleCalendarModal() {
+  const modal = document.getElementById('scheduleCalendarModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  scheduleCalendarModalState = null;
+}
+
+function onScheduleCalendarStartTimeChanged() {
+  const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
+  const endInput = document.getElementById('scheduleCalendarModalEndInput');
+  if (!scheduleCalendarModalState || !startInput || !endInput) return;
+
+  if (scheduleCalendarModalState.endAutoManaged || !endInput.value) {
+    endInput.value = suggestScheduleEndTime(startInput.value);
+    scheduleCalendarModalState.endAutoManaged = true;
+  }
+  updateScheduleCalendarModalPreview();
+}
+
+function onScheduleCalendarEndInputChanged() {
+  if (!scheduleCalendarModalState) return;
+  scheduleCalendarModalState.endAutoManaged = false;
+  updateScheduleCalendarModalPreview();
+}
+
+function updateScheduleCalendarModalPreview() {
+  const preview = document.getElementById('scheduleCalendarModalPreview');
+  const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
+  const endInput = document.getElementById('scheduleCalendarModalEndInput');
+  if (!preview || !startInput || !endInput || !scheduleCalendarModalState) return;
+
+  const startTime = String(startInput.value || '').trim();
+  const dateKey = scheduleCalendarModalState.dateKey;
+  if (!dateKey || !startTime) {
+    preview.textContent = '회차 키/오픈 시각 미리보기가 여기에 표시됩니다.';
+    return;
+  }
+
+  const startAt = `${dateKey}T${startTime}`;
+  const sessionKey = startAt.replace('T', '-');
+  const liveOpenOffset = Number(getVariableValueByKey('attendance_open_offset_min'));
+  const openOffsetMin = Number(
+    (!Number.isNaN(liveOpenOffset) ? liveOpenOffset : '') ||
+    (variableConfig && variableConfig.attendance_open_offset_min) ||
+    (scheduleDefaults && scheduleDefaults.attendance_open_offset_min) ||
+    -30
+  );
+  const start = new Date(startAt);
+  const open = new Date(start.getTime() + openOffsetMin * 60 * 1000);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  preview.innerHTML = `
+    회차 키: <strong>${escapeHtml(sessionKey)}</strong><br>
+    출석 오픈: ${escapeHtml(fmt(open))} (${openOffsetMin}분)<br>
+    종료 입력: ${endInput.value ? escapeHtml(endInput.value) : '미입력(기본 마감 규칙 적용)'}
+  `;
+}
+
+async function requestScheduleSave(options) {
+  const season = String(options.season || '').trim();
+  if (!season) {
+    return { success: false, message: '시즌 정보가 없습니다.' };
+  }
+
+  return CloudClubApi.call('scheduleSave', {
+    season,
+    sessionKey: options.sessionKey || '',
+    startAt: options.startAt || '',
+    endAt: options.endAt || '',
+    adminToken
+  });
 }
 
 async function saveSchedule(event) {
@@ -1350,16 +1696,18 @@ async function saveSchedule(event) {
   btn.innerHTML = `<span class="loader"></span> <span>${actionNoun} 중...</span>`;
 
   try {
-    const response = await CloudClubApi.call('scheduleSave', {
+    const response = await requestScheduleSave({
       season,
       sessionKey,
       startAt,
-      endAt,
-      adminToken
+      endAt
     });
 
     if (!response.success) {
-      showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(response.message || `일정 ${actionNoun} 실패`)}`, false);
+      const duplicateInfo = response.errorCode === 'SCHEDULE_DATE_DUPLICATE'
+        ? ` (충돌: ${response.conflictDateKey || '-'} / ${response.conflictSessionKey || '-'})`
+        : '';
+      showBoxMessage('scheduleActionResult', `❌ ${escapeHtml((response.message || `일정 ${actionNoun} 실패`) + duplicateInfo)}`, false);
       return;
     }
 
@@ -1380,6 +1728,84 @@ async function saveSchedule(event) {
     btn.disabled = false;
     updateScheduleSaveButtonLabel();
   }
+}
+
+async function submitScheduleCalendarModal() {
+  if (!scheduleCalendarModalState) return;
+
+  const season = getSelectedSeasonAlias();
+  const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
+  const endInput = document.getElementById('scheduleCalendarModalEndInput');
+  const saveBtn = document.getElementById('scheduleCalendarModalSaveBtn');
+  if (!season || !startInput || !endInput || !saveBtn) return;
+
+  const startTime = String(startInput.value || '').trim();
+  const endAt = String(endInput.value || '').trim();
+  if (!startTime) {
+    alert('시작 시간을 입력해주세요.');
+    return;
+  }
+
+  const startAt = `${scheduleCalendarModalState.dateKey}T${startTime}`;
+  const actionNoun = scheduleCalendarModalState.isEdit ? '수정' : '추가';
+
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = `<span class="loader"></span> <span>${actionNoun} 중...</span>`;
+  try {
+    const response = await requestScheduleSave({
+      season,
+      sessionKey: scheduleCalendarModalState.sessionKey,
+      startAt,
+      endAt
+    });
+
+    if (!response.success) {
+      const duplicateInfo = response.errorCode === 'SCHEDULE_DATE_DUPLICATE'
+        ? ` (충돌: ${response.conflictDateKey || '-'} / ${response.conflictSessionKey || '-'})`
+        : '';
+      alert((response.message || '일정 저장 실패') + duplicateInfo);
+      return;
+    }
+
+    showToast(`<i class="fas fa-check-circle"></i> 일정 ${actionNoun} 완료`, true);
+    closeScheduleCalendarModal();
+    await Promise.all([
+      loadScheduleList(),
+      checkAttendanceSession(),
+      loadGraduationReport()
+    ]);
+    resetScheduleForm();
+  } catch (error) {
+    if (handleUnauthorizedError(error)) return;
+    alert(getDisplayErrorMessage(error, `일정 ${actionNoun} 중 오류`));
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = `<i class="fas fa-save"></i> <span>${scheduleCalendarModalState && scheduleCalendarModalState.isEdit ? '일정 수정' : '일정 추가'}</span>`;
+  }
+}
+
+async function deleteFromCalendarModal() {
+  if (!scheduleCalendarModalState || !scheduleCalendarModalState.isEdit) return;
+
+  const season = getSelectedSeasonAlias();
+  const sessionKey = scheduleCalendarModalState.sessionKey;
+  if (!season || !sessionKey) return;
+
+  if (!confirm(`${sessionKey} 회차를 삭제하시겠습니까?`)) {
+    return;
+  }
+
+  if (!confirm(`삭제를 진행하면 해당 회차 열이 시트에서 제거됩니다.\n정말 삭제하시겠습니까?`)) {
+    return;
+  }
+
+  closeScheduleCalendarModal();
+  await requestScheduleDelete({
+    season,
+    sessionKey,
+    forceDelete: false,
+    confirmSessionKey: ''
+  });
 }
 
 async function deleteSelectedSchedule() {
@@ -1519,6 +1945,7 @@ async function requestScheduleDelete(options) {
       return;
     }
 
+    closeScheduleCalendarModal();
     showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || '일정 삭제 완료')}`, true);
     closeScheduleDeleteForceModal();
 

@@ -864,6 +864,14 @@ function formatDateTimeMinute(date) {
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
 }
 
+function formatDateKey(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function formatTimeHhmm(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'HH:mm');
+}
+
 function formatSignedOffset(seconds) {
   if (seconds === null || seconds === undefined || isNaN(Number(seconds))) {
     return '미출석';
@@ -2823,17 +2831,16 @@ function getScheduleList(seasonName) {
     const now = new Date();
     const variableConfig = getVariableConfig();
     const sessions = collectSessionsFromSheet(info.sheet, { variableConfig: variableConfig, createMissingMeta: false });
+    const dateMap = {};
 
-    return {
-      success: true,
-      seasonAlias: info.seasonAlias,
-      currentSheet: info.currentSheet,
-      defaults: {
-        default_session_start_time: variableConfig.default_session_start_time,
-        absence_threshold_min: variableConfig.absence_threshold_min,
-        attendance_open_offset_min: variableConfig.attendance_open_offset_min
-      },
-      items: sessions.map(session => ({
+    const items = sessions.map(session => {
+      const dateKey = formatDateKey(session.startTime);
+      if (!dateMap[dateKey]) {
+        dateMap[dateKey] = [];
+      }
+      dateMap[dateKey].push(session.sessionKey);
+
+      return {
         sessionKey: session.sessionKey,
         header: session.header,
         startTime: session.startTime.getTime(),
@@ -2844,9 +2851,32 @@ function getScheduleList(seasonName) {
         startLabel: formatDateTimeMinute(session.startTime),
         openLabel: formatDateTimeMinute(session.openTime),
         endLabel: formatDateTimeMinute(session.lateDeadline),
+        dateKey: dateKey,
+        startHhmm: formatTimeHhmm(session.startTime),
         isPast: now > session.lateDeadline,
         isActive: now >= session.openTime && now <= session.lateDeadline
-      }))
+      };
+    });
+
+    const dateConflicts = Object.keys(dateMap)
+      .filter(dateKey => dateMap[dateKey].length > 1)
+      .sort()
+      .map(dateKey => ({
+        dateKey: dateKey,
+        sessionKeys: dateMap[dateKey]
+      }));
+
+    return {
+      success: true,
+      seasonAlias: info.seasonAlias,
+      currentSheet: info.currentSheet,
+      defaults: {
+        default_session_start_time: variableConfig.default_session_start_time,
+        absence_threshold_min: variableConfig.absence_threshold_min,
+        attendance_open_offset_min: variableConfig.attendance_open_offset_min
+      },
+      items: items,
+      dateConflicts: dateConflicts
     };
   } catch (error) {
     return {
@@ -2881,9 +2911,21 @@ function saveSchedule(params) {
     const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: true });
 
     const newSessionKey = formatSessionKey(startTime);
+    const targetDateKey = formatDateKey(startTime);
     const duplicate = sessions.find(s => s.sessionKey === newSessionKey && s.sessionKey !== sessionKey);
     if (duplicate) {
       return { success: false, message: `동일한 시작시각의 회차가 이미 존재합니다. (${newSessionKey})` };
+    }
+
+    const duplicateDate = sessions.find(s => formatDateKey(s.startTime) === targetDateKey && s.sessionKey !== sessionKey);
+    if (duplicateDate) {
+      return {
+        success: false,
+        errorCode: 'SCHEDULE_DATE_DUPLICATE',
+        message: `같은 날짜(${targetDateKey})에는 회차를 1개만 등록할 수 있습니다. 기존 회차(${duplicateDate.sessionKey})를 먼저 수정/삭제하세요.`,
+        conflictSessionKey: duplicateDate.sessionKey,
+        conflictDateKey: targetDateKey
+      };
     }
 
     const headerValue = buildSessionHeader(startTime, endAt);

@@ -721,6 +721,200 @@
       line-height: 1.5;
     }
 
+    .schedule-calendar-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .schedule-calendar-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .schedule-calendar-nav .btn {
+      padding: 10px 12px;
+      font-size: 13px;
+      gap: 6px;
+    }
+
+    .schedule-calendar-month {
+      color: #bfdbfe;
+      font-size: 18px;
+      font-weight: 700;
+      min-width: 130px;
+      text-align: right;
+    }
+
+    .schedule-calendar-conflict-box {
+      margin-top: 12px;
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(244, 204, 204, 0.16);
+      border: 1px solid rgba(244, 204, 204, 0.45);
+      color: #fecaca;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .schedule-calendar-conflict-box ul {
+      margin-top: 8px;
+      margin-left: 18px;
+    }
+
+    .schedule-conflict-link-btn {
+      border: none;
+      background: transparent;
+      color: #bfdbfe;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 0;
+    }
+
+    .schedule-conflict-link-btn:hover {
+      color: #dbeafe;
+    }
+
+    .schedule-calendar-grid {
+      margin-top: 14px;
+    }
+
+    .schedule-calendar-weekdays,
+    .schedule-calendar-days {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .schedule-calendar-weekday {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #93bbfc;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    }
+
+    .schedule-calendar-day {
+      min-height: 112px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+
+    .schedule-calendar-day:hover {
+      border-color: rgba(96, 165, 250, 0.5);
+      transform: translateY(-1px);
+      background: rgba(96, 165, 250, 0.1);
+    }
+
+    .schedule-calendar-day.other-month {
+      opacity: 0.55;
+    }
+
+    .schedule-calendar-day.today {
+      border-color: rgba(147, 187, 252, 0.8);
+      box-shadow: inset 0 0 0 1px rgba(147, 187, 252, 0.45);
+    }
+
+    .schedule-calendar-day.selected {
+      border-color: rgba(96, 165, 250, 0.9);
+      background: rgba(59, 130, 246, 0.17);
+    }
+
+    .schedule-calendar-day.has-schedule {
+      background: rgba(217, 226, 243, 0.2);
+    }
+
+    .schedule-calendar-day-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .schedule-calendar-day-num {
+      color: #e2e8f0;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .schedule-calendar-plus-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: rgba(59, 130, 246, 0.25);
+      color: #dbeafe;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .schedule-calendar-plus-btn:hover {
+      background: rgba(59, 130, 246, 0.45);
+      border-color: rgba(147, 187, 252, 0.8);
+    }
+
+    .schedule-calendar-item-time {
+      color: #bfdbfe;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .schedule-calendar-item-status {
+      display: inline-flex;
+      align-self: flex-start;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f172a;
+      background: #d9ead3;
+    }
+
+    .schedule-calendar-item-empty {
+      color: #64748b;
+      font-size: 11px;
+      margin-top: auto;
+    }
+
+    .schedule-calendar-modal-grid {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .schedule-calendar-modal-grid .form-label {
+      font-size: 13px;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+
+    .schedule-calendar-modal-grid .form-input {
+      text-align: left;
+      letter-spacing: 0;
+      padding: 10px 12px;
+      font-size: 15px;
+      min-height: 40px;
+    }
+
     .table-wrap {
       width: 100%;
       overflow-x: auto;
@@ -1340,6 +1534,51 @@
       .site-footer-grid {
         grid-template-columns: 1fr;
       }
+
+      .schedule-calendar-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .schedule-calendar-nav {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .schedule-calendar-nav .btn {
+        width: 100%;
+        justify-content: center;
+        min-height: 40px;
+      }
+
+      .schedule-calendar-month {
+        text-align: left;
+      }
+
+      .schedule-calendar-weekday {
+        font-size: 12px;
+      }
+
+      .schedule-calendar-days {
+        gap: 6px;
+      }
+
+      .schedule-calendar-day {
+        min-height: 92px;
+        padding: 6px;
+      }
+
+      .schedule-calendar-day-num {
+        font-size: 13px;
+      }
+
+      .schedule-calendar-plus-btn {
+        width: 20px;
+        height: 20px;
+        font-size: 13px;
+      }
     }
     
     /* Cloud Animation */
@@ -1686,6 +1925,35 @@
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-calendar-day card-icon"></i>
+          <h2 class="card-title">캘린더 보기</h2>
+        </div>
+        <p class="info-text">날짜별 + 버튼으로 일정 추가/수정/삭제를 빠르게 처리할 수 있습니다. (일~토, 한 날짜 1회차 정책)</p>
+        <div class="schedule-calendar-toolbar">
+          <div class="schedule-calendar-nav">
+            <button type="button" class="btn btn-secondary" onclick="moveCalendarMonth(-1)">
+              <i class="fas fa-chevron-left"></i>
+              <span>이전 달</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="goCalendarToday()">
+              <i class="fas fa-dot-circle"></i>
+              <span>오늘</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="moveCalendarMonth(1)">
+              <span>다음 달</span>
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+          <div id="scheduleCalendarMonthTitle" class="schedule-calendar-month">-</div>
+        </div>
+        <div id="scheduleCalendarConflictWrap"></div>
+        <div id="scheduleCalendarGrid" class="schedule-calendar-grid">
+          <div class="loader" style="margin: 24px auto;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- 변수명 관리 탭 -->
@@ -1835,6 +2103,30 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeExcuseOverrideModal()">취소</button>
         <button type="button" class="btn" onclick="submitExcuseOverrideModal()">최종 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="scheduleCalendarModal" class="modal-backdrop">
+    <div class="modal-panel">
+      <h3 id="scheduleCalendarModalTitle">새 회차 추가</h3>
+      <p id="scheduleCalendarModalTargetDate">-</p>
+      <p id="scheduleCalendarModalSessionInfo">해당 날짜에 등록된 회차가 없습니다.</p>
+      <div class="schedule-calendar-modal-grid">
+        <div>
+          <label class="form-label" for="scheduleCalendarModalStartTimeInput">시작 시간</label>
+          <input id="scheduleCalendarModalStartTimeInput" type="time" class="form-input" onchange="onScheduleCalendarStartTimeChanged()">
+        </div>
+        <div>
+          <label class="form-label" for="scheduleCalendarModalEndInput">종료 시간 (선택)</label>
+          <input id="scheduleCalendarModalEndInput" type="time" class="form-input" oninput="onScheduleCalendarEndInputChanged()">
+        </div>
+      </div>
+      <div id="scheduleCalendarModalPreview" class="schedule-preview">회차 키/오픈 시각 미리보기가 여기에 표시됩니다.</div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeScheduleCalendarModal()">취소</button>
+        <button type="button" class="btn btn-secondary" id="scheduleCalendarModalDeleteBtn" onclick="deleteFromCalendarModal()" style="display:none;">삭제</button>
+        <button type="button" class="btn" id="scheduleCalendarModalSaveBtn" onclick="submitScheduleCalendarModal()">저장</button>
       </div>
     </div>
   </div>
