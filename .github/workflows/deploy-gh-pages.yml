@@ -49,7 +49,10 @@ jobs:
           APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
         run: |
           set -euo pipefail
-          sed -i "s|__API_BASE_URL__|$APPS_SCRIPT_WEB_APP_URL|g" web/shared/env.js
+          grep -q "__API_BASE_URL__" web/shared/env.js || { echo "::error::env.js placeholder(__API_BASE_URL__)를 찾지 못했습니다."; exit 1; }
+          sed -i "0,/__API_BASE_URL__/s|__API_BASE_URL__|$APPS_SCRIPT_WEB_APP_URL|" web/shared/env.js
+          grep -q "__API_BASE_URL__" web/shared/env.js && { echo "::error::env.js placeholder가 남아있습니다."; exit 1; }
+          grep -F "$APPS_SCRIPT_WEB_APP_URL" web/shared/env.js >/dev/null || { echo "::error::env.js에 API URL이 주입되지 않았습니다."; exit 1; }
 
       - name: Health check Apps Script apiInfo
         env:

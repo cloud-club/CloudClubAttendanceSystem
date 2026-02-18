@@ -12,5 +12,7 @@
   var env = global.CLOUDCLUB_ENV || {};
   var existing = global.CLOUDCLUB_CONFIG || {};
 
-  global.CLOUDCLUB_CONFIG = Object.assign({}, defaults, env, existing);
+  // 우선순위: defaults < 기존 설정 < env 주입값
+  // (env.js에서 Secret 기반 URL을 주입한 경우 최종값으로 강제)
+  global.CLOUDCLUB_CONFIG = Object.assign({}, defaults, existing, env);
 })(window);

@@ -80,7 +80,7 @@
   function call(action, params, options) {
     var baseUrl = getApiBaseUrl();
     if (!baseUrl || baseUrl.indexOf('REPLACE_WITH_APPS_SCRIPT_WEB_APP_URL') >= 0) {
-      return Promise.reject(createError('API_BASE_URL이 설정되지 않았습니다. web/shared/config.js를 확인하세요.', 'MISSING_API_BASE_URL'));
+      return Promise.reject(createError('API_BASE_URL이 설정되지 않았습니다. GitHub Pages를 workflow_dispatch로 재배포해 env.js 주입 상태를 확인하세요.', 'MISSING_API_BASE_URL'));
     }
 
     var timeoutMs = getTimeoutMs(options);
