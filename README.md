@@ -8,6 +8,23 @@ CloudClub 출석체크 시스템은 Google Sheets와 Apps Script를 활용한 �
 
 기술문서는 [이곳](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/TECHNICAL_DOCUMENTATION.md)을 참고하실 수 있습니다.
 
+## GitHub Pages 마이그레이션 안내 (관리자/학생 정적 페이지 + GAS API)
+
+이 저장소는 `web/` 디렉토리를 GitHub Pages로 배포하고, `Code.gs`는 JSONP API 게이트웨이로 동작하도록 확장되었습니다.
+
+- 관리자 페이지: `/admin/`
+- 학생 페이지: `/student/?season=시트명`
+
+### Apps Script Script Properties
+
+Apps Script 프로젝트의 `Project Settings > Script properties`에 아래 키를 설정해야 합니다.
+
+- `FRONTEND_ADMIN_BASE_URL`: 예) `https://<org>.github.io/CloudClubAttendanceSystem/admin/`
+- `FRONTEND_STUDENT_BASE_URL`: 예) `https://<org>.github.io/CloudClubAttendanceSystem/student/`
+- `ADMIN_KEY_HASH`: 관리자 키의 SHA-256 hex 문자열
+
+> 참고: `ADMIN_KEY_HASH`는 평문 키를 SHA-256으로 해시한 값입니다.
+
 ### 주요 특징
 - **실시간 출석 체크**: 30분 제한 시간이 있는 출석 세션
 - **자동 순위 시스템**: 출석률과 평균 체크인 시간 기반 랭킹
