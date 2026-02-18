@@ -25,13 +25,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate APPS_SCRIPT_WEB_APP_URL secret
+        env:
+          APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPS_SCRIPT_WEB_APP_URL:-}" ]; then
+            echo "::error::APPS_SCRIPT_WEB_APP_URL secret is empty. Secret 갱신 후 다시 배포하세요."
+            exit 1
+          fi
+
+          case "$APPS_SCRIPT_WEB_APP_URL" in
+            https://script.google.com/macros/s/*/exec*)
+              ;;
+            *)
+              echo "::error::APPS_SCRIPT_WEB_APP_URL format is invalid: $APPS_SCRIPT_WEB_APP_URL"
+              exit 1
+              ;;
+          esac
+
       - name: Inject API URL from secret
         env:
           APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
         run: |
-          if [ -n "$APPS_SCRIPT_WEB_APP_URL" ]; then
-            sed -i "s|__API_BASE_URL__|$APPS_SCRIPT_WEB_APP_URL|g" web/shared/env.js
+          set -euo pipefail
+          sed -i "s|__API_BASE_URL__|$APPS_SCRIPT_WEB_APP_URL|g" web/shared/env.js
+
+      - name: Health check Apps Script apiInfo
+        env:
+          APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+        run: |
+          set -euo pipefail
+          sep='?'
+          if [[ "$APPS_SCRIPT_WEB_APP_URL" == *\?* ]]; then
+            sep='&'
           fi
+          health_url="${APPS_SCRIPT_WEB_APP_URL}${sep}api=apiInfo&callback=cb&_=$(date +%s)"
+          body="$(curl -fsSL "$health_url")"
+
+          echo "$body" | grep -q '"apiVersion"' || { echo "::error::apiInfo 응답에 apiVersion이 없습니다."; exit 1; }
+          echo "$body" | grep -q '"variablesResetTemplate"' || { echo "::error::apiInfo 응답에 variablesResetTemplate 지원 정보가 없습니다."; exit 1; }
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

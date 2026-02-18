@@ -25,6 +25,9 @@ let calendarSelectedDateKey = '';
 let scheduleCalendarModalState = null;
 let excusedSearchKeyword = '';
 let excusedAbsentOnly = false;
+let variableApiInfo = null;
+let variableTabBlocked = false;
+let variableAutoNormalizedOnce = false;
 
 function normalizeSeasonAlias(raw) {
   const value = String(raw || '').trim();
@@ -147,6 +150,152 @@ function formatHhmmFromMs(ms) {
   const date = new Date(Number(ms));
   if (isNaN(date.getTime())) return '';
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function getConfiguredApiBaseUrl() {
+  const cfg = window.CLOUDCLUB_CONFIG || {};
+  return String(cfg.API_BASE_URL || '').trim();
+}
+
+function maskApiBaseUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '-';
+
+  try {
+    const parsed = new URL(raw, window.location.href);
+    const match = parsed.pathname.match(/\/macros\/s\/([^/]+)\/exec/i);
+    if (!match) {
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+
+    const token = match[1];
+    const maskedToken = token.length > 14
+      ? `${token.slice(0, 8)}...${token.slice(-6)}`
+      : `${token.slice(0, 4)}...${token.slice(-2)}`;
+
+    return `${parsed.origin}/macros/s/${maskedToken}/exec`;
+  } catch (error) {
+    return '[invalid-url]';
+  }
+}
+
+function setVariableActionButtonsDisabled(disabled) {
+  const buttonIds = [
+    'variablesSaveBtn',
+    'variablesReloadBtn',
+    'variablesTemplatePreserveBtn',
+    'variablesTemplateResetBtn'
+  ];
+
+  buttonIds.forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = !!disabled;
+  });
+}
+
+function renderVariableCompatibilityNotice(state) {
+  const node = document.getElementById('variablesCompatibilityNotice');
+  if (!node) return;
+
+  const info = state || {};
+  const maskedUrl = maskApiBaseUrl(getConfiguredApiBaseUrl());
+  const versionText = info.apiVersion ? `API 버전: ${escapeHtml(info.apiVersion)}` : 'API 버전: 확인 불가';
+  const serverTimeText = info.serverTime ? `서버 시각: ${escapeHtml(info.serverTime)}` : '';
+  const baseLine = `<div><strong>현재 API URL:</strong> <code>${escapeHtml(maskedUrl)}</code></div>`;
+  const versionLine = `<div><strong>${versionText}</strong>${serverTimeText ? ` / ${serverTimeText}` : ''}</div>`;
+
+  if (info.blocked) {
+    node.className = 'compat-notice blocked';
+    node.innerHTML = `
+      <div><strong>백엔드 구버전 연결됨</strong></div>
+      <div>${escapeHtml(info.message || 'Apps Script 재배포 + GitHub Pages 재배포가 필요합니다.')}</div>
+      ${versionLine}
+      ${baseLine}
+    `;
+    return;
+  }
+
+  node.className = 'compat-notice';
+  node.innerHTML = `
+    <div><strong>변수 API 호환성 정상</strong></div>
+    ${versionLine}
+    ${baseLine}
+  `;
+}
+
+function setVariableTabBlocked(blocked, message, info) {
+  variableTabBlocked = !!blocked;
+  const payload = Object.assign({}, info || {}, {
+    blocked: !!blocked,
+    message: message || ''
+  });
+  renderVariableCompatibilityNotice(payload);
+  setVariableActionButtonsDisabled(!!blocked);
+
+  if (!blocked) {
+    return;
+  }
+
+  const tableWrap = document.getElementById('variablesTableWrap');
+  const help = document.getElementById('variablesHelpPanel');
+  if (tableWrap) {
+    tableWrap.innerHTML = `<div class="error">${escapeHtml(message || '백엔드 구버전으로 변수 탭을 사용할 수 없습니다.')}</div>`;
+  }
+  if (help) {
+    help.innerHTML = `
+      <h4>백엔드 배포 버전을 확인해주세요.</h4>
+      <p class="help-muted">Apps Script 최신 버전 배포 후, GitHub Pages를 workflow_dispatch로 재배포하면 정상 동작합니다.</p>
+    `;
+  }
+}
+
+function hasRequiredVariableActions(supportedActions) {
+  const required = ['apiInfo', 'variablesGet', 'variablesNormalize', 'variablesResetTemplate'];
+  const actionSet = {};
+  (supportedActions || []).forEach(action => {
+    actionSet[String(action || '').trim()] = true;
+  });
+  return required.every(action => !!actionSet[action]);
+}
+
+async function ensureVariableApiCompatibility() {
+  try {
+    const info = await CloudClubApi.call('apiInfo', {
+      adminToken
+    });
+    if (!info || info.success === false) {
+      setVariableTabBlocked(
+        true,
+        (info && info.message) ? info.message : 'apiInfo 응답이 올바르지 않습니다. 백엔드를 재배포하세요.',
+        info || {}
+      );
+      return false;
+    }
+
+    const supportedActions = Array.isArray(info.supportedActions) ? info.supportedActions : [];
+    const compatible = hasRequiredVariableActions(supportedActions);
+    variableApiInfo = info;
+
+    if (!compatible) {
+      setVariableTabBlocked(
+        true,
+        'variablesGet/variablesNormalize/variablesResetTemplate 미지원 백엔드입니다. Apps Script와 GitHub Pages를 최신으로 재배포하세요.',
+        info
+      );
+      return false;
+    }
+
+    setVariableTabBlocked(false, '', info);
+    return true;
+  } catch (error) {
+    if (handleUnauthorizedError(error)) return false;
+    const message = error && error.code === 'UNSUPPORTED_ACTION'
+      ? 'apiInfo 미지원 백엔드입니다. Apps Script 최신 배포 후 GitHub Pages를 다시 배포하세요.'
+      : getDisplayErrorMessage(error, '백엔드 버전 확인 중 오류가 발생했습니다.');
+    setVariableTabBlocked(true, message, variableApiInfo || {});
+    return false;
+  }
 }
 
 function showBoxMessage(targetId, message, success) {
@@ -2289,11 +2438,54 @@ function validateVariableDraft(item, value) {
   return { valid: true };
 }
 
+async function maybeAutoNormalizeVariableSheet(response) {
+  if (variableAutoNormalizedOnce) {
+    return response;
+  }
+
+  const stats = response && response.stats ? response.stats : {};
+  const duplicateRemovedCount = Number(stats.duplicateRemovedCount || 0);
+  const invalidValueDroppedCount = Number(stats.invalidValueDroppedCount || 0);
+
+  if (duplicateRemovedCount <= 0 && invalidValueDroppedCount <= 0) {
+    return response;
+  }
+
+  variableAutoNormalizedOnce = true;
+
+  const normalized = await CloudClubApi.call('variablesNormalize', {
+    adminToken
+  });
+
+  if (!normalized.success) {
+    showBoxMessage('variablesResult', `❌ ${escapeHtml(normalized.message || '변수 정규화 실패')}`, false);
+    return response;
+  }
+
+  showBoxMessage(
+    'variablesResult',
+    `✅ 변수 시트 자동 정규화 완료 (중복 ${normalized.duplicateRemovedCount || 0}건, 무효값 ${normalized.invalidValueDroppedCount || 0}건)`,
+    true
+  );
+  showToast('<i class="fas fa-check-circle"></i> 변수 시트 자동 정규화 완료', true);
+
+  const refreshed = await CloudClubApi.call('variablesGet', {
+    adminToken
+  });
+  return refreshed;
+}
+
 async function loadVariables() {
   try {
-    const response = await CloudClubApi.call('variablesGet', {
+    const isCompatible = await ensureVariableApiCompatibility();
+    if (!isCompatible) {
+      return;
+    }
+
+    const rawResponse = await CloudClubApi.call('variablesGet', {
       adminToken
     });
+    const response = await maybeAutoNormalizeVariableSheet(rawResponse);
 
     if (!response.success) {
       document.getElementById('variablesTableWrap').innerHTML = `<div class="error">${escapeHtml(response.message || '변수 조회 실패')}</div>`;
@@ -2312,11 +2504,24 @@ async function loadVariables() {
     updateSchedulePreview();
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
+    if (error && error.code === 'UNSUPPORTED_ACTION') {
+      setVariableTabBlocked(
+        true,
+        '변수 API 일부가 구버전입니다. Apps Script 재배포 후 GitHub Pages를 다시 배포하세요.',
+        variableApiInfo || {}
+      );
+      return;
+    }
     document.getElementById('variablesTableWrap').innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '변수 조회 중 오류'))}</div>`;
   }
 }
 
 async function saveVariables() {
+  if (variableTabBlocked) {
+    alert('백엔드 구버전으로 변수 저장이 차단되었습니다. Apps Script와 GitHub Pages를 재배포하세요.');
+    return;
+  }
+
   if (!variableItems || variableItems.length === 0) {
     alert('저장할 변수 데이터가 없습니다.');
     return;
@@ -2365,6 +2570,11 @@ async function saveVariables() {
 }
 
 async function resetVariablesTemplate(mode) {
+  if (variableTabBlocked) {
+    alert('백엔드 구버전으로 템플릿 복구가 차단되었습니다. Apps Script와 GitHub Pages를 재배포하세요.');
+    return;
+  }
+
   const resetMode = mode === 'reset' ? 'reset' : 'preserve';
   const confirmMessage = resetMode === 'reset'
     ? '정말 변수 템플릿을 완전 초기화할까요? 현재 value 값이 기본값으로 바뀝니다.'

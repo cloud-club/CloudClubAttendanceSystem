@@ -1263,6 +1263,23 @@
       line-height: 1.6;
       margin: 16px 0;
     }
+
+    .compat-notice {
+      margin: 12px 0 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      background: rgba(59, 130, 246, 0.12);
+      color: #dbeafe;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .compat-notice.blocked {
+      border-color: rgba(239, 68, 68, 0.45);
+      background: rgba(239, 68, 68, 0.16);
+      color: #fecaca;
+    }
     
     .highlight-text {
       color: #60a5fa;
@@ -1964,6 +1981,9 @@
           <h2 class="card-title">variable 시트 변수 편집</h2>
         </div>
         <p class="info-text"><code>key | value | type | description | editable | updated_at | applies_to | applies_when | used_in</code> 단일 테이블(A:I) 기준입니다. 운영자는 <strong>value만 수정</strong>하며, 실제 사용처는 탭 기준으로 표시됩니다.</p>
+        <div id="variablesCompatibilityNotice" class="compat-notice">
+          <div><strong>백엔드 버전 확인 중...</strong></div>
+        </div>
         <div class="table-wrap" id="variablesTableWrap">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
@@ -1972,19 +1992,19 @@
           <p class="help-muted">값을 바꾸기 전에 “이 값이 어디에 적용되는지”를 먼저 확인하세요.</p>
         </div>
         <div class="sheet-actions">
-          <button type="button" class="btn" onclick="saveVariables()">
+          <button type="button" class="btn" id="variablesSaveBtn" onclick="saveVariables()">
             <i class="fas fa-save"></i>
             <span>변수 저장</span>
           </button>
-          <button type="button" class="btn btn-secondary" onclick="loadVariables()">
+          <button type="button" class="btn btn-secondary" id="variablesReloadBtn" onclick="loadVariables()">
             <i class="fas fa-sync"></i>
             <span>다시 불러오기</span>
           </button>
-          <button type="button" class="btn btn-secondary" onclick="resetVariablesTemplate('preserve')">
+          <button type="button" class="btn btn-secondary" id="variablesTemplatePreserveBtn" onclick="resetVariablesTemplate('preserve')">
             <i class="fas fa-tools"></i>
             <span>템플릿 복구(value 유지)</span>
           </button>
-          <button type="button" class="btn btn-secondary" onclick="resetVariablesTemplate('reset')">
+          <button type="button" class="btn btn-secondary" id="variablesTemplateResetBtn" onclick="resetVariablesTemplate('reset')">
             <i class="fas fa-undo-alt"></i>
             <span>템플릿 완전 초기화</span>
           </button>

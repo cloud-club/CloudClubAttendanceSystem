@@ -1,7 +1,7 @@
 (function (global) {
   var defaults = {
-    // Apps Script 웹앱 배포 URL (예: https://script.google.com/macros/s/AKfycb.../exec)
-    API_BASE_URL: 'https://script.google.com/macros/s/AKfycbxdJ2h7EmkfcFBpaO-HCuhEWQwDhz_CyijAembJHUJWq5cCuzxCoHtd7HA0NZuHCp5hiw/exec',
+    // 기본값은 placeholder를 유지하고, 실제 운영 URL은 web/shared/env.js에 주입합니다.
+    API_BASE_URL: 'REPLACE_WITH_APPS_SCRIPT_WEB_APP_URL',
     // JSONP 스크립트를 쿠키 비의존으로 로드해 Google 계정 리다이렉트 이슈를 줄입니다.
     JSONP_CROSSORIGIN: 'anonymous',
     JSONP_REFERRER_POLICY: 'no-referrer',

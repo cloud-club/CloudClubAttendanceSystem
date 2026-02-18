@@ -11,6 +11,7 @@ const ABSENT_COLOR = '#f4cccc';
 
 const ADMIN_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 const ADMIN_TOKEN_CACHE_PREFIX = 'admin_token_';
+const API_VERSION = '2026.02.18-v2.1';
 
 const VARIABLE_SHEET_NAME = 'variable';
 const VARIABLE_TABLE_HEADER_ROW = 1;
@@ -19,6 +20,31 @@ const VARIABLE_TABLE_HEADERS = ['key', 'value', 'type', 'description', 'editable
 
 const SESSION_META_SHEET_NAME = '_session_meta';
 const SESSION_META_HEADERS = ['seasonSheet', 'sessionKey', 'openOffsetMin', 'lateThresholdMin', 'absenceThresholdMin', 'explicitEndAt', 'createdAt'];
+const SUPPORTED_API_ACTIONS = [
+  'health',
+  'apiInfo',
+  'session',
+  'attendance',
+  'status',
+  'ranking',
+  'sheets',
+  'setActiveSheet',
+  'verifyAdminKey',
+  'studentUrl',
+  'adminUrl',
+  'sheetLink',
+  'variablesGet',
+  'variablesUpdate',
+  'variablesNormalize',
+  'variablesResetTemplate',
+  'scheduleList',
+  'scheduleSave',
+  'scheduleDelete',
+  'members',
+  'manualApprove',
+  'excusedSet',
+  'graduationReport'
+];
 
 const VARIABLE_CATALOG = {
   attendance_open_offset_min: {
@@ -309,6 +335,10 @@ function handleApiRequest(params) {
         };
         break;
 
+      case 'apiInfo':
+        data = getApiInfo();
+        break;
+
       case 'session':
         data = params.season ? getSeasonAttendanceSession(params.season) : getAttendanceSession();
         break;
@@ -534,6 +564,16 @@ function apiError(code, message) {
       message: message
     },
     ts: new Date().getTime()
+  };
+}
+
+function getApiInfo() {
+  return {
+    success: true,
+    apiVersion: API_VERSION,
+    supportedActions: SUPPORTED_API_ACTIONS.slice(),
+    scriptTimeZone: Session.getScriptTimeZone(),
+    serverTime: formatDateTime(new Date())
   };
 }
 
@@ -1190,7 +1230,10 @@ function isVariableRecordValid(record) {
   return !!validation.valid;
 }
 
-function collectVariableRecords(sheet) {
+function collectVariableRecords(sheet, options) {
+  const opts = options || {};
+  const mode = String(opts.mode || 'readStrict').trim();
+  const allowLegacyNormalize = mode === 'normalizeLegacy';
   const records = [];
   const lastRow = sheet.getLastRow();
   let legacyRowsImportedCount = 0;
@@ -1231,44 +1274,47 @@ function collectVariableRecords(sheet) {
   };
 
   appendRows(1, 2, 'table');
-  appendRows(5, 6, 'legacy_table');
 
-  // 구형 A2:C2 레거시 레이아웃은 레거시 헤더일 때만 읽는다.
-  if (lastRow >= 2 && allowLegacyRead) {
-    const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
-    const legacyKeyMap = [
-      { key: 'late_threshold_min', value: legacyValues[0] },
-      { key: 'absence_threshold_min', value: legacyValues[1] },
-      { key: 'attendance_open_offset_min', value: legacyValues[2] }
-    ];
+  if (allowLegacyNormalize) {
+    appendRows(5, 6, 'legacy_table');
 
-    legacyKeyMap.forEach(item => {
-      const raw = toVariableText(item.value);
-      if (!raw) return;
-      rowOrder++;
-      legacyRowsImportedCount++;
-      normalizedFromLegacy = true;
-      records.push({
-        key: item.key,
-        value: item.value,
-        type: 'number',
-        description: '',
-        editable: true,
-        updatedAt: '',
-        appliesTo: '',
-        appliesWhen: '',
-        usedIn: '',
-        order: -100000 + rowOrder,
-        source: 'legacy'
+    // 구형 A2:C2 레거시 레이아웃은 레거시 정규화 모드일 때만 읽는다.
+    if (lastRow >= 2 && allowLegacyRead) {
+      const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
+      const legacyKeyMap = [
+        { key: 'late_threshold_min', value: legacyValues[0] },
+        { key: 'absence_threshold_min', value: legacyValues[1] },
+        { key: 'attendance_open_offset_min', value: legacyValues[2] }
+      ];
+
+      legacyKeyMap.forEach(item => {
+        const raw = toVariableText(item.value);
+        if (!raw) return;
+        rowOrder++;
+        legacyRowsImportedCount++;
+        normalizedFromLegacy = true;
+        records.push({
+          key: item.key,
+          value: item.value,
+          type: 'number',
+          description: '',
+          editable: true,
+          updatedAt: '',
+          appliesTo: '',
+          appliesWhen: '',
+          usedIn: '',
+          order: -100000 + rowOrder,
+          source: 'legacy'
+        });
       });
-    });
-  } else if (lastRow >= 2 && hasLegacyHeader) {
-    const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
-    legacyValues.forEach(value => {
-      if (toVariableText(value)) {
-        legacyRowsIgnoredCount++;
-      }
-    });
+    } else if (lastRow >= 2 && hasLegacyHeader) {
+      const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
+      legacyValues.forEach(value => {
+        if (toVariableText(value)) {
+          legacyRowsIgnoredCount++;
+        }
+      });
+    }
   }
 
   return {
@@ -1438,8 +1484,9 @@ function writeVariableSheetRows(sheet, rows) {
 
 function getVariableDataSnapshot(sheet, options) {
   const opts = options || {};
+  const readMode = String(opts.readMode || 'readStrict').trim();
   const nowText = formatDateTime(new Date());
-  const collected = collectVariableRecords(sheet);
+  const collected = collectVariableRecords(sheet, { mode: readMode });
   const rawRecords = collected.records || [];
   const mergedResult = mergeVariableRecordsByLatest(rawRecords);
   const mergedMap = mergedResult.map || {};
@@ -1477,7 +1524,7 @@ function getVariableDataSnapshot(sheet, options) {
 function normalizeVariableSheetData(options) {
   const opts = options || {};
   const sheet = opts.sheet || ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false, readMode: 'normalizeLegacy' });
   writeVariableSheetRows(sheet, snapshot.rows);
 
   return {
@@ -1533,7 +1580,7 @@ function resetVariablesTemplate(modeRaw) {
   const sheet = ensureVariableSheet();
   const currentConfig = getVariableConfig();
   seedSessionMetaForAllSeasonSheets(currentConfig);
-  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false, readMode: 'normalizeLegacy' });
   const nowText = formatDateTime(new Date());
   const templateMap = buildTemplateVariableMap(nowText);
 
@@ -1797,7 +1844,7 @@ function validateVariableValue(key, value, type) {
 
 function getVariablesPayload() {
   const sheet = ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false, readMode: 'readStrict' });
   const items = [];
   const config = Object.assign({}, VARIABLE_DEFAULTS);
   const specMap = getRequiredVariableSpecMap();
@@ -1855,7 +1902,8 @@ function getVariablesPayload() {
     stats: {
       duplicateRemovedCount: snapshot.duplicateRemovedCount,
       invalidValueDroppedCount: snapshot.invalidValueDroppedCount,
-      filledByDefaultCount: snapshot.filledByDefaultCount
+      filledByDefaultCount: snapshot.filledByDefaultCount,
+      legacyRowsIgnoredCount: snapshot.legacyRowsIgnoredCount
     }
   };
 }
@@ -1887,7 +1935,7 @@ function updateVariables(items) {
   seedSessionMetaForAllSeasonSheets(currentConfig);
 
   const sheet = ensureVariableSheet();
-  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false });
+  const snapshot = getVariableDataSnapshot(sheet, { includeRequired: true, includeExtras: false, readMode: 'readStrict' });
   const existingMap = snapshot.map;
 
   const nowText = formatDateTime(new Date());
