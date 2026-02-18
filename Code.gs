@@ -139,6 +139,12 @@ const VARIABLE_DEFAULTS = {
   default_session_start_time: '19:00'
 };
 
+const MINUTE_VARIABLE_KEYS = {
+  attendance_open_offset_min: true,
+  late_threshold_min: true,
+  absence_threshold_min: true
+};
+
 /**
  * 웹앱 진입점
  * - api 파라미터가 있으면 JSONP API 라우팅
@@ -317,6 +323,14 @@ function handleApiRequest(params) {
 
         const items = parseItemsJson(params.itemsJson || params.items || '[]');
         data = updateVariables(items);
+        break;
+      }
+
+      case 'variablesNormalize': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = normalizeVariablesPayload();
         break;
       }
 
@@ -866,31 +880,101 @@ function buildSessionHeader(startTime, endAtText) {
   return `${startText}~${endMatch[1]}:${endMatch[2]}`;
 }
 
-function ensureVariableSheet() {
+function ensureVariableSheet(options) {
+  const opts = options || {};
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(VARIABLE_SHEET_NAME);
 
   if (!sheet) {
     sheet = ss.insertSheet(VARIABLE_SHEET_NAME);
+    const nowText = formatDateTime(new Date());
+    const baseMap = {};
+    ensureRequiredVariableEntries(baseMap, nowText);
+    writeVariableSheetRows(sheet, buildVariableRowsFromMap(baseMap, nowText));
+    return sheet;
   }
 
-  ensureVariableSheetLayout(sheet);
+  if (opts.normalize === true) {
+    normalizeVariableSheetData({ sheet: sheet });
+  }
+
   return sheet;
 }
 
-function ensureVariableSheetLayout(sheet) {
-  const nowText = formatDateTime(new Date());
-  const dataMap = {};
+function canonicalVariableKey(key) {
+  return String(key || '').trim().toLowerCase();
+}
 
-  readVariableRowsFromRange(sheet, 5, 6).forEach(item => {
-    dataMap[item.key] = item;
-  });
-  readVariableRowsFromRange(sheet, 1, 2).forEach(item => {
-    dataMap[item.key] = item;
-  });
+function toVariableText(value) {
+  if (value === undefined || value === null) return '';
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return formatDateTime(value);
+  }
+  return String(value).trim();
+}
 
-  // 구형 A2:C2 구조를 읽어 단일 테이블로 1회 마이그레이션합니다.
-  if (!dataMap.late_threshold_min || !dataMap.absence_threshold_min || !dataMap.attendance_open_offset_min) {
+function parseVariableUpdatedAtTimestamp(updatedAt, fallbackOrder) {
+  if (updatedAt instanceof Date && !isNaN(updatedAt.getTime())) {
+    return updatedAt.getTime();
+  }
+
+  const text = String(updatedAt || '').trim();
+  if (text) {
+    const parsed = new Date(text.replace(/\./g, '-'));
+    if (!isNaN(parsed.getTime())) {
+      return parsed.getTime();
+    }
+  }
+
+  return fallbackOrder;
+}
+
+function parseVariableEditable(value, defaultValue) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return defaultValue !== false;
+  }
+  return parseBooleanParam(value);
+}
+
+function collectVariableRecords(sheet) {
+  const records = [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 1) {
+    return records;
+  }
+
+  let rowOrder = 0;
+  const appendRows = (headerRow, firstDataRow) => {
+    if (lastRow < firstDataRow) return;
+    const headers = sheet.getRange(headerRow, 1, 1, VARIABLE_TABLE_HEADERS.length).getValues()[0];
+    if (canonicalVariableKey(headers[0]) !== 'key') {
+      return;
+    }
+
+    const rows = sheet.getRange(firstDataRow, 1, lastRow - firstDataRow + 1, VARIABLE_TABLE_HEADERS.length).getValues();
+    rows.forEach(row => {
+      const key = canonicalVariableKey(row[0]);
+      if (!key) return;
+      if (key === 'key') return;
+
+      rowOrder++;
+      records.push({
+        key: key,
+        value: row[1],
+        type: String(row[2] || '').trim() || 'string',
+        description: String(row[3] || '').trim(),
+        editable: parseVariableEditable(row[4], true),
+        updatedAt: toVariableText(row[5]),
+        order: rowOrder
+      });
+    });
+  };
+
+  appendRows(1, 2);
+  appendRows(5, 6);
+
+  // 구형 A2:C2를 단일 테이블로 읽기 전용 마이그레이션(쓰기 없음)
+  if (lastRow >= 2) {
     const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
     const legacyKeyMap = [
       { key: 'late_threshold_min', value: legacyValues[0] },
@@ -899,115 +983,264 @@ function ensureVariableSheetLayout(sheet) {
     ];
 
     legacyKeyMap.forEach(item => {
-      const raw = String(item.value === undefined || item.value === null ? '' : item.value).trim();
-      if (raw === '') return;
-      if (dataMap[item.key]) return;
-
-      dataMap[item.key] = {
+      const raw = toVariableText(item.value);
+      if (!raw) return;
+      rowOrder++;
+      records.push({
         key: item.key,
         value: item.value,
         type: 'number',
         description: '',
         editable: true,
-        updatedAt: nowText
-      };
+        updatedAt: '',
+        order: -100000 + rowOrder
+      });
     });
   }
 
-  REQUIRED_VARIABLE_SPECS.forEach(spec => {
-    if (!dataMap[spec.key]) {
-      dataMap[spec.key] = {
-        key: spec.key,
-        value: spec.value,
-        type: spec.type,
-        description: spec.description,
-        editable: true,
-        updatedAt: nowText
-      };
+  return records;
+}
+
+function mergeVariableRecordsByLatest(records, nowText) {
+  const map = {};
+
+  records.forEach(record => {
+    const key = canonicalVariableKey(record.key);
+    if (!key) return;
+
+    const candidate = {
+      key: key,
+      value: record.value,
+      type: String(record.type || '').trim() || 'string',
+      description: String(record.description || '').trim(),
+      editable: record.editable !== false,
+      updatedAt: String(record.updatedAt || '').trim()
+    };
+    const candidateTs = parseVariableUpdatedAtTimestamp(candidate.updatedAt, record.order);
+
+    const existing = map[key];
+    if (!existing) {
+      map[key] = candidate;
+      map[key]._sortTs = candidateTs;
+      map[key]._sortOrder = record.order;
       return;
     }
 
-    const current = dataMap[spec.key];
-    current.type = current.type || spec.type;
-    current.description = current.description || spec.description;
-    if (current.editable === undefined) {
-      current.editable = true;
-    }
-    if (!current.updatedAt) {
-      current.updatedAt = nowText;
+    const shouldReplace = candidateTs > existing._sortTs
+      || (candidateTs === existing._sortTs && record.order > existing._sortOrder);
+
+    if (shouldReplace) {
+      map[key] = candidate;
+      map[key]._sortTs = candidateTs;
+      map[key]._sortOrder = record.order;
     }
   });
 
-  const requiredOrder = REQUIRED_VARIABLE_SPECS.map(spec => spec.key);
+  ensureRequiredVariableEntries(map, nowText);
+
+  Object.keys(map).forEach(key => {
+    delete map[key]._sortTs;
+    delete map[key]._sortOrder;
+  });
+
+  return map;
+}
+
+function ensureRequiredVariableEntries(dataMap, nowText) {
+  REQUIRED_VARIABLE_SPECS.forEach(spec => {
+    const key = canonicalVariableKey(spec.key);
+    const current = dataMap[key] || {};
+    dataMap[key] = {
+      key: key,
+      value: current.value !== undefined ? current.value : spec.value,
+      type: String(current.type || spec.type || 'string').trim() || 'string',
+      description: String(current.description || spec.description || '').trim(),
+      editable: current.editable === false ? false : true,
+      updatedAt: String(current.updatedAt || nowText).trim()
+    };
+  });
+
+  Object.keys(dataMap).forEach(key => {
+    const current = dataMap[key] || {};
+    const catalog = VARIABLE_CATALOG[key] || {};
+    dataMap[key] = {
+      key: key,
+      value: current.value,
+      type: String(current.type || catalog.type || 'string').trim() || 'string',
+      description: String(current.description || catalog.description || '').trim(),
+      editable: current.editable === false ? false : true,
+      updatedAt: String(current.updatedAt || nowText).trim()
+    };
+  });
+}
+
+function buildVariableRowsFromMap(dataMap, nowText) {
+  ensureRequiredVariableEntries(dataMap, nowText);
+
+  const requiredOrder = REQUIRED_VARIABLE_SPECS.map(spec => canonicalVariableKey(spec.key));
   const extraKeys = Object.keys(dataMap).filter(key => requiredOrder.indexOf(key) === -1).sort();
   const orderedKeys = requiredOrder.concat(extraKeys);
 
-  const rows = orderedKeys.map(key => {
+  return orderedKeys.map(key => {
     const item = dataMap[key];
-    const catalog = VARIABLE_CATALOG[key] || {};
-    const type = String(item.type || catalog.type || 'string').trim() || 'string';
-    const normalizedValue = parseVariableValue(item.value, type);
-
+    const type = String(item.type || 'string').trim() || 'string';
     return [
       key,
-      normalizedValue,
+      parseVariableValue(item.value, type, key),
       type,
-      String(item.description || catalog.description || '').trim(),
+      String(item.description || '').trim(),
       item.editable === false ? 'false' : 'true',
       String(item.updatedAt || nowText).trim()
     ];
   });
+}
 
-  const clearRows = Math.max(sheet.getLastRow(), VARIABLE_TABLE_FIRST_DATA_ROW + rows.length);
-  sheet.getRange(1, 1, clearRows, VARIABLE_TABLE_HEADERS.length).clearContent();
+function writeVariableSheetRows(sheet, rows) {
+  const rowCount = Math.max(sheet.getLastRow(), VARIABLE_TABLE_FIRST_DATA_ROW + rows.length);
+  if (rowCount > 0) {
+    sheet.getRange(1, 1, rowCount, VARIABLE_TABLE_HEADERS.length).clearContent();
+  }
+
   sheet.getRange(VARIABLE_TABLE_HEADER_ROW, 1, 1, VARIABLE_TABLE_HEADERS.length).setValues([VARIABLE_TABLE_HEADERS]);
+
   if (rows.length > 0) {
     sheet.getRange(VARIABLE_TABLE_FIRST_DATA_ROW, 1, rows.length, VARIABLE_TABLE_HEADERS.length).setValues(rows);
   }
 }
 
-function readVariableRowsFromRange(sheet, headerRow, firstDataRow) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < firstDataRow) return [];
+function getVariableDataSnapshot(sheet) {
+  const nowText = formatDateTime(new Date());
+  const rawRecords = collectVariableRecords(sheet);
+  const mergedMap = mergeVariableRecordsByLatest(rawRecords, nowText);
+  const rows = buildVariableRowsFromMap(mergedMap, nowText);
 
-  const headers = sheet.getRange(headerRow, 1, 1, VARIABLE_TABLE_HEADERS.length).getValues()[0];
-  const head0 = String(headers[0] || '').trim().toLowerCase();
-  if (head0 !== 'key') {
-    return [];
-  }
-
-  const rawRows = sheet.getRange(firstDataRow, 1, lastRow - firstDataRow + 1, VARIABLE_TABLE_HEADERS.length).getValues();
-  const rows = [];
-  rawRows.forEach(row => {
-    const key = String(row[0] || '').trim();
-    if (!key) return;
-
-    rows.push({
-      key: key,
-      value: row[1],
-      type: String(row[2] || '').trim() || 'string',
-      description: String(row[3] || '').trim(),
-      editable: String(row[4] || '').trim() === '' ? true : parseBooleanParam(row[4]),
-      updatedAt: String(row[5] || '').trim()
-    });
-  });
-
-  return rows;
+  return {
+    nowText: nowText,
+    rawCount: rawRecords.length,
+    dedupedCount: Object.keys(mergedMap).length,
+    duplicateRemovedCount: Math.max(0, rawRecords.length - Object.keys(mergedMap).length),
+    map: mergedMap,
+    rows: rows
+  };
 }
 
-function parseVariableValue(value, type) {
+function normalizeVariableSheetData(options) {
+  const opts = options || {};
+  const sheet = opts.sheet || ensureVariableSheet();
+  const snapshot = getVariableDataSnapshot(sheet);
+  writeVariableSheetRows(sheet, snapshot.rows);
+
+  return {
+    sheetName: sheet.getName(),
+    rowCount: snapshot.rows.length,
+    duplicateRemovedCount: snapshot.duplicateRemovedCount
+  };
+}
+
+function normalizeVariablesPayload() {
+  const sheet = ensureVariableSheet();
+  const normalized = normalizeVariableSheetData({ sheet: sheet });
+  const payload = getVariablesPayload();
+  payload.message = `variable 시트 정규화 완료 (중복 정리 ${normalized.duplicateRemovedCount}건)`;
+  payload.normalized = normalized;
+  return payload;
+}
+
+function isMinuteVariableKey(key) {
+  return !!MINUTE_VARIABLE_KEYS[canonicalVariableKey(key)];
+}
+
+function parseMinutesFromTimeText(text) {
+  const match = String(text || '').trim().match(/^(-)?(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+
+  const sign = match[1] ? -1 : 1;
+  const hh = parseInt(match[2], 10);
+  const mm = parseInt(match[3], 10);
+  const ss = match[4] ? parseInt(match[4], 10) : 0;
+  if (isNaN(hh) || isNaN(mm) || isNaN(ss)) return null;
+
+  const minutes = (hh * 60) + mm + (ss / 60);
+  return Math.round(sign * minutes);
+}
+
+function toHhmmFromAny(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'HH:mm');
+  }
+
+  if (typeof value === 'number' && isFinite(value)) {
+    if (Math.abs(value) <= 1) {
+      const dayMinutes = Math.round(((value % 1) + 1) % 1 * 24 * 60);
+      const hh = Math.floor(dayMinutes / 60);
+      const mm = dayMinutes % 60;
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+
+    if (value >= 0 && value < 24) {
+      return `${String(Math.floor(value)).padStart(2, '0')}:00`;
+    }
+  }
+
+  const text = String(value || '').trim();
+  if (!text) return '';
+
+  const hhmm = text.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (hhmm) {
+    return `${String(parseInt(hhmm[1], 10)).padStart(2, '0')}:${hhmm[2]}`;
+  }
+
+  const parsed = new Date(text.replace(/\./g, '-').replace('T', ' '));
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, Session.getScriptTimeZone(), 'HH:mm');
+  }
+
+  return '';
+}
+
+function parseVariableValue(value, type, key) {
+  const normalizedType = String(type || 'string').trim() || 'string';
+  const normalizedKey = canonicalVariableKey(key);
   const raw = value === null || value === undefined ? '' : String(value).trim();
 
-  if (type === 'number') {
+  if (normalizedType === 'number') {
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      if (!isMinuteVariableKey(normalizedKey)) return '';
+      return (value.getHours() * 60) + value.getMinutes();
+    }
+
+    if (typeof value === 'number' && isFinite(value)) {
+      if (isMinuteVariableKey(normalizedKey) && Math.abs(value) < 1 && value !== 0) {
+        return Math.round(value * 24 * 60);
+      }
+      return value;
+    }
+
     if (raw === '') return '';
+
+    if (isMinuteVariableKey(normalizedKey)) {
+      const timeMinutes = parseMinutesFromTimeText(raw);
+      if (timeMinutes !== null) {
+        return timeMinutes;
+      }
+    }
+
     const n = Number(raw);
     if (isNaN(n)) return '';
+    if (isMinuteVariableKey(normalizedKey) && Math.abs(n) < 1 && n !== 0) {
+      return Math.round(n * 24 * 60);
+    }
     return n;
   }
 
-  if (type === 'boolean') {
+  if (normalizedType === 'boolean') {
     if (raw === '') return false;
     return /^(true|1|yes|y)$/i.test(raw);
+  }
+
+  if (normalizedKey === 'default_session_start_time') {
+    const hhmm = toHhmmFromAny(value);
+    if (hhmm) return hhmm;
   }
 
   return raw;
@@ -1114,8 +1347,9 @@ function validateVariableValue(key, value, type) {
       return { valid: false, message: `${key}: 빈값을 허용하지 않습니다.` };
     }
 
-    const n = Number(text);
-    if (isNaN(n)) {
+    const parsed = parseVariableValue(value, 'number', key);
+    const n = Number(parsed);
+    if (parsed === '' || isNaN(n)) {
       return { valid: false, message: `${key}: 숫자값이어야 합니다.` };
     }
 
@@ -1129,7 +1363,7 @@ function validateVariableValue(key, value, type) {
     return { valid: true };
   }
 
-  if (type === 'number' && text !== '' && isNaN(Number(text))) {
+  if (type === 'number' && text !== '' && parseVariableValue(value, 'number', key) === '') {
     return { valid: false, message: `${key}: 숫자값이어야 합니다.` };
   }
 
@@ -1138,46 +1372,41 @@ function validateVariableValue(key, value, type) {
 
 function getVariablesPayload() {
   const sheet = ensureVariableSheet();
-  const lastRow = sheet.getLastRow();
-
+  const snapshot = getVariableDataSnapshot(sheet);
   const items = [];
   const config = Object.assign({}, VARIABLE_DEFAULTS);
 
-  if (lastRow >= VARIABLE_TABLE_FIRST_DATA_ROW) {
-    const rows = sheet.getRange(VARIABLE_TABLE_FIRST_DATA_ROW, 1, lastRow - VARIABLE_TABLE_FIRST_DATA_ROW + 1, VARIABLE_TABLE_HEADERS.length).getValues();
+  snapshot.rows.forEach((row, idx) => {
+    const key = canonicalVariableKey(row[0]);
+    if (!key) return;
 
-    rows.forEach((row, idx) => {
-      const key = String(row[0] || '').trim();
-      if (!key) return;
+    const type = String(row[2] || '').trim() || 'string';
+    const parsedValue = parseVariableValue(row[1], type, key);
+    const editable = String(row[4] || '').trim();
+    const catalog = getVariableCatalogEntry(key);
 
-      const type = String(row[2] || '').trim() || 'string';
-      const parsedValue = parseVariableValue(row[1], type);
-      const editable = String(row[4] || '').trim();
-      const catalog = getVariableCatalogEntry(key);
-
-      items.push({
-        key: key,
-        value: parsedValue,
-        type: type,
-        description: String(row[3] || '').trim(),
-        editable: editable === '' ? true : /^(true|1|yes|y)$/i.test(editable),
-        updatedAt: String(row[5] || '').trim(),
-        row: VARIABLE_TABLE_FIRST_DATA_ROW + idx,
-        labelKo: String(catalog.labelKo || '').trim(),
-        unit: String(catalog.unit || '').trim(),
-        appliesTo: String(catalog.appliesTo || '').trim(),
-        appliesWhen: String(catalog.appliesWhen || '').trim(),
-        formula: String(catalog.formula || '').trim(),
-        example: String(catalog.example || '').trim(),
-        validation: catalog.validation || null,
-        validationText: buildVariableValidationText(catalog.validation || null)
-      });
-
-      if (parsedValue !== '' || !(key in config)) {
-        config[key] = parsedValue;
-      }
+    items.push({
+      key: key,
+      value: parsedValue,
+      type: type,
+      description: String(row[3] || '').trim(),
+      editable: editable === '' ? true : /^(true|1|yes|y)$/i.test(editable),
+      updatedAt: String(row[5] || '').trim(),
+      row: VARIABLE_TABLE_FIRST_DATA_ROW + idx,
+      labelKo: String(catalog.labelKo || '').trim(),
+      unit: String(catalog.unit || '').trim(),
+      appliesTo: String(catalog.appliesTo || '').trim(),
+      appliesWhen: String(catalog.appliesWhen || '').trim(),
+      formula: String(catalog.formula || '').trim(),
+      example: String(catalog.example || '').trim(),
+      validation: catalog.validation || null,
+      validationText: buildVariableValidationText(catalog.validation || null)
     });
-  }
+
+    if (parsedValue !== '' || !(key in config)) {
+      config[key] = parsedValue;
+    }
+  });
 
   return {
     success: true,
@@ -1215,18 +1444,14 @@ function updateVariables(items) {
   seedSessionMetaForAllSeasonSheets(currentConfig);
 
   const sheet = ensureVariableSheet();
-  const payload = getVariablesPayload();
-  const existingMap = {};
-
-  payload.items.forEach(item => {
-    existingMap[item.key] = item;
-  });
+  const snapshot = getVariableDataSnapshot(sheet);
+  const existingMap = snapshot.map;
 
   const nowText = formatDateTime(new Date());
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const key = String((item && item.key) || '').trim();
+    const key = canonicalVariableKey((item && item.key) || '');
     if (!key) continue;
 
     const existing = existingMap[key] || null;
@@ -1246,29 +1471,29 @@ function updateVariables(items) {
       return { success: false, message: validation.message || `${key} 변수값 검증에 실패했습니다.` };
     }
 
-    const value = parseVariableValue(rawValue, type);
+    const value = parseVariableValue(rawValue, type, key);
 
-    if (existing) {
-      sheet.getRange(existing.row, 2, 1, 5).setValues([[
-        value,
-        type,
-        description,
-        editable ? 'true' : 'false',
-        nowText
-      ]]);
-    } else {
-      sheet.appendRow([
-        key,
-        value,
-        type,
-        description,
-        editable ? 'true' : 'false',
-        nowText
-      ]);
-    }
+    existingMap[key] = {
+      key: key,
+      value: value,
+      type: type,
+      description: description,
+      editable: editable,
+      updatedAt: nowText
+    };
   }
 
-  return getVariablesPayload();
+  const rows = buildVariableRowsFromMap(existingMap, nowText);
+  writeVariableSheetRows(sheet, rows);
+
+  const payload = getVariablesPayload();
+  payload.message = `변수 저장 완료 (중복 정리 ${snapshot.duplicateRemovedCount}건)`;
+  payload.normalized = {
+    sheetName: sheet.getName(),
+    rowCount: rows.length,
+    duplicateRemovedCount: snapshot.duplicateRemovedCount
+  };
+  return payload;
 }
 
 function ensureSessionMetaSheet() {
@@ -2000,7 +2225,12 @@ function parseAttendanceTime(value) {
       const str = value.trim();
       if (!str) return null;
 
-      const match = str.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+      const normalized = str
+        .replace(/\./g, '-')
+        .replace(/\//g, '-')
+        .replace('T', ' ');
+
+      const match = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
       if (match) {
         return new Date(
           parseInt(match[1], 10),
@@ -2008,7 +2238,7 @@ function parseAttendanceTime(value) {
           parseInt(match[3], 10),
           parseInt(match[4], 10),
           parseInt(match[5], 10),
-          parseInt(match[6], 10)
+          match[6] ? parseInt(match[6], 10) : 0
         );
       }
 
@@ -2019,7 +2249,8 @@ function parseAttendanceTime(value) {
     }
 
     if (typeof value === 'number') {
-      return new Date((value - 25569) * 86400 * 1000);
+      if (!isFinite(value)) return null;
+      return new Date(Math.round((value - 25569) * 86400 * 1000));
     }
   } catch (e) {
     Logger.log('날짜 파싱 오류: ' + e.toString());
@@ -2149,12 +2380,12 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
   }
 
   rankings.sort((a, b) => {
-    if (b.attendanceRate !== a.attendanceRate) {
-      return b.attendanceRate - a.attendanceRate;
-    }
-
     if (b.attendedCount !== a.attendedCount) {
       return b.attendedCount - a.attendedCount;
+    }
+
+    if (b.attendanceRate !== a.attendanceRate) {
+      return b.attendanceRate - a.attendanceRate;
     }
 
     if (a.avgAttendOffsetSeconds === null) return 1;
@@ -2490,6 +2721,35 @@ function parseBooleanParam(value) {
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'y';
 }
 
+function buildExcusedExistingRecordInfo(existingValue, existingNote, session) {
+  const rawText = existingValue === undefined || existingValue === null ? '' : String(existingValue).trim();
+  const noteText = String(existingNote || '').trim();
+  const isExcused = isExcusedValue(existingValue);
+  const parsedTime = parseAttendanceTime(existingValue);
+  const hasParsedTime = !!(parsedTime && !isNaN(parsedTime.getTime()));
+  const hasDateValue = existingValue instanceof Date && !isNaN(existingValue.getTime());
+  const hasNumericValue = typeof existingValue === 'number' && isFinite(existingValue);
+  const hasFallbackTextRecord = !isExcused && rawText !== '' && (/\d/.test(rawText) || /(출석|지각)/.test(rawText));
+  const hasAttendanceRecord = !isExcused && (hasParsedTime || hasDateValue || hasNumericValue || hasFallbackTextRecord);
+
+  let status = '';
+  if (hasAttendanceRecord) {
+    if (hasParsedTime) {
+      const computedStatus = getAttendanceType(parsedTime, session);
+      status = (computedStatus === 'on_time' || computedStatus === 'late') ? computedStatus : 'recorded';
+    } else {
+      status = 'recorded';
+    }
+  }
+
+  return {
+    hasAttendanceRecord: hasAttendanceRecord,
+    existingStatus: status,
+    existingTimeText: hasParsedTime ? formatDateTime(parsedTime) : rawText,
+    existingNote: noteText
+  };
+}
+
 function setExcusedAttendance(params) {
   const seasonName = String(params.season || '').trim();
   const phone = String(params.phone || '').trim();
@@ -2529,21 +2789,18 @@ function setExcusedAttendance(params) {
 
     const targetRange = sheet.getRange(rowIndex + 1, session.colIndex + 1);
     const existingValue = targetRange.getValue();
-    const existingStatus = getAttendanceDetailType(existingValue, session, new Date());
-    const existingTime = parseAttendanceTime(existingValue);
-    const existingTimeText = existingTime ? formatDateTime(existingTime) : (String(existingValue || '').trim() || '');
-    const existingNote = String(targetRange.getNote() || '').trim();
-    const isAttendanceRecord = existingStatus === 'on_time' || existingStatus === 'late';
+    const existingRecord = buildExcusedExistingRecordInfo(existingValue, targetRange.getNote(), session);
+    const isAttendanceRecord = existingRecord.hasAttendanceRecord;
 
     if (enabled) {
-      if (isAttendanceRecord && (!forceOverride || previewOnly)) {
+      if (isAttendanceRecord && !forceOverride) {
         return {
           success: false,
           errorCode: 'EXCUSE_OVERRIDE_CONFIRM_REQUIRED',
           message: '이미 출석/지각 기록이 있습니다. 유고로 덮어쓸지 다시 확인해주세요.',
-          existingStatus: existingStatus,
-          existingTime: existingTimeText,
-          existingNote: existingNote,
+          existingStatus: existingRecord.existingStatus,
+          existingTime: existingRecord.existingTimeText,
+          existingNote: existingRecord.existingNote,
           requiresOverride: true
         };
       }
@@ -2553,9 +2810,10 @@ function setExcusedAttendance(params) {
           success: true,
           message: '유고 처리 사전 확인 완료',
           previewOnly: true,
-          existingStatus: existingStatus,
-          existingTime: existingTimeText,
-          existingNote: existingNote
+          existingStatus: existingRecord.existingStatus,
+          existingTime: existingRecord.existingTimeText,
+          existingNote: existingRecord.existingNote,
+          requiresOverride: false
         };
       }
 
@@ -2564,10 +2822,12 @@ function setExcusedAttendance(params) {
         noteLines.push(`유고 사유: ${comment}`);
       }
       if (isAttendanceRecord) {
-        const statusText = existingStatus === 'on_time' ? '출석' : '지각';
-        noteLines.push(`[덮어쓰기] 기존 기록: ${statusText}${existingTimeText ? ` (${existingTimeText})` : ''}`);
-        if (existingNote) {
-          noteLines.push(`[기존 메모] ${existingNote}`);
+        const statusText = existingRecord.existingStatus === 'on_time'
+          ? '출석'
+          : (existingRecord.existingStatus === 'late' ? '지각' : '기록');
+        noteLines.push(`[덮어쓰기] 기존 기록: ${statusText}${existingRecord.existingTimeText ? ` (${existingRecord.existingTimeText})` : ''}`);
+        if (existingRecord.existingNote) {
+          noteLines.push(`[기존 메모] ${existingRecord.existingNote}`);
         }
       }
 
@@ -2584,11 +2844,11 @@ function setExcusedAttendance(params) {
         enabled: true,
         comment: comment,
         overwrittenAttendance: isAttendanceRecord,
-        previousStatus: isAttendanceRecord ? existingStatus : ''
+        previousStatus: isAttendanceRecord ? existingRecord.existingStatus : ''
       };
     }
 
-    if (isExcusedValue(targetRange.getValue())) {
+    if (isExcusedValue(existingValue)) {
       targetRange.clearContent();
       targetRange.setBackground('#ffffff');
       targetRange.clearNote();

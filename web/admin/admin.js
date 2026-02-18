@@ -13,6 +13,7 @@ let graduationReportCache = null;
 let excuseModalState = null;
 let excuseOverrideState = null;
 let graduationVisibleCount = 20;
+let graduationSortState = { key: 'attendedCount', direction: 'desc' };
 let scheduleDeleteForceState = null;
 let scheduleEndAutoManaged = true;
 let scheduleDefaults = {};
@@ -1075,6 +1076,15 @@ async function manualApprove(event) {
   }
 }
 
+function updateScheduleSaveButtonLabel() {
+  const btn = document.getElementById('scheduleSaveBtn');
+  const select = document.getElementById('scheduleSessionSelect');
+  if (!btn || !select) return;
+
+  const isEdit = !!String(select.value || '').trim();
+  btn.innerHTML = `<i class="fas fa-save"></i> <span>${isEdit ? '일정 수정' : '일정 추가'}</span>`;
+}
+
 function resetScheduleForm() {
   const select = document.getElementById('scheduleSessionSelect');
   const dateInput = document.getElementById('scheduleDateInput');
@@ -1101,6 +1111,7 @@ function resetScheduleForm() {
   }
 
   updateSchedulePreview();
+  updateScheduleSaveButtonLabel();
 }
 
 function populateScheduleSelect(items) {
@@ -1121,6 +1132,8 @@ function populateScheduleSelect(items) {
   if (prevValue && items.some(item => item.sessionKey === prevValue)) {
     select.value = prevValue;
   }
+
+  updateScheduleSaveButtonLabel();
 }
 
 function renderScheduleTable(items) {
@@ -1204,6 +1217,7 @@ function handleScheduleSelectionChange() {
   }
   scheduleEndAutoManaged = !found.explicitEndAt;
   updateSchedulePreview();
+  updateScheduleSaveButtonLabel();
 }
 
 function selectScheduleForEdit(encodedSessionKey) {
@@ -1243,6 +1257,7 @@ async function loadScheduleList() {
       resetScheduleForm();
     } else {
       updateSchedulePreview();
+      updateScheduleSaveButtonLabel();
     }
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
@@ -1258,6 +1273,8 @@ async function saveSchedule(event) {
 
   const season = getSelectedSeasonAlias();
   const sessionKey = document.getElementById('scheduleSessionSelect').value;
+  const isEditMode = !!String(sessionKey || '').trim();
+  const actionNoun = isEditMode ? '수정' : '추가';
   const startAt = composeScheduleStartAt();
   const endAt = document.getElementById('scheduleEndInput').value;
 
@@ -1273,7 +1290,7 @@ async function saveSchedule(event) {
 
   const btn = document.getElementById('scheduleSaveBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="loader"></span> <span>저장 중...</span>';
+  btn.innerHTML = `<span class="loader"></span> <span>${actionNoun} 중...</span>`;
 
   try {
     const response = await CloudClubApi.call('scheduleSave', {
@@ -1285,12 +1302,12 @@ async function saveSchedule(event) {
     });
 
     if (!response.success) {
-      showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(response.message || '일정 저장 실패')}`, false);
+      showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(response.message || `일정 ${actionNoun} 실패`)}`, false);
       return;
     }
 
-    showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || '일정 저장 완료')}`, true);
-    showToast('<i class="fas fa-check-circle"></i> 일정 저장 완료', true);
+    showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || `일정 ${actionNoun} 완료`)}`, true);
+    showToast(`<i class="fas fa-check-circle"></i> 일정 ${actionNoun} 완료`, true);
 
     await Promise.all([
       loadScheduleList(),
@@ -1301,10 +1318,10 @@ async function saveSchedule(event) {
     resetScheduleForm();
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
-    showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '일정 저장 중 오류'))}`, false);
+    showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, `일정 ${actionNoun} 중 오류`))}`, false);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-save"></i> <span>일정 저장</span>';
+    updateScheduleSaveButtonLabel();
   }
 }
 
@@ -1816,6 +1833,47 @@ function renderGraduationSummary(report) {
   `;
 }
 
+function getGraduationSortDefaultDirection(key) {
+  if (key === 'name' || key === 'phone') return 'asc';
+  if (key === 'absenceEquivalent') return 'asc';
+  return 'desc';
+}
+
+function setGraduationSort(key) {
+  if (!key) return;
+
+  if (graduationSortState.key === key) {
+    graduationSortState.direction = graduationSortState.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    graduationSortState.key = key;
+    graduationSortState.direction = getGraduationSortDefaultDirection(key);
+  }
+
+  graduationVisibleCount = 20;
+  if (graduationReportCache) {
+    renderGraduationTable(graduationReportCache);
+    renderGraduationMatrix(graduationReportCache);
+  }
+}
+
+function getGraduationSortIndicator(key) {
+  if (graduationSortState.key !== key) {
+    return '<span class="sort-indicator">↕</span>';
+  }
+  return graduationSortState.direction === 'asc'
+    ? '<span class="sort-indicator active">↑</span>'
+    : '<span class="sort-indicator active">↓</span>';
+}
+
+function renderGraduationSortableHeader(key, label) {
+  return `
+    <button type="button" class="table-sort-btn" onclick="setGraduationSort('${key}')">
+      <span>${escapeHtml(label)}</span>
+      ${getGraduationSortIndicator(key)}
+    </button>
+  `;
+}
+
 function renderGraduationTable(report) {
   const wrap = document.getElementById('graduationTableWrap');
   const loadMoreWrap = document.getElementById('graduationLoadMoreWrap');
@@ -1847,15 +1905,15 @@ function renderGraduationTable(report) {
     <table class="management-table">
       <thead>
         <tr>
-          <th>회원</th>
-          <th>연락처</th>
-          <th>출석률</th>
-          <th>출석</th>
-          <th>지각</th>
-          <th>결석</th>
-          <th>유고</th>
-          <th>결석환산</th>
-          <th>판정</th>
+          <th>${renderGraduationSortableHeader('name', '회원')}</th>
+          <th>${renderGraduationSortableHeader('phone', '연락처')}</th>
+          <th>${renderGraduationSortableHeader('attendanceRate', '출석률')}</th>
+          <th>${renderGraduationSortableHeader('attendedCount', '출석')}</th>
+          <th>${renderGraduationSortableHeader('lateCount', '지각')}</th>
+          <th>${renderGraduationSortableHeader('absentCount', '결석')}</th>
+          <th>${renderGraduationSortableHeader('excusedCount', '유고')}</th>
+          <th>${renderGraduationSortableHeader('absenceEquivalent', '결석환산')}</th>
+          <th>${renderGraduationSortableHeader('status', '판정')}</th>
         </tr>
       </thead>
       <tbody>
@@ -1894,18 +1952,62 @@ function getMemberAttendanceRate(member) {
   return Math.round((Number(member.attendedCount || 0) / denominator) * 100);
 }
 
+function getGraduationStatusScore(member) {
+  if (member.isGraduated) return 3;
+  if (member.isGraduationPossible) return 2;
+  return 1;
+}
+
+function getGraduationSortValue(member, key) {
+  switch (key) {
+    case 'name':
+      return String(member.name || '').toLowerCase();
+    case 'phone':
+      return String(member.phone || '');
+    case 'attendanceRate':
+      return Number(member.attendanceRate || 0);
+    case 'attendedCount':
+      return Number(member.attendedCount || 0);
+    case 'lateCount':
+      return Number(member.lateCount || 0);
+    case 'absentCount':
+      return Number(member.absentCount || 0);
+    case 'excusedCount':
+      return Number(member.excusedCount || 0);
+    case 'absenceEquivalent':
+      return Number(member.absenceEquivalent || 0);
+    case 'status':
+      return getGraduationStatusScore(member);
+    default:
+      return Number(member.attendedCount || 0);
+  }
+}
+
 function getSortedGraduationMembers(report) {
   const list = (report.members || []).slice();
   list.forEach(member => {
     member.attendanceRate = getMemberAttendanceRate(member);
   });
 
+  const sortKey = graduationSortState.key || 'attendedCount';
+  const directionFactor = graduationSortState.direction === 'asc' ? 1 : -1;
+
   list.sort((a, b) => {
-    if (b.attendanceRate !== a.attendanceRate) {
-      return b.attendanceRate - a.attendanceRate;
+    const aValue = getGraduationSortValue(a, sortKey);
+    const bValue = getGraduationSortValue(b, sortKey);
+
+    if (aValue !== bValue) {
+      if (typeof aValue === 'string' || typeof bValue === 'string') {
+        return String(aValue).localeCompare(String(bValue), 'ko') * directionFactor;
+      }
+      return (aValue > bValue ? 1 : -1) * directionFactor;
     }
+
     if (b.attendedCount !== a.attendedCount) {
       return b.attendedCount - a.attendedCount;
+    }
+    if (b.attendanceRate !== a.attendanceRate) {
+      return b.attendanceRate - a.attendanceRate;
     }
     if (a.absenceEquivalent !== b.absenceEquivalent) {
       return a.absenceEquivalent - b.absenceEquivalent;
@@ -2071,17 +2173,20 @@ async function submitExcuseModal() {
 
   const input = document.getElementById('excuseCommentInput');
   const comment = input ? input.value.trim() : '';
-  const response = await applyExcusedChange({
+  const preview = await applyExcusedChange({
     phone: excuseModalState.phone,
     sessionKey: excuseModalState.sessionKey,
     enabled: true,
-    comment
+    comment,
+    previewOnly: true
   });
 
-  if (!response) return;
+  if (!preview) return;
 
-  if (!response.success && response.errorCode === 'EXCUSE_OVERRIDE_CONFIRM_REQUIRED') {
-    const warningConfirmed = confirm('이미 출석/지각 기록이 있습니다. 정말 유고로 덮어쓸까요?');
+  if (!preview.success && preview.errorCode === 'EXCUSE_OVERRIDE_CONFIRM_REQUIRED') {
+    const warningConfirmed = excuseModalState.preWarned
+      ? true
+      : confirm('이미 출석/지각 기록이 있습니다. 정말 유고로 덮어쓸까요?');
     if (!warningConfirmed) {
       return;
     }
@@ -2091,9 +2196,9 @@ async function submitExcuseModal() {
       sessionKey: excuseModalState.sessionKey,
       memberName: excuseModalState.memberName,
       comment: comment,
-      existingStatus: response.existingStatus || '',
-      existingTime: response.existingTime || '',
-      existingNote: response.existingNote || ''
+      existingStatus: preview.existingStatus || '',
+      existingTime: preview.existingTime || '',
+      existingNote: preview.existingNote || ''
     };
 
     closeExcuseModal();
@@ -2101,7 +2206,18 @@ async function submitExcuseModal() {
     return;
   }
 
-  if (response.success) {
+  if (!preview.success) {
+    return;
+  }
+
+  const response = await applyExcusedChange({
+    phone: excuseModalState.phone,
+    sessionKey: excuseModalState.sessionKey,
+    enabled: true,
+    comment
+  });
+
+  if (response && response.success) {
     closeExcuseModal();
   }
 }
@@ -2112,7 +2228,11 @@ function openExcuseOverrideModal(state) {
   const input = document.getElementById('excuseOverrideConfirmInput');
   if (!modal || !summary || !input) return;
 
-  const statusText = state.existingStatus === 'on_time' ? '출석' : (state.existingStatus === 'late' ? '지각' : state.existingStatus);
+  const statusText = state.existingStatus === 'on_time'
+    ? '출석'
+    : (state.existingStatus === 'late'
+      ? '지각'
+      : (state.existingStatus === 'recorded' ? '기록됨' : state.existingStatus));
   const noteText = state.existingNote ? ` / 기존 메모: ${state.existingNote}` : '';
   summary.textContent = `${state.memberName} / ${state.sessionKey} 기존 기록: ${statusText || '-'} ${state.existingTime || ''}${noteText}`;
   input.value = '';
@@ -2177,11 +2297,19 @@ async function onMatrixCellClick(event) {
     return;
   }
 
+  if (status === 'on_time' || status === 'late') {
+    const confirmed = confirm(`${memberName}님은 이미 ${status === 'on_time' ? '출석' : '지각'} 상태입니다. 정말 유고 처리하시겠습니까?`);
+    if (!confirmed) {
+      return;
+    }
+  }
+
   openExcuseModal({
     phone,
     sessionKey,
     memberName,
-    note
+    note,
+    preWarned: status === 'on_time' || status === 'late'
   });
 }
 
@@ -2208,6 +2336,10 @@ async function applyExcusedChange(payload) {
       if (response.errorCode !== 'EXCUSE_OVERRIDE_CONFIRM_REQUIRED') {
         alert(response.message || '유고 처리에 실패했습니다.');
       }
+      return response;
+    }
+
+    if (payload.previewOnly) {
       return response;
     }
 
