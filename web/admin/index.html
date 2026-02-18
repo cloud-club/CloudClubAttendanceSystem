@@ -4,6 +4,7 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../images/logo.png" type="image/png">
   <title>Cloud Club 출석체크 관리자</title>
   <!-- 라이브러리 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -114,11 +115,55 @@
       border-radius: 2px;
       animation: fadeIn 1.2s ease-out;
     }
+
+    .season-toolbar {
+      position: sticky;
+      top: 12px;
+      z-index: 1200;
+      margin-bottom: 20px;
+      animation: fadeInUp 0.7s ease-out;
+    }
+
+    .season-toolbar-panel {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      padding: 16px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+    }
+
+    .season-toolbar-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .season-toolbar-row .form-label {
+      margin-bottom: 0;
+      font-size: 15px;
+      min-width: 90px;
+    }
+
+    .season-toolbar-row .sheet-select {
+      max-width: 260px;
+      padding: 12px 16px;
+      font-size: 15px;
+      min-width: 220px;
+    }
+
+    .season-toolbar-info {
+      margin-top: 8px;
+      color: #93bbfc;
+      font-size: 13px;
+    }
     
     /* Tab Navigation */
     .tab-nav {
       display: flex;
       justify-content: center;
+      flex-wrap: wrap;
       margin-bottom: 48px;
       background: rgba(255, 255, 255, 0.05);
       border-radius: 20px;
@@ -575,6 +620,44 @@
       flex-wrap: wrap;
     }
 
+    .schedule-form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .schedule-form-grid .form-group {
+      margin: 0;
+      max-width: 100%;
+      text-align: left;
+    }
+
+    .schedule-form-grid .form-label {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .schedule-form-grid .form-input,
+    .schedule-form-grid .sheet-select {
+      font-size: 15px;
+      letter-spacing: 0;
+      padding: 12px 14px;
+      text-align: left;
+    }
+
+    .schedule-preview {
+      margin-top: 12px;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(96, 165, 250, 0.25);
+      color: #bfdbfe;
+      font-size: 13px;
+      text-align: left;
+      line-height: 1.5;
+    }
+
     .table-wrap {
       width: 100%;
       overflow-x: auto;
@@ -621,6 +704,36 @@
       outline: none;
       border-color: #60a5fa;
       box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+    }
+
+    .variable-row {
+      cursor: pointer;
+    }
+
+    .variable-row.active {
+      background: rgba(96, 165, 250, 0.14);
+    }
+
+    .variable-help-panel {
+      margin-top: 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(96, 165, 250, 0.26);
+      background: rgba(15, 23, 42, 0.7);
+      padding: 14px;
+      text-align: left;
+      color: #dbeafe;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .variable-help-panel h4 {
+      margin-bottom: 8px;
+      color: #93bbfc;
+      font-size: 15px;
+    }
+
+    .variable-help-panel .help-muted {
+      color: #94a3b8;
     }
 
     .status-chip {
@@ -751,11 +864,26 @@
       font-size: 14px;
     }
 
+    .modal-panel input {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+      padding: 10px;
+      font-size: 14px;
+    }
+
     .modal-actions {
       margin-top: 12px;
       display: flex;
       justify-content: flex-end;
       gap: 8px;
+    }
+
+    .load-more-wrap {
+      margin-top: 12px;
+      text-align: center;
     }
     
     /* Ranking Table */
@@ -911,6 +1039,80 @@
     .copy-btn:hover {
       background: rgba(59, 130, 246, 0.3);
     }
+
+    .site-footer {
+      margin-top: 100px;
+      background: linear-gradient(120deg, #1e3a8a, #1e40af 45%, #1d4ed8);
+      color: #dbeafe;
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      position: relative;
+      z-index: 5;
+    }
+
+    .site-footer-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 42px 24px 28px;
+    }
+
+    .site-footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 30px;
+      align-items: start;
+    }
+
+    .site-footer h3 {
+      color: #fff;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+
+    .site-footer p,
+    .site-footer li {
+      color: #dbeafe;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .site-footer-links {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .site-footer-links a {
+      color: #dbeafe;
+      text-decoration: none;
+      border: 1px solid rgba(219, 234, 254, 0.35);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .site-footer-contact {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .site-footer-contact a {
+      color: #dbeafe;
+      text-decoration: none;
+    }
+
+    .site-footer-bottom {
+      margin-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      padding-top: 14px;
+      text-align: center;
+      font-size: 13px;
+      color: #bfdbfe;
+    }
     
     /* Animations */
     @keyframes fadeIn {
@@ -961,6 +1163,20 @@
       .container {
         padding: 15px;
       }
+
+      .season-toolbar {
+        top: 8px;
+      }
+
+      .season-toolbar-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .season-toolbar-row .sheet-select {
+        max-width: none;
+        min-width: 0;
+      }
       
       .main-title {
         font-size: 3rem;
@@ -996,6 +1212,10 @@
       .ranking-table th,
       .ranking-table td {
         padding: 8px 12px;
+      }
+
+      .site-footer-grid {
+        grid-template-columns: 1fr;
       }
     }
     
@@ -1071,6 +1291,26 @@
       <p class="subtitle">출석체크 관리자 시스템</p>
       <div class="divider"></div>
     </header>
+
+    <div class="season-toolbar">
+      <div class="season-toolbar-panel">
+        <div class="season-toolbar-row">
+          <label for="sheetSelect" class="form-label">참조할 시트</label>
+          <select id="sheetSelect" class="sheet-select" onchange="changeSheet()">
+            <option value="">시트를 불러오는 중...</option>
+          </select>
+          <button type="button" class="btn btn-secondary" onclick="openCurrentSheet()">
+            <i class="fas fa-external-link-alt"></i>
+            <span>Google Sheets 바로가기</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="refreshSeasonData()">
+            <i class="fas fa-sync-alt"></i>
+            <span>데이터 새로고침</span>
+          </button>
+        </div>
+        <p class="season-toolbar-info" id="sheetLinkInfo">현재 선택된 시즌 탭으로 이동합니다.</p>
+      </div>
+    </div>
     
     <nav class="tab-nav">
       <button class="tab-button active" onclick="openTab('generate', event)">
@@ -1093,6 +1333,10 @@
         <i class="fas fa-sliders-h"></i>
         <span>변수명 관리</span>
       </button>
+      <button class="tab-button" onclick="openTab('excused', event)">
+        <i class="fas fa-notes-medical"></i>
+        <span>유고 처리</span>
+      </button>
       <button class="tab-button" onclick="openTab('graduation', event)">
         <i class="fas fa-user-check"></i>
         <span>수료 판정</span>
@@ -1101,27 +1345,6 @@
 
     <!-- QR코드 관리 탭 -->
     <div id="generate" class="tab-content active">
-      <div class="card">
-        <div class="card-header">
-          <i class="fas fa-cog card-icon"></i>
-          <h2 class="card-title">시트 선택</h2>
-        </div>
-        <div class="sheet-selector">
-          <label for="sheetSelect" class="form-label">출석 시트 선택</label>
-          <select id="sheetSelect" class="sheet-select" onchange="changeSheet()">
-            <option value="">시트를 불러오는 중...</option>
-          </select>
-          <div class="sheet-actions">
-            <button type="button" class="btn btn-secondary" onclick="openCurrentSheet()">
-              <i class="fas fa-external-link-alt"></i>
-              <span>Google Sheets 바로가기</span>
-            </button>
-          </div>
-          <p class="info-text" id="sheetLinkInfo">현재 선택된 시즌 탭으로 이동합니다.</p>
-          <p class="info-text">선택한 시트의 명단으로 출석체크가 진행됩니다.</p>
-        </div>
-      </div>
-      
       <div class="card">
         <div class="card-header">
           <i class="fas fa-qrcode card-icon"></i>
@@ -1283,22 +1506,29 @@
           <i class="fas fa-calendar-plus card-icon"></i>
           <h2 class="card-title">시즌 일정 등록/수정</h2>
         </div>
-        <p class="info-text">행사 시작 시각과 종료 시각(선택)을 저장합니다. 종료 시각이 비어 있으면 variable 기본값이 적용됩니다.</p>
-        <form onsubmit="saveSchedule(event)" style="text-align:center;">
-          <div class="form-group">
-            <label class="form-label" for="scheduleSessionSelect">수정 대상 회차</label>
-            <select id="scheduleSessionSelect" class="sheet-select">
-              <option value="">새 회차 추가</option>
-            </select>
+        <p class="info-text">캘린더에서 날짜를 고르고 시간을 입력하면 회차 키를 자동으로 생성합니다. 종료 시각은 시작 시각과 변수값을 기준으로 자동 제안됩니다.</p>
+        <form onsubmit="saveSchedule(event)">
+          <div class="schedule-form-grid">
+            <div class="form-group">
+              <label class="form-label" for="scheduleSessionSelect">수정 대상 회차</label>
+              <select id="scheduleSessionSelect" class="sheet-select">
+                <option value="">새 회차 추가</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="scheduleDateInput">행사 날짜</label>
+              <input id="scheduleDateInput" type="date" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="scheduleStartTimeInput">시작 시간</label>
+              <input id="scheduleStartTimeInput" type="time" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="scheduleEndInput">종료 시간 (선택)</label>
+              <input id="scheduleEndInput" type="time" class="form-input">
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="scheduleStartInput">시작 시각</label>
-            <input id="scheduleStartInput" type="datetime-local" class="form-input" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="scheduleEndInput">종료 시각 (선택)</label>
-            <input id="scheduleEndInput" type="time" class="form-input">
-          </div>
+          <div class="schedule-preview" id="scheduleComputedPreview">회차 키와 마감 계산 정보가 여기에 표시됩니다.</div>
           <div class="sheet-actions">
             <button type="submit" class="btn" id="scheduleSaveBtn">
               <i class="fas fa-save"></i>
@@ -1335,9 +1565,13 @@
           <i class="fas fa-cogs card-icon"></i>
           <h2 class="card-title">variable 시트 변수 편집</h2>
         </div>
-        <p class="info-text">A5:F 확장 테이블을 기준으로 변수값을 편집하며, 공통 3개 값은 A2:C2에도 동기화됩니다.</p>
+        <p class="info-text"><code>key | value | type | description | editable | updated_at</code> 단일 테이블 기준으로 변수값을 편집합니다. 각 변수의 적용 위치/시점/공식은 상세 패널에서 확인할 수 있습니다.</p>
         <div class="table-wrap" id="variablesTableWrap">
           <div class="loader" style="margin: 24px auto;"></div>
+        </div>
+        <div class="variable-help-panel" id="variablesHelpPanel">
+          <h4>변수를 선택하면 설명이 표시됩니다.</h4>
+          <p class="help-muted">값을 바꾸기 전에 “이 값이 어디에 적용되는지”를 먼저 확인하세요.</p>
         </div>
         <div class="sheet-actions">
           <button type="button" class="btn" onclick="saveVariables()">
@@ -1375,72 +1609,56 @@
           <i class="fas fa-table card-icon"></i>
           <h2 class="card-title">회원별 수료 판정표</h2>
         </div>
+        <p class="info-text">정렬 기준: 출석률 높은 순. 한 번에 20명씩 로드됩니다.</p>
         <div class="table-wrap" id="graduationTableWrap">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
+        <div class="load-more-wrap" id="graduationLoadMoreWrap"></div>
       </div>
+    </div>
 
+    <div id="excused" class="tab-content">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-border-all card-icon"></i>
-          <h2 class="card-title">회차별 상태 매트릭스</h2>
+          <h2 class="card-title">유고 처리 매트릭스</h2>
         </div>
         <p class="info-text">
           색상 기준: 출석(연초록), 지각(연주황), 결석(연빨강), 유고(연파랑).<br>
           셀을 클릭하면 유고 설정/해제와 코멘트(Note) 저장이 가능합니다.
         </p>
-        <div class="table-wrap" id="graduationMatrixWrap">
+        <div class="table-wrap" id="excusedMatrixWrap">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Footer from provided HTML -->
-  <footer class="bg-gradient-to-r from-indigo-900 via-blue-900 to-indigo-900 text-white relative z-10" style="margin-top: 100px;">
-    <div class="max-w-7xl mx-auto px-6 py-12 md:py-16">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
-        <div class="md:col-span-2">
-          <a class="flex items-center space-x-2 mb-6" href="https://www.cloudclub.kr/">
-            <img src="https://www.cloudclub.kr/images/logo.png" alt="CLOUD CLUB Logo" class="h-16 hover:opacity-80 transition-opacity"/>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-grid">
+        <div>
+          <a href="https://www.cloudclub.kr/" target="_blank" rel="noopener noreferrer">
+            <img src="https://www.cloudclub.kr/images/logo.png" alt="CLOUD CLUB Logo" style="height:48px;">
           </a>
-          <p class="text-blue-100 mb-6 max-w-md">Cloud Club은 클라우드 기술에 대한 열정을 가진 학생들이 모여, 클라우드 컴퓨팅, 인프라, 그리고 관련 IT 기술을 탐구하고 실습하며 함께 성장하는 커뮤니티입니다.</p>
-          <div class="flex space-x-4">
-            <a href="https://github.com/cloud-club" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="GitHub">
-              <i class="ri-github-fill text-xl"></i>
-            </a>
-            <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="Instagram">
-              <i class="ri-instagram-line text-xl"></i>
-            </a>
-            <a href="https://www.linkedin.com/company/cloudclub-kr" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="LinkedIn">
-              <i class="ri-linkedin-fill text-xl"></i>
-            </a>
-            <a href="https://www.youtube.com/@cloudclub-kr" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="YouTube">
-              <i class="ri-youtube-fill text-xl"></i>
-            </a>
+          <p style="margin-top:10px;">Cloud Club은 클라우드 기술에 대한 열정을 가진 학생들이 모여 실습과 협업으로 성장하는 커뮤니티입니다.</p>
+          <div class="site-footer-links">
+            <a href="https://github.com/cloud-club" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer">Instagram</a>
+            <a href="https://www.linkedin.com/company/cloudclub-kr" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+            <a href="https://www.youtube.com/@cloudclub-kr" target="_blank" rel="noopener noreferrer">YouTube</a>
           </div>
         </div>
         <div>
-          <h3 class="font-bold text-lg mb-4">Contact</h3>
-          <ul class="space-y-3 text-blue-100">
-            <li class="flex items-center">
-              <i class="ri-mail-line mr-3 text-lg flex-shrink-0"></i>
-              <a href="mailto:cloudclub@cloudclub.kr" class="hover:text-white transition-colors">cloudclub@cloudclub.kr</a>
-            </li>
-            <li class="flex items-center">
-              <i class="ri-global-line mr-3 text-lg flex-shrink-0"></i>
-              <a href="https://www.cloudclub.kr/" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">www.cloudclub.kr</a>
-            </li>
-            <li class="flex items-center">
-              <i class="ri-instagram-line mr-3 text-lg flex-shrink-0"></i>
-              <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">@cloudclub.kr</a>
-            </li>
+          <h3>Contact</h3>
+          <ul class="site-footer-contact">
+            <li><a href="mailto:cloudclub@cloudclub.kr">cloudclub@cloudclub.kr</a></li>
+            <li><a href="https://www.cloudclub.kr/" target="_blank" rel="noopener noreferrer">www.cloudclub.kr</a></li>
+            <li><a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer">@cloudclub.kr</a></li>
           </ul>
         </div>
       </div>
-      <div class="mt-12 pt-8 text-center">
-        <p class="text-blue-200 text-sm">© 2025 Cloud Club. All rights reserved.</p>
-      </div>
+      <div class="site-footer-bottom">© 2026 Cloud Club. All rights reserved.</div>
     </div>
   </footer>
 
@@ -1456,11 +1674,34 @@
     </div>
   </div>
 
+  <div id="excuseOverrideModal" class="modal-backdrop">
+    <div class="modal-panel">
+      <h3>유고 덮어쓰기 최종 확인</h3>
+      <p id="excuseOverrideSummaryText">기존 기록을 덮어쓸 경우 원복이 어렵습니다.</p>
+      <p>확인 문구를 입력하세요: <strong>유고처리</strong></p>
+      <input id="excuseOverrideConfirmInput" type="text" placeholder="유고처리">
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeExcuseOverrideModal()">취소</button>
+        <button type="button" class="btn" onclick="submitExcuseOverrideModal()">최종 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="scheduleDeleteForceModal" class="modal-backdrop">
+    <div class="modal-panel">
+      <h3>일정 강제 삭제 확인</h3>
+      <p id="scheduleDeleteForceText">출석 데이터가 존재합니다. 강제 삭제하려면 회차 키를 다시 입력하세요.</p>
+      <input id="scheduleDeleteForceInput" type="text" placeholder="sessionKey 입력">
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeScheduleDeleteForceModal()">취소</button>
+        <button type="button" class="btn" onclick="submitScheduleDeleteForceModal()">강제 삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../shared/env.js"></script>
   <script src="../shared/config.js"></script>
   <script src="../shared/api-jsonp.js"></script>
   <script src="./admin.js"></script>
-
-  <!-- Tailwind CSS for footer styling -->
-  <script src="https://cdn.tailwindcss.com"></script>
 </body>
 </html>

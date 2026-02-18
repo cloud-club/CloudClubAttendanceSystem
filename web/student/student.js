@@ -207,7 +207,7 @@ function displayRankings(response) {
           <th>이름</th>
           <th>출석률</th>
           <th>출석 횟수</th>
-          <th>평균 출석 시간</th>
+          <th>평균 출석 오프셋</th>
         </tr>
       </thead>
       <tbody>
@@ -218,9 +218,10 @@ function displayRankings(response) {
       ? `<span class="rank-medal rank-${item.rank}">${item.rank}</span>`
       : `<span style="color: #94a3b8;">${item.rank}</span>`;
 
-    const avgTimeDisplay = item.avgAttendTime === '미출석'
+    const avgOffset = item.avgAttendOffset || item.avgAttendTime;
+    const avgTimeDisplay = avgOffset === '미출석'
       ? '<span style="color: #64748b;">-</span>'
-      : `<span style="color: #60a5fa;">${item.avgAttendTime}</span>`;
+      : `<span style="color: #60a5fa;">${escapeHtml(avgOffset)}</span>`;
 
     tableHTML += `
       <tr>

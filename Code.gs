@@ -13,13 +13,105 @@ const ADMIN_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 const ADMIN_TOKEN_CACHE_PREFIX = 'admin_token_';
 
 const VARIABLE_SHEET_NAME = 'variable';
-const VARIABLE_TABLE_HEADER_ROW = 5;
-const VARIABLE_TABLE_FIRST_DATA_ROW = 6;
+const VARIABLE_TABLE_HEADER_ROW = 1;
+const VARIABLE_TABLE_FIRST_DATA_ROW = 2;
 const VARIABLE_TABLE_HEADERS = ['key', 'value', 'type', 'description', 'editable', 'updated_at'];
-const LEGACY_VARIABLE_HEADERS = ['지각 한계 범위', '결석 한계 범위', '출석 시작 범위'];
 
 const SESSION_META_SHEET_NAME = '_session_meta';
 const SESSION_META_HEADERS = ['seasonSheet', 'sessionKey', 'openOffsetMin', 'lateThresholdMin', 'absenceThresholdMin', 'explicitEndAt', 'createdAt'];
+
+const VARIABLE_CATALOG = {
+  attendance_open_offset_min: {
+    labelKo: '출석 오픈 오프셋',
+    unit: '분',
+    appliesTo: '출석 오픈 시각 계산',
+    appliesWhen: '회차 시작 시각 기준',
+    formula: 'openTime = startTime + attendance_open_offset_min',
+    example: '-30 이면 시작 30분 전 오픈',
+    validation: { kind: 'number', min: -240, max: 0, required: true }
+  },
+  late_threshold_min: {
+    labelKo: '지각 판정 기준',
+    unit: '분',
+    appliesTo: '정시/지각 구분 경계',
+    appliesWhen: '회차 시작 이후',
+    formula: 'onTimeDeadline = startTime + late_threshold_min',
+    example: '50 이면 시작 50분까지 정시',
+    validation: { kind: 'number', min: 1, max: 360, required: true }
+  },
+  absence_threshold_min: {
+    labelKo: '기본 출석 마감 기준',
+    unit: '분',
+    appliesTo: '종료시간 미입력 회차의 지각 마감',
+    appliesWhen: '회차 종료시간이 비어있을 때',
+    formula: 'lateDeadline = startTime + absence_threshold_min',
+    example: '180 이면 시작 3시간 후 마감',
+    validation: { kind: 'number', min: 1, max: 600, required: true }
+  },
+  required_attendance_count: {
+    labelKo: '수료 최소 출석 횟수',
+    unit: '회',
+    appliesTo: '수료 판정',
+    appliesWhen: '수료 리포트 계산 시',
+    formula: 'attendedCount >= required_attendance_count',
+    example: '3 이면 최소 3회 출석 필요',
+    validation: { kind: 'number', min: 0, max: 100, required: true }
+  },
+  late_to_absence_ratio: {
+    labelKo: '지각 결석 환산비',
+    unit: '회',
+    appliesTo: '결석환산 계산',
+    appliesWhen: '수료 리포트 계산 시',
+    formula: 'absenceEquivalent = absent + floor(late / ratio)',
+    example: '3 이면 지각 3회 = 결석 1회',
+    validation: { kind: 'number', min: 1, max: 20, required: true }
+  },
+  required_session_positions: {
+    labelKo: '필참 회차 위치',
+    unit: '위치',
+    appliesTo: '수료 필참 조건',
+    appliesWhen: '수료 리포트 계산 시',
+    formula: '허용값: first,last 조합',
+    example: 'first,last',
+    validation: { kind: 'required_positions', required: true }
+  },
+  max_absence_equivalent: {
+    labelKo: '결석환산 상한',
+    unit: '회',
+    appliesTo: '수료 불가 기준',
+    appliesWhen: '수료 리포트 계산 시',
+    formula: 'absenceEquivalent <= max_absence_equivalent',
+    example: '빈값이면 자동 계산',
+    validation: { kind: 'number', min: 0, max: 100, required: false, allowEmpty: true }
+  },
+  official_session_min_recommended: {
+    labelKo: '권장 최소 공식행사 수',
+    unit: '회',
+    appliesTo: '운영 가이드',
+    appliesWhen: '수료 규칙 안내 표시',
+    formula: '권장 구간 하한',
+    example: '6',
+    validation: { kind: 'number', min: 0, max: 100, required: true }
+  },
+  official_session_max_recommended: {
+    labelKo: '권장 최대 공식행사 수',
+    unit: '회',
+    appliesTo: '운영 가이드',
+    appliesWhen: '수료 규칙 안내 표시',
+    formula: '권장 구간 상한',
+    example: '8',
+    validation: { kind: 'number', min: 0, max: 100, required: true }
+  },
+  default_session_start_time: {
+    labelKo: '일정 기본 시작시간',
+    unit: 'HH:mm',
+    appliesTo: '관리자 일정 등록 UI',
+    appliesWhen: '신규 일정 입력 시작값',
+    formula: '신규 회차 시작 시각 기본값',
+    example: '19:00',
+    validation: { kind: 'hhmm', required: true }
+  }
+};
 
 const REQUIRED_VARIABLE_SPECS = [
   { key: 'attendance_open_offset_min', value: -30, type: 'number', description: '행사 시작 n분 전 출석 오픈' },
@@ -30,7 +122,8 @@ const REQUIRED_VARIABLE_SPECS = [
   { key: 'required_session_positions', value: 'first,last', type: 'string', description: '필참 회차 위치' },
   { key: 'max_absence_equivalent', value: '', type: 'number', description: '빈값이면 자동 계산' },
   { key: 'official_session_min_recommended', value: 6, type: 'number', description: '권장 최소 공식 행사 수' },
-  { key: 'official_session_max_recommended', value: 8, type: 'number', description: '권장 최대 공식 행사 수' }
+  { key: 'official_session_max_recommended', value: 8, type: 'number', description: '권장 최대 공식 행사 수' },
+  { key: 'default_session_start_time', value: '19:00', type: 'string', description: '일정 관리 기본 시작시간' }
 ];
 
 const VARIABLE_DEFAULTS = {
@@ -42,7 +135,8 @@ const VARIABLE_DEFAULTS = {
   required_session_positions: 'first,last',
   max_absence_equivalent: '',
   official_session_min_recommended: 6,
-  official_session_max_recommended: 8
+  official_session_max_recommended: 8,
+  default_session_start_time: '19:00'
 };
 
 /**
@@ -698,6 +792,20 @@ function formatDateTimeMinute(date) {
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
 }
 
+function formatSignedOffset(seconds) {
+  if (seconds === null || seconds === undefined || isNaN(Number(seconds))) {
+    return '미출석';
+  }
+
+  const value = Number(seconds);
+  const sign = value < 0 ? '-' : '+';
+  const abs = Math.abs(Math.round(value));
+  const mm = Math.floor(abs / 60);
+  const ss = abs % 60;
+
+  return `${sign}${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
 function parseTimeOnDate(date, hhmm) {
   if (!hhmm) return null;
   const match = String(hhmm).trim().match(/^(\d{2}):(\d{2})$/);
@@ -771,67 +879,120 @@ function ensureVariableSheet() {
 }
 
 function ensureVariableSheetLayout(sheet) {
-  const legacyHeaderRange = sheet.getRange(1, 1, 1, 3);
-  const legacyHeaders = legacyHeaderRange.getValues()[0];
-
-  if (legacyHeaders.every(v => String(v || '').trim() === '')) {
-    legacyHeaderRange.setValues([LEGACY_VARIABLE_HEADERS]);
-  }
-
-  const legacyValueRange = sheet.getRange(2, 1, 1, 3);
-  const legacyValues = legacyValueRange.getValues()[0];
-  if (legacyValues.every(v => String(v || '').trim() === '')) {
-    legacyValueRange.setValues([[
-      VARIABLE_DEFAULTS.late_threshold_min,
-      VARIABLE_DEFAULTS.absence_threshold_min,
-      VARIABLE_DEFAULTS.attendance_open_offset_min
-    ]]);
-  }
-
-  const tableHeaderRange = sheet.getRange(VARIABLE_TABLE_HEADER_ROW, 1, 1, VARIABLE_TABLE_HEADERS.length);
-  const tableHeaders = tableHeaderRange.getValues()[0];
-  if (String(tableHeaders[0] || '').trim() === '') {
-    tableHeaderRange.setValues([VARIABLE_TABLE_HEADERS]);
-  }
-
-  const existingKeys = getExistingVariableKeys(sheet);
   const nowText = formatDateTime(new Date());
+  const dataMap = {};
+
+  readVariableRowsFromRange(sheet, 5, 6).forEach(item => {
+    dataMap[item.key] = item;
+  });
+  readVariableRowsFromRange(sheet, 1, 2).forEach(item => {
+    dataMap[item.key] = item;
+  });
+
+  // 구형 A2:C2 구조를 읽어 단일 테이블로 1회 마이그레이션합니다.
+  if (!dataMap.late_threshold_min || !dataMap.absence_threshold_min || !dataMap.attendance_open_offset_min) {
+    const legacyValues = sheet.getRange(2, 1, 1, 3).getValues()[0];
+    const legacyKeyMap = [
+      { key: 'late_threshold_min', value: legacyValues[0] },
+      { key: 'absence_threshold_min', value: legacyValues[1] },
+      { key: 'attendance_open_offset_min', value: legacyValues[2] }
+    ];
+
+    legacyKeyMap.forEach(item => {
+      const raw = String(item.value === undefined || item.value === null ? '' : item.value).trim();
+      if (raw === '') return;
+      if (dataMap[item.key]) return;
+
+      dataMap[item.key] = {
+        key: item.key,
+        value: item.value,
+        type: 'number',
+        description: '',
+        editable: true,
+        updatedAt: nowText
+      };
+    });
+  }
 
   REQUIRED_VARIABLE_SPECS.forEach(spec => {
-    if (existingKeys[spec.key]) {
+    if (!dataMap[spec.key]) {
+      dataMap[spec.key] = {
+        key: spec.key,
+        value: spec.value,
+        type: spec.type,
+        description: spec.description,
+        editable: true,
+        updatedAt: nowText
+      };
       return;
     }
 
-    const row = [
-      spec.key,
-      spec.value,
-      spec.type,
-      spec.description,
-      'true',
-      nowText
-    ];
-
-    sheet.appendRow(row);
-  });
-}
-
-function getExistingVariableKeys(sheet) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < VARIABLE_TABLE_FIRST_DATA_ROW) {
-    return {};
-  }
-
-  const keys = sheet.getRange(VARIABLE_TABLE_FIRST_DATA_ROW, 1, lastRow - VARIABLE_TABLE_FIRST_DATA_ROW + 1, 1).getValues();
-  const map = {};
-
-  keys.forEach(row => {
-    const key = String(row[0] || '').trim();
-    if (key) {
-      map[key] = true;
+    const current = dataMap[spec.key];
+    current.type = current.type || spec.type;
+    current.description = current.description || spec.description;
+    if (current.editable === undefined) {
+      current.editable = true;
+    }
+    if (!current.updatedAt) {
+      current.updatedAt = nowText;
     }
   });
 
-  return map;
+  const requiredOrder = REQUIRED_VARIABLE_SPECS.map(spec => spec.key);
+  const extraKeys = Object.keys(dataMap).filter(key => requiredOrder.indexOf(key) === -1).sort();
+  const orderedKeys = requiredOrder.concat(extraKeys);
+
+  const rows = orderedKeys.map(key => {
+    const item = dataMap[key];
+    const catalog = VARIABLE_CATALOG[key] || {};
+    const type = String(item.type || catalog.type || 'string').trim() || 'string';
+    const normalizedValue = parseVariableValue(item.value, type);
+
+    return [
+      key,
+      normalizedValue,
+      type,
+      String(item.description || catalog.description || '').trim(),
+      item.editable === false ? 'false' : 'true',
+      String(item.updatedAt || nowText).trim()
+    ];
+  });
+
+  const clearRows = Math.max(sheet.getLastRow(), VARIABLE_TABLE_FIRST_DATA_ROW + rows.length);
+  sheet.getRange(1, 1, clearRows, VARIABLE_TABLE_HEADERS.length).clearContent();
+  sheet.getRange(VARIABLE_TABLE_HEADER_ROW, 1, 1, VARIABLE_TABLE_HEADERS.length).setValues([VARIABLE_TABLE_HEADERS]);
+  if (rows.length > 0) {
+    sheet.getRange(VARIABLE_TABLE_FIRST_DATA_ROW, 1, rows.length, VARIABLE_TABLE_HEADERS.length).setValues(rows);
+  }
+}
+
+function readVariableRowsFromRange(sheet, headerRow, firstDataRow) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < firstDataRow) return [];
+
+  const headers = sheet.getRange(headerRow, 1, 1, VARIABLE_TABLE_HEADERS.length).getValues()[0];
+  const head0 = String(headers[0] || '').trim().toLowerCase();
+  if (head0 !== 'key') {
+    return [];
+  }
+
+  const rawRows = sheet.getRange(firstDataRow, 1, lastRow - firstDataRow + 1, VARIABLE_TABLE_HEADERS.length).getValues();
+  const rows = [];
+  rawRows.forEach(row => {
+    const key = String(row[0] || '').trim();
+    if (!key) return;
+
+    rows.push({
+      key: key,
+      value: row[1],
+      type: String(row[2] || '').trim() || 'string',
+      description: String(row[3] || '').trim(),
+      editable: String(row[4] || '').trim() === '' ? true : parseBooleanParam(row[4]),
+      updatedAt: String(row[5] || '').trim()
+    });
+  });
+
+  return rows;
 }
 
 function parseVariableValue(value, type) {
@@ -868,7 +1029,8 @@ function normalizeVariableConfig(config) {
   normalized.official_session_min_recommended = Math.max(0, toNumberWithDefault(normalized.official_session_min_recommended, VARIABLE_DEFAULTS.official_session_min_recommended));
   normalized.official_session_max_recommended = Math.max(normalized.official_session_min_recommended, toNumberWithDefault(normalized.official_session_max_recommended, VARIABLE_DEFAULTS.official_session_max_recommended));
 
-  normalized.required_session_positions = String(normalized.required_session_positions || VARIABLE_DEFAULTS.required_session_positions);
+  normalized.required_session_positions = parseRequiredSessionPositions(normalized.required_session_positions).join(',');
+  normalized.default_session_start_time = normalizeHhmm(normalized.default_session_start_time, VARIABLE_DEFAULTS.default_session_start_time);
 
   return normalized;
 }
@@ -886,20 +1048,97 @@ function toNumberWithDefault(value, defaultValue) {
   return n;
 }
 
-function readLegacyVariableValues(sheet) {
-  const values = sheet.getRange(2, 1, 1, 3).getValues()[0];
+function normalizeHhmm(value, defaultValue) {
+  const text = String(value || '').trim();
+  if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
+    return text;
+  }
 
-  return {
-    late_threshold_min: toNumberWithDefault(values[0], VARIABLE_DEFAULTS.late_threshold_min),
-    absence_threshold_min: toNumberWithDefault(values[1], VARIABLE_DEFAULTS.absence_threshold_min),
-    attendance_open_offset_min: toNumberWithDefault(values[2], VARIABLE_DEFAULTS.attendance_open_offset_min)
-  };
+  return String(defaultValue || '19:00');
+}
+
+function getVariableCatalogEntry(key) {
+  return VARIABLE_CATALOG[key] || {};
+}
+
+function buildVariableValidationText(validation) {
+  if (!validation || !validation.kind) return '';
+
+  if (validation.kind === 'number') {
+    const min = validation.min !== undefined ? validation.min : '-∞';
+    const max = validation.max !== undefined ? validation.max : '∞';
+    const requiredText = validation.allowEmpty ? '빈값 허용' : '필수';
+    return `숫자(${min}~${max}, ${requiredText})`;
+  }
+
+  if (validation.kind === 'hhmm') {
+    return 'HH:mm (24시간)';
+  }
+
+  if (validation.kind === 'required_positions') {
+    return 'first,last 조합';
+  }
+
+  return '';
+}
+
+function validateVariableValue(key, value, type) {
+  const catalog = getVariableCatalogEntry(key);
+  const validation = catalog.validation || {};
+  const text = value === undefined || value === null ? '' : String(value).trim();
+
+  if (validation.kind === 'hhmm') {
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
+      return { valid: false, message: `${key}: HH:mm 형식이어야 합니다. (예: 19:00)` };
+    }
+    return { valid: true };
+  }
+
+  if (validation.kind === 'required_positions') {
+    const rawList = text.split(',').map(v => String(v || '').trim().toLowerCase()).filter(v => !!v);
+    if (rawList.length === 0) {
+      return { valid: false, message: `${key}: first,last 중 1개 이상 지정해야 합니다.` };
+    }
+    const invalid = rawList.filter(v => v !== 'first' && v !== 'last');
+    if (invalid.length > 0) {
+      return { valid: false, message: `${key}: 허용값은 first,last 만 가능합니다.` };
+    }
+    return { valid: true };
+  }
+
+  if (validation.kind === 'number') {
+    if (text === '') {
+      if (validation.allowEmpty) {
+        return { valid: true };
+      }
+      return { valid: false, message: `${key}: 빈값을 허용하지 않습니다.` };
+    }
+
+    const n = Number(text);
+    if (isNaN(n)) {
+      return { valid: false, message: `${key}: 숫자값이어야 합니다.` };
+    }
+
+    if (validation.min !== undefined && n < validation.min) {
+      return { valid: false, message: `${key}: ${validation.min} 이상이어야 합니다.` };
+    }
+    if (validation.max !== undefined && n > validation.max) {
+      return { valid: false, message: `${key}: ${validation.max} 이하여야 합니다.` };
+    }
+
+    return { valid: true };
+  }
+
+  if (type === 'number' && text !== '' && isNaN(Number(text))) {
+    return { valid: false, message: `${key}: 숫자값이어야 합니다.` };
+  }
+
+  return { valid: true };
 }
 
 function getVariablesPayload() {
   const sheet = ensureVariableSheet();
   const lastRow = sheet.getLastRow();
-  const legacy = readLegacyVariableValues(sheet);
 
   const items = [];
   const config = Object.assign({}, VARIABLE_DEFAULTS);
@@ -914,6 +1153,7 @@ function getVariablesPayload() {
       const type = String(row[2] || '').trim() || 'string';
       const parsedValue = parseVariableValue(row[1], type);
       const editable = String(row[4] || '').trim();
+      const catalog = getVariableCatalogEntry(key);
 
       items.push({
         key: key,
@@ -922,7 +1162,15 @@ function getVariablesPayload() {
         description: String(row[3] || '').trim(),
         editable: editable === '' ? true : /^(true|1|yes|y)$/i.test(editable),
         updatedAt: String(row[5] || '').trim(),
-        row: VARIABLE_TABLE_FIRST_DATA_ROW + idx
+        row: VARIABLE_TABLE_FIRST_DATA_ROW + idx,
+        labelKo: String(catalog.labelKo || '').trim(),
+        unit: String(catalog.unit || '').trim(),
+        appliesTo: String(catalog.appliesTo || '').trim(),
+        appliesWhen: String(catalog.appliesWhen || '').trim(),
+        formula: String(catalog.formula || '').trim(),
+        example: String(catalog.example || '').trim(),
+        validation: catalog.validation || null,
+        validationText: buildVariableValidationText(catalog.validation || null)
       });
 
       if (parsedValue !== '' || !(key in config)) {
@@ -931,21 +1179,11 @@ function getVariablesPayload() {
     });
   }
 
-  if (config.late_threshold_min === '' || config.late_threshold_min === undefined) {
-    config.late_threshold_min = legacy.late_threshold_min;
-  }
-  if (config.absence_threshold_min === '' || config.absence_threshold_min === undefined) {
-    config.absence_threshold_min = legacy.absence_threshold_min;
-  }
-  if (config.attendance_open_offset_min === '' || config.attendance_open_offset_min === undefined) {
-    config.attendance_open_offset_min = legacy.attendance_open_offset_min;
-  }
-
   return {
     success: true,
     sheetName: VARIABLE_SHEET_NAME,
-    legacy: legacy,
     items: items,
+    catalog: VARIABLE_CATALOG,
     config: normalizeVariableConfig(config)
   };
 }
@@ -986,9 +1224,10 @@ function updateVariables(items) {
 
   const nowText = formatDateTime(new Date());
 
-  items.forEach(item => {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const key = String((item && item.key) || '').trim();
-    if (!key) return;
+    if (!key) continue;
 
     const existing = existingMap[key] || null;
     const type = String((item && item.type) || (existing && existing.type) || 'string').trim() || 'string';
@@ -997,7 +1236,17 @@ function updateVariables(items) {
       ? !!item.editable
       : (existing ? !!existing.editable : true);
 
-    const value = parseVariableValue(item ? item.value : '', type);
+    if (existing && existing.editable === false) {
+      return { success: false, message: `${key}: 수정 불가 항목입니다.` };
+    }
+
+    const rawValue = item ? item.value : '';
+    const validation = validateVariableValue(key, rawValue, type);
+    if (!validation.valid) {
+      return { success: false, message: validation.message || `${key} 변수값 검증에 실패했습니다.` };
+    }
+
+    const value = parseVariableValue(rawValue, type);
 
     if (existing) {
       sheet.getRange(existing.row, 2, 1, 5).setValues([[
@@ -1017,23 +1266,9 @@ function updateVariables(items) {
         nowText
       ]);
     }
-  });
-
-  const updatedPayload = getVariablesPayload();
-  syncLegacyVariableRow(sheet, updatedPayload.config);
+  }
 
   return getVariablesPayload();
-}
-
-function syncLegacyVariableRow(sheet, config) {
-  const normalized = normalizeVariableConfig(config);
-
-  sheet.getRange(1, 1, 1, 3).setValues([LEGACY_VARIABLE_HEADERS]);
-  sheet.getRange(2, 1, 1, 3).setValues([[
-    normalized.late_threshold_min,
-    normalized.absence_threshold_min,
-    normalized.attendance_open_offset_min
-  ]]);
 }
 
 function ensureSessionMetaSheet() {
@@ -1853,8 +2088,8 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
 
     let attendedCount = 0;
     let effectiveSessionCount = 0;
-    let totalAttendTimeSeconds = 0;
-    let validAttendTimeCount = 0;
+    let totalAttendOffsetSeconds = 0;
+    let validOffsetCount = 0;
 
     closedSessions.forEach(session => {
       const cellValue = values[i][session.colIndex];
@@ -1878,9 +2113,12 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
       }
 
       const diffSec = Math.floor((attendTime - session.startTime) / 1000);
-      if (diffSec >= 0 && diffSec <= Math.floor((session.lateDeadline - session.startTime) / 1000)) {
-        totalAttendTimeSeconds += diffSec;
-        validAttendTimeCount++;
+      const minAllowed = Math.floor((session.openTime - session.startTime) / 1000);
+      const maxAllowed = Math.floor((session.lateDeadline - session.startTime) / 1000);
+
+      if (diffSec >= minAllowed && diffSec <= maxAllowed) {
+        totalAttendOffsetSeconds += diffSec;
+        validOffsetCount++;
       }
     });
 
@@ -1888,20 +2126,12 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
       ? (attendedCount / effectiveSessionCount) * 100
       : 0;
 
-    let avgAttendTimeSeconds;
-    let avgAttendTimeFormatted;
+    let avgAttendOffsetSeconds = null;
+    let avgAttendOffsetFormatted = '미출석';
 
-    if (validAttendTimeCount > 0) {
-      avgAttendTimeSeconds = Math.round(totalAttendTimeSeconds / validAttendTimeCount);
-      const avgMinutes = Math.floor(avgAttendTimeSeconds / 60);
-      const avgSeconds = avgAttendTimeSeconds % 60;
-      avgAttendTimeFormatted = `${avgMinutes}:${String(avgSeconds).padStart(2, '0')}`;
-    } else if (attendedCount > 0) {
-      avgAttendTimeSeconds = 3600;
-      avgAttendTimeFormatted = '60:00';
-    } else {
-      avgAttendTimeSeconds = 999999;
-      avgAttendTimeFormatted = '미출석';
+    if (validOffsetCount > 0) {
+      avgAttendOffsetSeconds = Math.round(totalAttendOffsetSeconds / validOffsetCount);
+      avgAttendOffsetFormatted = formatSignedOffset(avgAttendOffsetSeconds);
     }
 
     rankings.push({
@@ -1910,8 +2140,11 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
       attendedCount: attendedCount,
       totalSessions: effectiveSessionCount,
       attendanceRate: Math.round(attendanceRate),
-      avgAttendTimeSeconds: avgAttendTimeSeconds,
-      avgAttendTime: avgAttendTimeFormatted
+      avgAttendOffsetSeconds: avgAttendOffsetSeconds,
+      avgAttendOffset: avgAttendOffsetFormatted,
+      // 하위 호환: 기존 프런트 필드명 유지
+      avgAttendTimeSeconds: avgAttendOffsetSeconds === null ? 999999 : avgAttendOffsetSeconds,
+      avgAttendTime: avgAttendOffsetFormatted
     });
   }
 
@@ -1920,10 +2153,18 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
       return b.attendanceRate - a.attendanceRate;
     }
 
-    if (a.avgAttendTimeSeconds === 999999) return 1;
-    if (b.avgAttendTimeSeconds === 999999) return -1;
+    if (b.attendedCount !== a.attendedCount) {
+      return b.attendedCount - a.attendedCount;
+    }
 
-    return a.avgAttendTimeSeconds - b.avgAttendTimeSeconds;
+    if (a.avgAttendOffsetSeconds === null) return 1;
+    if (b.avgAttendOffsetSeconds === null) return -1;
+
+    if (a.avgAttendOffsetSeconds !== b.avgAttendOffsetSeconds) {
+      return a.avgAttendOffsetSeconds - b.avgAttendOffsetSeconds;
+    }
+
+    return String(a.name).localeCompare(String(b.name));
   });
 
   rankings.forEach((item, index) => {
@@ -1964,12 +2205,18 @@ function getScheduleList(seasonName) {
   try {
     const info = getRequestedSeasonSheetInfo(seasonName);
     const now = new Date();
-    const sessions = collectSessionsFromSheet(info.sheet, { createMissingMeta: true });
+    const variableConfig = getVariableConfig();
+    const sessions = collectSessionsFromSheet(info.sheet, { variableConfig: variableConfig, createMissingMeta: true });
 
     return {
       success: true,
       seasonAlias: info.seasonAlias,
       currentSheet: info.currentSheet,
+      defaults: {
+        default_session_start_time: variableConfig.default_session_start_time,
+        absence_threshold_min: variableConfig.absence_threshold_min,
+        attendance_open_offset_min: variableConfig.attendance_open_offset_min
+      },
       items: sessions.map(session => ({
         sessionKey: session.sessionKey,
         header: session.header,
@@ -2073,6 +2320,8 @@ function deleteSchedule(params) {
   try {
     const info = getRequestedSeasonSheetInfo(params.season || '');
     const sessionKey = String(params.sessionKey || '').trim();
+    const forceDelete = parseBooleanParam(params.forceDelete);
+    const confirmSessionKey = String(params.confirmSessionKey || '').trim();
     if (!sessionKey) {
       return { success: false, message: 'sessionKey 파라미터가 필요합니다.' };
     }
@@ -2085,14 +2334,35 @@ function deleteSchedule(params) {
       return { success: false, message: '삭제 대상 회차를 찾을 수 없습니다.' };
     }
 
+    const attendanceRecordCount = countAttendanceRecordsInSession(sheet, target.colIndex);
+    if (attendanceRecordCount > 0 && !forceDelete) {
+      return {
+        success: false,
+        errorCode: 'SCHEDULE_DELETE_HAS_ATTENDANCE',
+        message: `이미 ${attendanceRecordCount}건의 출석 기록이 있어 삭제하려면 강제 삭제 확인이 필요합니다.`,
+        attendanceRecordCount: attendanceRecordCount,
+        sessionKey: sessionKey
+      };
+    }
+
+    if (attendanceRecordCount > 0 && forceDelete && confirmSessionKey !== sessionKey) {
+      return {
+        success: false,
+        errorCode: 'SCHEDULE_DELETE_CONFIRM_KEY_MISMATCH',
+        message: '강제 삭제 확인 문자열이 일치하지 않습니다. sessionKey를 정확히 입력하세요.'
+      };
+    }
+
     sheet.deleteColumn(target.colIndex + 1);
     removeSessionMetaRow(sheet.getName(), sessionKey);
 
     return {
       success: true,
-      message: '일정이 삭제되었습니다.',
+      message: attendanceRecordCount > 0 ? '강제 삭제로 일정이 삭제되었습니다.' : '일정이 삭제되었습니다.',
       sessionKey: sessionKey,
-      seasonAlias: info.seasonAlias
+      seasonAlias: info.seasonAlias,
+      forceDeleted: attendanceRecordCount > 0,
+      attendanceRecordCount: attendanceRecordCount
     };
   } catch (error) {
     return {
@@ -2100,6 +2370,21 @@ function deleteSchedule(params) {
       message: error.message || '일정 삭제 중 오류가 발생했습니다.'
     };
   }
+}
+
+function countAttendanceRecordsInSession(sheet, colIndex) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+
+  const values = sheet.getRange(2, colIndex + 1, lastRow - 1, 1).getValues();
+  let count = 0;
+  values.forEach(row => {
+    const text = String(row[0] || '').trim();
+    if (text !== '') {
+      count++;
+    }
+  });
+  return count;
 }
 
 function getMembers(seasonName) {
@@ -2210,6 +2495,8 @@ function setExcusedAttendance(params) {
   const phone = String(params.phone || '').trim();
   const sessionKey = String(params.sessionKey || '').trim();
   const enabled = parseBooleanParam(params.enabled);
+  const previewOnly = parseBooleanParam(params.previewOnly);
+  const forceOverride = parseBooleanParam(params.forceOverride);
   const comment = String(params.comment || '').trim();
 
   if (!seasonName || !phone || !sessionKey) {
@@ -2241,11 +2528,52 @@ function setExcusedAttendance(params) {
     }
 
     const targetRange = sheet.getRange(rowIndex + 1, session.colIndex + 1);
+    const existingValue = targetRange.getValue();
+    const existingStatus = getAttendanceDetailType(existingValue, session, new Date());
+    const existingTime = parseAttendanceTime(existingValue);
+    const existingTimeText = existingTime ? formatDateTime(existingTime) : (String(existingValue || '').trim() || '');
+    const existingNote = String(targetRange.getNote() || '').trim();
+    const isAttendanceRecord = existingStatus === 'on_time' || existingStatus === 'late';
 
     if (enabled) {
+      if (isAttendanceRecord && (!forceOverride || previewOnly)) {
+        return {
+          success: false,
+          errorCode: 'EXCUSE_OVERRIDE_CONFIRM_REQUIRED',
+          message: '이미 출석/지각 기록이 있습니다. 유고로 덮어쓸지 다시 확인해주세요.',
+          existingStatus: existingStatus,
+          existingTime: existingTimeText,
+          existingNote: existingNote,
+          requiresOverride: true
+        };
+      }
+
+      if (previewOnly) {
+        return {
+          success: true,
+          message: '유고 처리 사전 확인 완료',
+          previewOnly: true,
+          existingStatus: existingStatus,
+          existingTime: existingTimeText,
+          existingNote: existingNote
+        };
+      }
+
+      const noteLines = [];
+      if (comment) {
+        noteLines.push(`유고 사유: ${comment}`);
+      }
+      if (isAttendanceRecord) {
+        const statusText = existingStatus === 'on_time' ? '출석' : '지각';
+        noteLines.push(`[덮어쓰기] 기존 기록: ${statusText}${existingTimeText ? ` (${existingTimeText})` : ''}`);
+        if (existingNote) {
+          noteLines.push(`[기존 메모] ${existingNote}`);
+        }
+      }
+
       targetRange.setValue('유고');
       targetRange.setBackground(EXCUSED_COLOR);
-      targetRange.setNote(comment || '');
+      targetRange.setNote(noteLines.join('\n'));
 
       return {
         success: true,
@@ -2254,7 +2582,9 @@ function setExcusedAttendance(params) {
         sessionKey: session.sessionKey,
         phone: cleanedPhone,
         enabled: true,
-        comment: comment
+        comment: comment,
+        overwrittenAttendance: isAttendanceRecord,
+        previousStatus: isAttendanceRecord ? existingStatus : ''
       };
     }
 
@@ -2424,6 +2754,9 @@ function getGraduationReport(seasonName) {
       });
 
       const absenceEquivalent = absentCount + Math.floor(lateCount / lateToAbsenceRatio);
+      const attendanceRate = effectivePastCount > 0
+        ? Math.round((attendedCount / effectivePastCount) * 100)
+        : 0;
 
       const meetsAttendance = attendedCount >= requiredAttendanceCount;
       const attendancePossible = attendedCount + futureCount >= requiredAttendanceCount;
@@ -2445,6 +2778,7 @@ function getGraduationReport(seasonName) {
         excusedCount: excusedCount,
         effectivePastCount: effectivePastCount,
         futureCount: futureCount,
+        attendanceRate: attendanceRate,
         absenceEquivalent: absenceEquivalent,
         requiredSessionsOk: requiredSatisfied,
         requiredSessionsPossible: requiredPossible,
@@ -2455,6 +2789,19 @@ function getGraduationReport(seasonName) {
         details: details
       });
     }
+
+    members.sort((a, b) => {
+      if (b.attendanceRate !== a.attendanceRate) {
+        return b.attendanceRate - a.attendanceRate;
+      }
+      if (b.attendedCount !== a.attendedCount) {
+        return b.attendedCount - a.attendedCount;
+      }
+      if (a.absenceEquivalent !== b.absenceEquivalent) {
+        return a.absenceEquivalent - b.absenceEquivalent;
+      }
+      return String(a.name).localeCompare(String(b.name));
+    });
 
     return {
       success: true,

@@ -7,8 +7,15 @@ let currentSeasonAlias = '';
 let scheduleItems = [];
 let membersCache = [];
 let variableItems = [];
+let variableConfig = {};
+let selectedVariableIndex = -1;
 let graduationReportCache = null;
 let excuseModalState = null;
+let excuseOverrideState = null;
+let graduationVisibleCount = 20;
+let scheduleDeleteForceState = null;
+let scheduleEndAutoManaged = true;
+let scheduleDefaults = {};
 
 function normalizeSeasonAlias(raw) {
   const value = String(raw || '').trim();
@@ -283,6 +290,21 @@ async function initializeDashboard() {
   if (scheduleSelect) {
     scheduleSelect.addEventListener('change', handleScheduleSelectionChange);
   }
+  const scheduleDateInput = document.getElementById('scheduleDateInput');
+  const scheduleStartTimeInput = document.getElementById('scheduleStartTimeInput');
+  const scheduleEndInput = document.getElementById('scheduleEndInput');
+  if (scheduleDateInput) {
+    scheduleDateInput.addEventListener('change', updateSchedulePreview);
+  }
+  if (scheduleStartTimeInput) {
+    scheduleStartTimeInput.addEventListener('change', onScheduleStartTimeChanged);
+  }
+  if (scheduleEndInput) {
+    scheduleEndInput.addEventListener('input', () => {
+      scheduleEndAutoManaged = false;
+      updateSchedulePreview();
+    });
+  }
 
   document.getElementById('phoneInput').addEventListener('click', function () {
     this.focus();
@@ -290,6 +312,8 @@ async function initializeDashboard() {
   document.getElementById('statusPhoneInput').addEventListener('click', function () {
     this.focus();
   });
+
+  resetScheduleForm();
 }
 
 async function refreshSeasonData() {
@@ -297,7 +321,8 @@ async function refreshSeasonData() {
     refreshSessionAndRanking(),
     loadScheduleList(),
     loadMembers(),
-    loadSheetLinkInfo()
+    loadSheetLinkInfo(),
+    loadGraduationReport()
   ]);
 }
 
@@ -465,7 +490,7 @@ function displayRankings(response) {
           <th>이름</th>
           <th>출석률</th>
           <th>출석 횟수</th>
-          <th>평균 출석 시간</th>
+          <th>평균 출석 오프셋</th>
         </tr>
       </thead>
       <tbody>
@@ -476,9 +501,10 @@ function displayRankings(response) {
       ? `<span class="rank-medal rank-${item.rank}">${item.rank}</span>`
       : `<span style="color: #94a3b8;">${item.rank}</span>`;
 
-    const avgTimeDisplay = item.avgAttendTime === '미출석'
+    const avgOffset = item.avgAttendOffset || item.avgAttendTime;
+    const avgTimeDisplay = avgOffset === '미출석'
       ? '<span style="color: #64748b;">-</span>'
-      : `<span style="color: #60a5fa;">${escapeHtml(item.avgAttendTime)}</span>`;
+      : `<span style="color: #60a5fa;">${escapeHtml(avgOffset)}</span>`;
 
     tableHTML += `
       <tr>
@@ -709,6 +735,10 @@ function openTab(tabName, evt) {
   }
 
   if (tabName === 'graduation') {
+    loadGraduationReport();
+  }
+
+  if (tabName === 'excused') {
     loadGraduationReport();
   }
 
@@ -1047,12 +1077,30 @@ async function manualApprove(event) {
 
 function resetScheduleForm() {
   const select = document.getElementById('scheduleSessionSelect');
-  const startInput = document.getElementById('scheduleStartInput');
+  const dateInput = document.getElementById('scheduleDateInput');
+  const startTimeInput = document.getElementById('scheduleStartTimeInput');
   const endInput = document.getElementById('scheduleEndInput');
 
   if (select) select.value = '';
-  if (startInput) startInput.value = '';
-  if (endInput) endInput.value = '';
+
+  const now = new Date();
+  if (dateInput) {
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    dateInput.value = `${yyyy}-${mm}-${dd}`;
+  }
+
+  if (startTimeInput) {
+    startTimeInput.value = getDefaultScheduleStartTime();
+  }
+
+  scheduleEndAutoManaged = true;
+  if (endInput) {
+    endInput.value = suggestScheduleEndTime(startTimeInput ? startTimeInput.value : '');
+  }
+
+  updateSchedulePreview();
 }
 
 function populateScheduleSelect(items) {
@@ -1129,17 +1177,33 @@ function renderScheduleTable(items) {
 
 function handleScheduleSelectionChange() {
   const key = document.getElementById('scheduleSessionSelect').value;
+  const dateInput = document.getElementById('scheduleDateInput');
+  const startTimeInput = document.getElementById('scheduleStartTimeInput');
+  const endInput = document.getElementById('scheduleEndInput');
+
   if (!key) {
-    document.getElementById('scheduleStartInput').value = '';
-    document.getElementById('scheduleEndInput').value = '';
+    resetScheduleForm();
     return;
   }
 
   const found = scheduleItems.find(item => item.sessionKey === key);
   if (!found) return;
 
-  document.getElementById('scheduleStartInput').value = formatDatetimeLocal(found.startTime);
-  document.getElementById('scheduleEndInput').value = found.explicitEndAt || '';
+  const date = new Date(found.startTime);
+  if (dateInput) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    dateInput.value = `${yyyy}-${mm}-${dd}`;
+  }
+  if (startTimeInput) {
+    startTimeInput.value = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+  if (endInput) {
+    endInput.value = found.explicitEndAt || suggestScheduleEndTime(startTimeInput ? startTimeInput.value : '');
+  }
+  scheduleEndAutoManaged = !found.explicitEndAt;
+  updateSchedulePreview();
 }
 
 function selectScheduleForEdit(encodedSessionKey) {
@@ -1170,10 +1234,16 @@ async function loadScheduleList() {
       return;
     }
 
+    scheduleDefaults = response.defaults || {};
     scheduleItems = response.items || [];
     renderScheduleTable(scheduleItems);
     populateScheduleSelect(scheduleItems);
     populateManualSessionSelect(scheduleItems);
+    if (!document.getElementById('scheduleSessionSelect').value) {
+      resetScheduleForm();
+    } else {
+      updateSchedulePreview();
+    }
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     const wrap = document.getElementById('scheduleTableWrap');
@@ -1188,7 +1258,7 @@ async function saveSchedule(event) {
 
   const season = getSelectedSeasonAlias();
   const sessionKey = document.getElementById('scheduleSessionSelect').value;
-  const startAt = document.getElementById('scheduleStartInput').value;
+  const startAt = composeScheduleStartAt();
   const endAt = document.getElementById('scheduleEndInput').value;
 
   if (!season) {
@@ -1256,19 +1326,127 @@ async function deleteSelectedSchedule() {
     return;
   }
 
+  if (!confirm(`삭제를 진행하면 해당 회차 열이 시트에서 제거됩니다.\n정말 삭제하시겠습니까?`)) {
+    return;
+  }
+
+  await requestScheduleDelete({
+    season,
+    sessionKey,
+    forceDelete: false,
+    confirmSessionKey: ''
+  });
+}
+
+function getDefaultScheduleStartTime() {
+  const fromVariable = String((variableConfig && variableConfig.default_session_start_time) || '').trim();
+  if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(fromVariable)) {
+    return fromVariable;
+  }
+
+  const fromScheduleDefaults = String((scheduleDefaults && scheduleDefaults.default_session_start_time) || '').trim();
+  if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(fromScheduleDefaults)) {
+    return fromScheduleDefaults;
+  }
+
+  return '19:00';
+}
+
+function suggestScheduleEndTime(startTimeText) {
+  const match = String(startTimeText || '').match(/^(\d{2}):(\d{2})$/);
+  if (!match) return '';
+
+  const startMin = (parseInt(match[1], 10) * 60) + parseInt(match[2], 10);
+  const liveAbsence = Number(getVariableValueByKey('absence_threshold_min'));
+  const duration = Number(
+    (!Number.isNaN(liveAbsence) ? liveAbsence : '') ||
+    (variableConfig && variableConfig.absence_threshold_min) ||
+    (scheduleDefaults && scheduleDefaults.absence_threshold_min) ||
+    180
+  );
+  const end = startMin + (isNaN(duration) ? 180 : duration);
+  const hh = Math.floor((end % (24 * 60)) / 60);
+  const mm = end % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+function composeScheduleStartAt() {
+  const date = document.getElementById('scheduleDateInput').value;
+  const time = document.getElementById('scheduleStartTimeInput').value;
+
+  if (!date || !time) return '';
+  return `${date}T${time}`;
+}
+
+function onScheduleStartTimeChanged() {
+  const startTimeInput = document.getElementById('scheduleStartTimeInput');
+  const endInput = document.getElementById('scheduleEndInput');
+  if (!startTimeInput || !endInput) return;
+
+  if (scheduleEndAutoManaged || !endInput.value) {
+    endInput.value = suggestScheduleEndTime(startTimeInput.value);
+    scheduleEndAutoManaged = true;
+  }
+
+  updateSchedulePreview();
+}
+
+function updateSchedulePreview() {
+  const preview = document.getElementById('scheduleComputedPreview');
+  if (!preview) return;
+
+  const startAt = composeScheduleStartAt();
+  const endAt = document.getElementById('scheduleEndInput').value;
+  if (!startAt) {
+    preview.textContent = '회차 키와 마감 계산 정보가 여기에 표시됩니다.';
+    return;
+  }
+
+  const key = startAt.replace('T', '-');
+  const liveOpenOffset = Number(getVariableValueByKey('attendance_open_offset_min'));
+  const openOffsetMin = Number(
+    (!Number.isNaN(liveOpenOffset) ? liveOpenOffset : '') ||
+    (variableConfig && variableConfig.attendance_open_offset_min) ||
+    (scheduleDefaults && scheduleDefaults.attendance_open_offset_min) ||
+    -30
+  );
+  const start = new Date(startAt);
+  const open = new Date(start.getTime() + openOffsetMin * 60 * 1000);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  preview.innerHTML = `
+    회차 키: <strong>${escapeHtml(key)}</strong><br>
+    출석 오픈: ${escapeHtml(fmt(open))} (${openOffsetMin}분)<br>
+    종료 입력: ${endAt ? escapeHtml(endAt) : '미입력(기본 마감 규칙 적용)'}
+  `;
+}
+
+async function requestScheduleDelete(options) {
   try {
     const response = await CloudClubApi.call('scheduleDelete', {
-      season,
-      sessionKey,
+      season: options.season,
+      sessionKey: options.sessionKey,
+      forceDelete: options.forceDelete ? 'true' : 'false',
+      confirmSessionKey: options.confirmSessionKey || '',
       adminToken
     });
 
     if (!response.success) {
+      if (response.errorCode === 'SCHEDULE_DELETE_HAS_ATTENDANCE') {
+        openScheduleDeleteForceModal({
+          season: options.season,
+          sessionKey: options.sessionKey,
+          attendanceRecordCount: response.attendanceRecordCount || 0
+        });
+        return;
+      }
+
       showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(response.message || '일정 삭제 실패')}`, false);
       return;
     }
 
     showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || '일정 삭제 완료')}`, true);
+    closeScheduleDeleteForceModal();
 
     await Promise.all([
       loadScheduleList(),
@@ -1283,6 +1461,46 @@ async function deleteSelectedSchedule() {
   }
 }
 
+function openScheduleDeleteForceModal(state) {
+  scheduleDeleteForceState = state;
+  const modal = document.getElementById('scheduleDeleteForceModal');
+  const text = document.getElementById('scheduleDeleteForceText');
+  const input = document.getElementById('scheduleDeleteForceInput');
+  if (!modal || !text || !input) return;
+
+  text.textContent = `${state.sessionKey} 회차에 ${state.attendanceRecordCount}건의 기록이 있습니다. 강제 삭제를 진행하려면 sessionKey를 정확히 입력하세요.`;
+  input.value = '';
+  modal.style.display = 'flex';
+  setTimeout(() => input.focus(), 0);
+}
+
+function closeScheduleDeleteForceModal() {
+  const modal = document.getElementById('scheduleDeleteForceModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  scheduleDeleteForceState = null;
+}
+
+async function submitScheduleDeleteForceModal() {
+  if (!scheduleDeleteForceState) return;
+
+  const input = document.getElementById('scheduleDeleteForceInput');
+  const typed = input ? input.value.trim() : '';
+  const expected = scheduleDeleteForceState.sessionKey;
+  if (typed !== expected) {
+    alert(`sessionKey가 일치하지 않습니다. (${expected})`);
+    return;
+  }
+
+  await requestScheduleDelete({
+    season: scheduleDeleteForceState.season,
+    sessionKey: expected,
+    forceDelete: true,
+    confirmSessionKey: typed
+  });
+}
+
 function renderVariablesTable(items) {
   const wrap = document.getElementById('variablesTableWrap');
   if (!wrap) return;
@@ -1295,14 +1513,18 @@ function renderVariablesTable(items) {
   const rows = items.map((item, idx) => {
     const disabledAttr = item.editable ? '' : 'disabled';
     const valueText = item.value === null || item.value === undefined ? '' : String(item.value);
+    const activeClass = idx === selectedVariableIndex ? 'active' : '';
 
     return `
-      <tr>
+      <tr class="variable-row ${activeClass}" onclick="selectVariableRow(${idx})">
         <td>${escapeHtml(item.key)}</td>
         <td>
-          <input class="table-input" id="var-value-${idx}" data-key="${escapeHtml(item.key)}" data-type="${escapeHtml(item.type || 'string')}" data-description="${escapeHtml(item.description || '')}" ${disabledAttr} value="${escapeHtml(valueText)}">
+          <input class="table-input" id="var-value-${idx}" data-key="${escapeHtml(item.key)}" data-type="${escapeHtml(item.type || 'string')}" data-description="${escapeHtml(item.description || '')}" ${disabledAttr} value="${escapeHtml(valueText)}" oninput="onVariableInputChanged(${idx}, event)">
         </td>
         <td>${escapeHtml(item.type || 'string')}</td>
+        <td>${escapeHtml(item.unit || '-')}</td>
+        <td>${escapeHtml(item.appliesTo || '-')}</td>
+        <td>${escapeHtml(item.appliesWhen || '-')}</td>
         <td>${escapeHtml(item.description || '')}</td>
         <td>${item.editable ? 'Y' : 'N'}</td>
         <td>${escapeHtml(item.updatedAt || '')}</td>
@@ -1317,6 +1539,9 @@ function renderVariablesTable(items) {
           <th>key</th>
           <th>value</th>
           <th>type</th>
+          <th>unit</th>
+          <th>적용 위치</th>
+          <th>적용 시점</th>
           <th>description</th>
           <th>editable</th>
           <th>updated_at</th>
@@ -1327,6 +1552,126 @@ function renderVariablesTable(items) {
       </tbody>
     </table>
   `;
+}
+
+function getVariableInputValue(idx) {
+  const input = document.getElementById(`var-value-${idx}`);
+  return input ? input.value : '';
+}
+
+function getVariableValueByKey(key) {
+  const index = variableItems.findIndex(item => item.key === key);
+  if (index === -1) return '';
+  return getVariableInputValue(index);
+}
+
+function renderVariableHelpPanel(item) {
+  const panel = document.getElementById('variablesHelpPanel');
+  if (!panel) return;
+
+  if (!item) {
+    panel.innerHTML = `
+      <h4>변수를 선택하면 설명이 표시됩니다.</h4>
+      <p class="help-muted">값을 바꾸기 전에 “이 값이 어디에 적용되는지”를 먼저 확인하세요.</p>
+    `;
+    return;
+  }
+
+  const value = getVariableInputValue(selectedVariableIndex);
+  const hasTimePreview = ['attendance_open_offset_min', 'late_threshold_min', 'absence_threshold_min'].indexOf(item.key) !== -1;
+  let previewHtml = '';
+
+  if (hasTimePreview) {
+    const openOffsetMin = Number(getVariableValueByKey('attendance_open_offset_min') || -30);
+    const lateThresholdMin = Number(getVariableValueByKey('late_threshold_min') || 50);
+    const absenceThresholdMin = Number(getVariableValueByKey('absence_threshold_min') || 180);
+    const base = new Date('2026-01-01T19:00:00');
+    const openTime = new Date(base.getTime() + openOffsetMin * 60 * 1000);
+    const onTimeDeadline = new Date(base.getTime() + lateThresholdMin * 60 * 1000);
+    const lateDeadline = new Date(base.getTime() + absenceThresholdMin * 60 * 1000);
+    const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+    previewHtml = `
+      <p><strong>시간 미리보기 (기준 시작시각 19:00)</strong></p>
+      <p>출석 오픈: ${hhmm(openTime)} / 정시 경계: ${hhmm(onTimeDeadline)} / 기본 마감: ${hhmm(lateDeadline)}</p>
+    `;
+  }
+
+  panel.innerHTML = `
+    <h4>${escapeHtml(item.labelKo || item.key)}</h4>
+    <p><strong>현재 입력값:</strong> ${escapeHtml(value || '(빈값)')} ${item.unit ? `(${escapeHtml(item.unit)})` : ''}</p>
+    <p><strong>어디에 적용:</strong> ${escapeHtml(item.appliesTo || '-')}</p>
+    <p><strong>언제 적용:</strong> ${escapeHtml(item.appliesWhen || '-')}</p>
+    <p><strong>설명:</strong> ${escapeHtml(item.description || '-')}</p>
+    <p><strong>공식:</strong> ${escapeHtml(item.formula || '-')}</p>
+    <p><strong>예시:</strong> ${escapeHtml(item.example || '-')}</p>
+    <p><strong>검증 규칙:</strong> ${escapeHtml(item.validationText || '-')}</p>
+    ${previewHtml}
+  `;
+}
+
+function selectVariableRow(index) {
+  selectedVariableIndex = index;
+  const rows = document.querySelectorAll('#variablesTableWrap .variable-row');
+  rows.forEach((row, idx) => {
+    row.classList.toggle('active', idx === index);
+  });
+  renderVariableHelpPanel(variableItems[index] || null);
+}
+
+function onVariableInputChanged(index) {
+  if (selectedVariableIndex === index) {
+    renderVariableHelpPanel(variableItems[index] || null);
+  }
+  if (variableItems[index] && variableItems[index].key === 'absence_threshold_min') {
+    updateSchedulePreview();
+  }
+  if (variableItems[index] && variableItems[index].key === 'attendance_open_offset_min') {
+    updateSchedulePreview();
+  }
+}
+
+function validateVariableDraft(item, value) {
+  const validation = item.validation || null;
+  const text = String(value === undefined || value === null ? '' : value).trim();
+
+  if (!validation || !validation.kind) return { valid: true };
+
+  if (validation.kind === 'number') {
+    if (text === '') {
+      if (validation.allowEmpty) return { valid: true };
+      return { valid: false, message: `${item.key}: 빈값을 허용하지 않습니다.` };
+    }
+
+    const n = Number(text);
+    if (Number.isNaN(n)) {
+      return { valid: false, message: `${item.key}: 숫자값을 입력하세요.` };
+    }
+    if (validation.min !== undefined && n < validation.min) {
+      return { valid: false, message: `${item.key}: ${validation.min} 이상이어야 합니다.` };
+    }
+    if (validation.max !== undefined && n > validation.max) {
+      return { valid: false, message: `${item.key}: ${validation.max} 이하여야 합니다.` };
+    }
+    return { valid: true };
+  }
+
+  if (validation.kind === 'hhmm') {
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
+      return { valid: false, message: `${item.key}: HH:mm 형식으로 입력하세요. (예: 19:00)` };
+    }
+    return { valid: true };
+  }
+
+  if (validation.kind === 'required_positions') {
+    const list = text.split(',').map(v => v.trim().toLowerCase()).filter(v => !!v);
+    if (!list.length || list.some(v => v !== 'first' && v !== 'last')) {
+      return { valid: false, message: `${item.key}: first,last 조합만 허용됩니다.` };
+    }
+    return { valid: true };
+  }
+
+  return { valid: true };
 }
 
 async function loadVariables() {
@@ -1341,7 +1686,15 @@ async function loadVariables() {
     }
 
     variableItems = response.items || [];
+    variableConfig = response.config || {};
+    selectedVariableIndex = variableItems.length > 0 ? 0 : -1;
     renderVariablesTable(variableItems);
+    if (selectedVariableIndex >= 0) {
+      selectVariableRow(selectedVariableIndex);
+    } else {
+      renderVariableHelpPanel(null);
+    }
+    updateSchedulePreview();
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     document.getElementById('variablesTableWrap').innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '변수 조회 중 오류'))}</div>`;
@@ -1354,20 +1707,25 @@ async function saveVariables() {
     return;
   }
 
-  const payload = variableItems.map((item, idx) => {
-    const input = document.getElementById(`var-value-${idx}`);
-    const value = input ? input.value : item.value;
-
-    return {
-      key: item.key,
-      value,
-      type: item.type,
-      description: item.description,
-      editable: item.editable
-    };
-  });
-
   try {
+    const payload = variableItems.map((item, idx) => {
+      const input = document.getElementById(`var-value-${idx}`);
+      const value = input ? input.value : item.value;
+
+      const validation = validateVariableDraft(item, value);
+      if (!validation.valid) {
+        throw new Error(validation.message || `${item.key} 값이 올바르지 않습니다.`);
+      }
+
+      return {
+        key: item.key,
+        value,
+        type: item.type,
+        description: item.description,
+        editable: item.editable
+      };
+    });
+
     const response = await CloudClubApi.call('variablesUpdate', {
       adminToken,
       itemsJson: JSON.stringify(payload)
@@ -1378,7 +1736,7 @@ async function saveVariables() {
       return;
     }
 
-    showBoxMessage('variablesResult', '✅ 변수 저장 완료 (legacy A2:C2 동기화 포함)', true);
+    showBoxMessage('variablesResult', '✅ 변수 저장 완료', true);
     showToast('<i class="fas fa-check-circle"></i> 변수 저장 완료', true);
 
     await Promise.all([
@@ -1460,18 +1818,22 @@ function renderGraduationSummary(report) {
 
 function renderGraduationTable(report) {
   const wrap = document.getElementById('graduationTableWrap');
+  const loadMoreWrap = document.getElementById('graduationLoadMoreWrap');
   if (!wrap) return;
 
-  const members = report.members || [];
+  const members = getSortedGraduationMembers(report);
   if (members.length === 0) {
     wrap.innerHTML = '<p class="info-text">회원 데이터가 없습니다.</p>';
+    if (loadMoreWrap) loadMoreWrap.innerHTML = '';
     return;
   }
 
-  const rows = members.map(member => `
+  const visibleMembers = members.slice(0, graduationVisibleCount);
+  const rows = visibleMembers.map(member => `
     <tr>
       <td><span class="grade-badge">${escapeHtml(member.grade)}</span>${escapeHtml(member.name)}</td>
       <td>${escapeHtml(member.phone)}</td>
+      <td>${member.attendanceRate}%</td>
       <td>${member.attendedCount}</td>
       <td>${member.lateCount}</td>
       <td>${member.absentCount}</td>
@@ -1487,6 +1849,7 @@ function renderGraduationTable(report) {
         <tr>
           <th>회원</th>
           <th>연락처</th>
+          <th>출석률</th>
           <th>출석</th>
           <th>지각</th>
           <th>결석</th>
@@ -1500,6 +1863,57 @@ function renderGraduationTable(report) {
       </tbody>
     </table>
   `;
+
+  if (loadMoreWrap) {
+    if (visibleMembers.length < members.length) {
+      loadMoreWrap.innerHTML = `
+        <button type="button" class="btn btn-secondary" onclick="loadMoreGraduationMembers()">
+          <i class="fas fa-chevron-down"></i>
+          <span>20명 더 보기 (${visibleMembers.length}/${members.length})</span>
+        </button>
+      `;
+    } else {
+      loadMoreWrap.innerHTML = `<p class="info-text">총 ${members.length}명 표시 완료</p>`;
+    }
+  }
+}
+
+function loadMoreGraduationMembers() {
+  graduationVisibleCount += 20;
+  if (graduationReportCache) {
+    renderGraduationTable(graduationReportCache);
+  }
+}
+
+function getMemberAttendanceRate(member) {
+  if (typeof member.attendanceRate === 'number') {
+    return member.attendanceRate;
+  }
+  const denominator = Number(member.effectivePastCount || 0);
+  if (denominator <= 0) return 0;
+  return Math.round((Number(member.attendedCount || 0) / denominator) * 100);
+}
+
+function getSortedGraduationMembers(report) {
+  const list = (report.members || []).slice();
+  list.forEach(member => {
+    member.attendanceRate = getMemberAttendanceRate(member);
+  });
+
+  list.sort((a, b) => {
+    if (b.attendanceRate !== a.attendanceRate) {
+      return b.attendanceRate - a.attendanceRate;
+    }
+    if (b.attendedCount !== a.attendedCount) {
+      return b.attendedCount - a.attendedCount;
+    }
+    if (a.absenceEquivalent !== b.absenceEquivalent) {
+      return a.absenceEquivalent - b.absenceEquivalent;
+    }
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+  return list;
 }
 
 function getMatrixCellLabel(status) {
@@ -1518,11 +1932,11 @@ function getMatrixCellLabel(status) {
 }
 
 function renderGraduationMatrix(report) {
-  const wrap = document.getElementById('graduationMatrixWrap');
+  const wrap = document.getElementById('excusedMatrixWrap');
   if (!wrap) return;
 
   const sessions = report.sessions || [];
-  const members = report.members || [];
+  const members = getSortedGraduationMembers(report);
 
   if (sessions.length === 0 || members.length === 0) {
     wrap.innerHTML = '<p class="info-text">매트릭스를 표시할 데이터가 없습니다.</p>';
@@ -1595,10 +2009,12 @@ async function loadGraduationReport() {
   if (!season) return;
 
   const tableWrap = document.getElementById('graduationTableWrap');
-  const matrixWrap = document.getElementById('graduationMatrixWrap');
+  const matrixWrap = document.getElementById('excusedMatrixWrap');
+  const loadMoreWrap = document.getElementById('graduationLoadMoreWrap');
 
   if (tableWrap) tableWrap.innerHTML = '<div class="loader" style="margin: 24px auto;"></div>';
   if (matrixWrap) matrixWrap.innerHTML = '<div class="loader" style="margin: 24px auto;"></div>';
+  if (loadMoreWrap) loadMoreWrap.innerHTML = '';
 
   try {
     const response = await CloudClubApi.call('graduationReport', {
@@ -1609,10 +2025,12 @@ async function loadGraduationReport() {
     if (!response.success) {
       if (tableWrap) tableWrap.innerHTML = `<div class="error">${escapeHtml(response.message || '수료 판정 조회 실패')}</div>`;
       if (matrixWrap) matrixWrap.innerHTML = '';
+      if (loadMoreWrap) loadMoreWrap.innerHTML = '';
       return;
     }
 
     graduationReportCache = response;
+    graduationVisibleCount = 20;
 
     renderGraduationSummary(response);
     renderGraduationTable(response);
@@ -1621,6 +2039,7 @@ async function loadGraduationReport() {
     if (handleUnauthorizedError(error)) return;
     if (tableWrap) tableWrap.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '수료 판정 조회 중 오류'))}</div>`;
     if (matrixWrap) matrixWrap.innerHTML = '';
+    if (loadMoreWrap) loadMoreWrap.innerHTML = '';
   }
 }
 
@@ -1652,15 +2071,84 @@ async function submitExcuseModal() {
 
   const input = document.getElementById('excuseCommentInput');
   const comment = input ? input.value.trim() : '';
-
-  await applyExcusedChange({
+  const response = await applyExcusedChange({
     phone: excuseModalState.phone,
     sessionKey: excuseModalState.sessionKey,
     enabled: true,
     comment
   });
 
-  closeExcuseModal();
+  if (!response) return;
+
+  if (!response.success && response.errorCode === 'EXCUSE_OVERRIDE_CONFIRM_REQUIRED') {
+    const warningConfirmed = confirm('이미 출석/지각 기록이 있습니다. 정말 유고로 덮어쓸까요?');
+    if (!warningConfirmed) {
+      return;
+    }
+
+    excuseOverrideState = {
+      phone: excuseModalState.phone,
+      sessionKey: excuseModalState.sessionKey,
+      memberName: excuseModalState.memberName,
+      comment: comment,
+      existingStatus: response.existingStatus || '',
+      existingTime: response.existingTime || '',
+      existingNote: response.existingNote || ''
+    };
+
+    closeExcuseModal();
+    openExcuseOverrideModal(excuseOverrideState);
+    return;
+  }
+
+  if (response.success) {
+    closeExcuseModal();
+  }
+}
+
+function openExcuseOverrideModal(state) {
+  const modal = document.getElementById('excuseOverrideModal');
+  const summary = document.getElementById('excuseOverrideSummaryText');
+  const input = document.getElementById('excuseOverrideConfirmInput');
+  if (!modal || !summary || !input) return;
+
+  const statusText = state.existingStatus === 'on_time' ? '출석' : (state.existingStatus === 'late' ? '지각' : state.existingStatus);
+  const noteText = state.existingNote ? ` / 기존 메모: ${state.existingNote}` : '';
+  summary.textContent = `${state.memberName} / ${state.sessionKey} 기존 기록: ${statusText || '-'} ${state.existingTime || ''}${noteText}`;
+  input.value = '';
+  modal.style.display = 'flex';
+  setTimeout(() => input.focus(), 0);
+}
+
+function closeExcuseOverrideModal() {
+  const modal = document.getElementById('excuseOverrideModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  excuseOverrideState = null;
+}
+
+async function submitExcuseOverrideModal() {
+  if (!excuseOverrideState) return;
+
+  const input = document.getElementById('excuseOverrideConfirmInput');
+  const typed = input ? input.value.trim() : '';
+  if (typed !== '유고처리') {
+    alert('확인 문구가 일치하지 않습니다. "유고처리"를 정확히 입력해주세요.');
+    return;
+  }
+
+  const response = await applyExcusedChange({
+    phone: excuseOverrideState.phone,
+    sessionKey: excuseOverrideState.sessionKey,
+    enabled: true,
+    comment: excuseOverrideState.comment,
+    forceOverride: true
+  });
+
+  if (response && response.success) {
+    closeExcuseOverrideModal();
+  }
 }
 
 async function onMatrixCellClick(event) {
@@ -1701,7 +2189,7 @@ async function applyExcusedChange(payload) {
   const season = getSelectedSeasonAlias();
   if (!season) {
     alert('시즌 정보가 없습니다.');
-    return;
+    return null;
   }
 
   try {
@@ -1711,12 +2199,16 @@ async function applyExcusedChange(payload) {
       sessionKey: payload.sessionKey,
       enabled: payload.enabled ? 'true' : 'false',
       comment: payload.comment || '',
+      previewOnly: payload.previewOnly ? 'true' : 'false',
+      forceOverride: payload.forceOverride ? 'true' : 'false',
       adminToken
     });
 
     if (!response.success) {
-      alert(response.message || '유고 처리에 실패했습니다.');
-      return;
+      if (response.errorCode !== 'EXCUSE_OVERRIDE_CONFIRM_REQUIRED') {
+        alert(response.message || '유고 처리에 실패했습니다.');
+      }
+      return response;
     }
 
     showToast(`<i class="fas fa-check-circle"></i> ${escapeHtml(response.message || '유고 반영 완료')}`, true);
@@ -1725,9 +2217,11 @@ async function applyExcusedChange(payload) {
       loadGraduationReport(),
       loadRankings()
     ]);
+    return response;
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     alert(getDisplayErrorMessage(error, '유고 처리 중 오류가 발생했습니다.'));
+    return null;
   }
 }
 
