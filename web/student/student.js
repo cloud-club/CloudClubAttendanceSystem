@@ -262,7 +262,7 @@ function displayRankings(response) {
     tableHTML += `
       <tr>
         <td>${rankDisplay}</td>
-        <td><span class="grade-badge">${item.grade}</span>${item.name}</td>
+        <td><span class="grade-badge">${item.seasonLabel || item.grade || '-'}</span>${item.name}</td>
         <td><span class="highlight-text">${item.attendanceRate}%</span></td>
         <td>${item.attendedCount}/${item.totalSessions}</td>
         <td>${avgTimeDisplay}</td>
@@ -337,13 +337,13 @@ function handleAttendanceResponse(response) {
       ? '<span class="attendance-badge late">지각</span>'
       : '<span class="attendance-badge on-time">정시</span>';
 
-    let message = `✅ <span class="grade-badge">${response.grade}</span>${response.name}님, ${response.time} 출석 완료! ${typeBadge}`;
+    let message = `✅ <span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님, ${response.time} 출석 완료! ${typeBadge}`;
 
     if (response.attendanceInfo) {
       const info = response.attendanceInfo;
       message += `
         <div class="attendance-info">
-          <h3><span class="grade-badge">${response.grade}</span>${response.name}님 출석 현황</h3>
+          <h3><span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님 출석 현황</h3>
           <div class="attendance-stats">
             <div class="stat-item">
               <div class="stat-label">출석 횟수</div>
@@ -490,7 +490,7 @@ function handleStatusResponse(response) {
     statusResult.innerHTML = `
       <div class="card">
         <div class="attendance-info">
-          <h3><span class="grade-badge">${data.grade}</span>${data.name}님 출석 현황</h3>
+          <h3><span class="grade-badge">${data.seasonLabel || data.grade || '-'}</span>${data.name}님 출석 현황</h3>
           <div class="attendance-stats">
             <div class="stat-item">
               <div class="stat-label">출석 횟수</div>

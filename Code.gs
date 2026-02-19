@@ -11,7 +11,7 @@ const ABSENT_COLOR = '#f4cccc';
 
 const ADMIN_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 const ADMIN_TOKEN_CACHE_PREFIX = 'admin_token_';
-const API_VERSION = '2026.02.18-v2.1';
+const API_VERSION = '2026.02.19-v4.0';
 
 const VARIABLE_SHEET_NAME = 'variable';
 const VARIABLE_TABLE_HEADER_ROW = 1;
@@ -20,6 +20,53 @@ const VARIABLE_TABLE_HEADERS = ['key', 'value', 'type', 'description', 'editable
 
 const SESSION_META_SHEET_NAME = '_session_meta';
 const SESSION_META_HEADERS = ['seasonSheet', 'sessionKey', 'openOffsetMin', 'lateThresholdMin', 'absenceThresholdMin', 'explicitEndAt', 'createdAt'];
+const IMPORT_META_SHEET_NAME = '_import_meta';
+const IMPORT_META_HEADERS = [
+  'importId',
+  'seasonAlias',
+  'stagingSheetName',
+  'status',
+  'importMode',
+  'schemaSummaryJson',
+  'createdAt',
+  'updatedAt',
+  'insertedCount',
+  'skippedDuplicateCount',
+  'droppedInvalidCount',
+  'skippedNonTargetCount'
+];
+const IMPORT_STATUS_ACTIVE = 'active';
+const IMPORT_STATUS_FINALIZED = 'finalized';
+const IMPORT_STATUS_ABORTED = 'aborted';
+const MEMBER_V2_SHEET_HEADERS = [
+  'Name',
+  'Season',
+  'Phone',
+  'Email',
+  'Github ID',
+  'Github Email',
+  'Notion Email',
+  'Discord ID',
+  'Slack Email',
+  '회비 체크',
+  '수료 여부',
+  '운영진 여부'
+];
+const MEMBER_IMPORT_INTERNAL_PHONE_KEY_HEADER = '_phone_key';
+const MEMBER_FIELD_ORDER = [
+  'name',
+  'season',
+  'phone',
+  'email',
+  'githubId',
+  'githubEmail',
+  'notionEmail',
+  'discordId',
+  'slackEmail',
+  'feeChecked',
+  'completed',
+  'isStaff'
+];
 const SUPPORTED_API_ACTIONS = [
   'health',
   'apiInfo',
@@ -43,7 +90,12 @@ const SUPPORTED_API_ACTIONS = [
   'members',
   'manualApprove',
   'excusedSet',
-  'graduationReport'
+  'graduationReport',
+  'sheetSchemaAudit',
+  'seasonImportBegin',
+  'seasonImportChunk',
+  'seasonImportFinalize',
+  'seasonImportAbort'
 ];
 
 const VARIABLE_CATALOG = {
@@ -498,6 +550,46 @@ function handleApiRequest(params) {
           return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
         }
         data = getGraduationReport(params.season || '');
+        break;
+      }
+
+      case 'sheetSchemaAudit': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = getSheetSchemaAudit(params.season || '');
+        break;
+      }
+
+      case 'seasonImportBegin': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = beginSeasonImport(params);
+        break;
+      }
+
+      case 'seasonImportChunk': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = importSeasonChunk(params);
+        break;
+      }
+
+      case 'seasonImportFinalize': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = finalizeSeasonImport(params);
+        break;
+      }
+
+      case 'seasonImportAbort': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = abortSeasonImport(params);
         break;
       }
 
@@ -2076,9 +2168,10 @@ function collectSessionsFromSheet(sheet, options) {
   const variableConfig = normalizeVariableConfig(opts.variableConfig || getVariableConfig());
 
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const memberSchema = opts.memberSchema || resolveMemberSchemaFromHeaders(headers);
   const parsedSessions = [];
 
-  for (let j = 3; j < headers.length; j++) {
+  for (let j = Math.max(0, memberSchema.sessionStartColIndex); j < headers.length; j++) {
     const parsed = parseSessionHeader(headers[j]);
     if (!parsed) continue;
 
@@ -2406,22 +2499,244 @@ function markSeasonAttendance(phoneNumber, seasonName) {
 }
 
 function isValidPhoneNumber(phoneNumber) {
-  return /^010\d{8}$/.test(String(phoneNumber || '').replace(/-/g, ''));
+  return /^010\d{8}$/.test(String(phoneNumber || '').replace(/\D/g, ''));
 }
 
 function normalizePhone(phoneNumber) {
-  return String(phoneNumber || '').replace(/-/g, '').trim();
+  return String(phoneNumber || '').replace(/\D/g, '').trim();
 }
 
-function findMemberRowIndex(values, cleanedPhone) {
-  for (let i = 1; i < values.length; i++) {
-    const storedPhone = normalizePhone(values[i][2]);
-    if (storedPhone === cleanedPhone) {
-      return i;
+function normalizeMemberHeaderToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-]/g, '')
+    .replace(/[()]/g, '')
+    .replace(/\./g, '');
+}
+
+function getMemberHeaderHints() {
+  return {
+    name: ['name', '이름', '성명', '성함'],
+    season: ['season', '기수', 'cohort', '학기'],
+    phone: ['phone', '전화번호', '핸드폰', '휴대폰', '연락처', 'mobile'],
+    email: ['email', '이메일', '메일', '연락처이메일'],
+    githubId: ['githubid', 'github', '깃허브id', '깃허브아이디'],
+    githubEmail: ['githubemail', '깃허브이메일'],
+    notionEmail: ['notionemail', '노션이메일'],
+    discordId: ['discordid', 'discorid', '디스코드id', '디스코드아이디'],
+    slackEmail: ['slackemail', '슬랙이메일'],
+    feeChecked: ['회비체크', '회비', 'feepaid', 'feechecked'],
+    completed: ['수료여부', '수료', 'completed'],
+    isStaff: ['운영진여부', '운영진', 'staff', 'isstaff']
+  };
+}
+
+function resolveMemberSchemaFromHeaders(headers) {
+  const values = Array.isArray(headers) ? headers : [];
+  const tokens = values.map(normalizeMemberHeaderToken);
+  const hints = getMemberHeaderHints();
+  const fieldMap = {};
+  const usedCols = {};
+
+  MEMBER_FIELD_ORDER.forEach(field => {
+    const hintList = hints[field] || [];
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    for (let i = 0; i < tokens.length; i++) {
+      if (usedCols[i]) continue;
+      const token = tokens[i];
+      if (!token) continue;
+
+      let score = 0;
+      hintList.forEach(h => {
+        const hint = normalizeMemberHeaderToken(h);
+        if (!hint) return;
+        if (token === hint) {
+          score = Math.max(score, 1);
+          return;
+        }
+        if (token.indexOf(hint) !== -1 || hint.indexOf(token) !== -1) {
+          score = Math.max(score, 0.72);
+        }
+      });
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    }
+
+    if (bestIndex >= 0 && bestScore >= 0.65) {
+      fieldMap[field] = bestIndex;
+      usedCols[bestIndex] = true;
+    } else {
+      fieldMap[field] = null;
+    }
+  });
+
+  if (fieldMap.name === null && values.length > 0) fieldMap.name = 0;
+  if (fieldMap.season === null && values.length > 1) fieldMap.season = 1;
+  if (fieldMap.phone === null && values.length > 2) fieldMap.phone = 2;
+
+  let sessionStartColIndex = -1;
+  const sessionColumns = [];
+  for (let i = 0; i < values.length; i++) {
+    if (parseSessionHeader(values[i])) {
+      sessionColumns.push(i);
+      if (sessionStartColIndex === -1) {
+        sessionStartColIndex = i;
+      }
     }
   }
 
-  return -1;
+  let profileMax = 0;
+  MEMBER_FIELD_ORDER.forEach(field => {
+    const idx = fieldMap[field];
+    if (idx !== null && idx !== undefined) {
+      profileMax = Math.max(profileMax, idx + 1);
+    }
+  });
+  profileMax = Math.max(profileMax, 3);
+  if (sessionStartColIndex === -1 || sessionStartColIndex < profileMax) {
+    sessionStartColIndex = profileMax;
+  }
+
+  const missingRequired = ['name', 'season', 'phone'].filter(field => fieldMap[field] === null || fieldMap[field] === undefined);
+  const strictMissingRequired = ['name', 'season', 'phone', 'email'].filter(field => fieldMap[field] === null || fieldMap[field] === undefined);
+
+  const isV2 = MEMBER_V2_SHEET_HEADERS.every((header, idx) => normalizeMemberHeaderToken(values[idx]) === normalizeMemberHeaderToken(header));
+
+  return {
+    headers: values,
+    fieldMap: fieldMap,
+    sessionStartColIndex: sessionStartColIndex,
+    sessionColumns: sessionColumns,
+    missingRequired: missingRequired,
+    strictMissingRequired: strictMissingRequired,
+    isV2: isV2
+  };
+}
+
+function resolveMemberSchema(sheet) {
+  const lastCol = Math.max(1, sheet.getLastColumn());
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  return resolveMemberSchemaFromHeaders(headers);
+}
+
+function getMemberFieldValue(row, schema, field) {
+  const map = schema && schema.fieldMap ? schema.fieldMap : {};
+  const idx = map[field];
+  if (idx === null || idx === undefined || idx < 0) return '';
+  return row[idx];
+}
+
+function normalizeSeasonNumber(value) {
+  if (value === null || value === undefined || value === '') return NaN;
+  if (typeof value === 'number' && isFinite(value)) {
+    const rounded = Math.round(value);
+    return rounded > 0 ? rounded : NaN;
+  }
+  return parseCohortNumber(value);
+}
+
+function formatSeasonLabel(value) {
+  const seasonNo = normalizeSeasonNumber(value);
+  if (!isNaN(seasonNo)) return `${seasonNo}기`;
+  const text = String(value || '').trim();
+  return text || '';
+}
+
+function parseBooleanLikeValue(value) {
+  if (value === true) return { value: true, valid: true };
+  if (value === false) return { value: false, valid: true };
+  if (value === null || value === undefined || value === '') return { value: null, valid: true };
+
+  const text = String(value).trim().toLowerCase();
+  if (!text) return { value: null, valid: true };
+
+  const trueTokens = { true: true, '1': true, y: true, yes: true, o: true, '예': true, '체크': true, checked: true };
+  const falseTokens = { false: true, '0': true, n: true, no: true, x: true, '아니오': true, unchecked: true };
+
+  if (trueTokens[text]) return { value: true, valid: true };
+  if (falseTokens[text]) return { value: false, valid: true };
+  return { value: null, valid: false };
+}
+
+function normalizeMemberRecord(raw, schema) {
+  const row = Array.isArray(raw) ? raw : [];
+  const memberSchema = schema || { fieldMap: {} };
+  const seasonRaw = getMemberFieldValue(row, memberSchema, 'season');
+  const seasonNo = normalizeSeasonNumber(seasonRaw);
+  const seasonLabel = formatSeasonLabel(seasonRaw);
+
+  const email = normalizeImportEmail(getMemberFieldValue(row, memberSchema, 'email'));
+  const githubId = String(getMemberFieldValue(row, memberSchema, 'githubId') || '').trim();
+  const githubEmail = normalizeImportEmail(getMemberFieldValue(row, memberSchema, 'githubEmail'));
+  const notionEmail = normalizeImportEmail(getMemberFieldValue(row, memberSchema, 'notionEmail'));
+  const discordId = String(getMemberFieldValue(row, memberSchema, 'discordId') || '').trim();
+  const slackEmail = normalizeImportEmail(getMemberFieldValue(row, memberSchema, 'slackEmail'));
+  const feeChecked = parseBooleanLikeValue(getMemberFieldValue(row, memberSchema, 'feeChecked'));
+  const completed = parseBooleanLikeValue(getMemberFieldValue(row, memberSchema, 'completed'));
+  const isStaff = parseBooleanLikeValue(getMemberFieldValue(row, memberSchema, 'isStaff'));
+
+  return {
+    name: String(getMemberFieldValue(row, memberSchema, 'name') || '').trim(),
+    season: isNaN(seasonNo) ? null : seasonNo,
+    seasonLabel: seasonLabel,
+    grade: seasonLabel,
+    phone: normalizePhone(getMemberFieldValue(row, memberSchema, 'phone')),
+    email: email,
+    githubId: githubId,
+    githubEmail: githubEmail,
+    notionEmail: notionEmail,
+    discordId: discordId,
+    slackEmail: slackEmail,
+    feeChecked: feeChecked.value,
+    completed: completed.value,
+    isStaff: isStaff.value
+  };
+}
+
+function readMemberFromRow(row, schema) {
+  return normalizeMemberRecord(row, schema);
+}
+
+function findMemberRowIndexByPhone(values, schema, cleanedPhone) {
+  const rows = Array.isArray(values) ? values : [];
+  const memberSchema = schema || resolveMemberSchemaFromHeaders(rows[0] || []);
+  const matchedRowIndexes = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const storedPhone = normalizePhone(getMemberFieldValue(rows[i], memberSchema, 'phone'));
+    if (!storedPhone) continue;
+    if (storedPhone === cleanedPhone) {
+      matchedRowIndexes.push(i);
+    }
+  }
+
+  return {
+    rowIndex: matchedRowIndexes.length === 1 ? matchedRowIndexes[0] : -1,
+    matchedRowIndexes: matchedRowIndexes,
+    duplicateRowIndexes: matchedRowIndexes.length > 1 ? matchedRowIndexes : []
+  };
+}
+
+function findMemberRowIndex(values, cleanedPhone, schema) {
+  const result = findMemberRowIndexByPhone(values, schema, cleanedPhone);
+  if (result.matchedRowIndexes.length === 0) return -1;
+  return result.matchedRowIndexes[0];
+}
+
+function buildPhoneSuperkeyDuplicateResult(rowIndexes) {
+  const rows = (rowIndexes || []).map(idx => idx + 1);
+  return {
+    success: false,
+    errorCode: 'PHONE_SUPERKEY_DUPLICATE',
+    message: `동일 Phone 슈퍼키가 중복되었습니다. (rows: ${rows.join(', ')})`,
+    duplicateRows: rows
+  };
 }
 
 /**
@@ -2439,9 +2754,10 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
   try {
     const dataRange = sheet.getDataRange();
     const values = dataRange.getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
     const now = new Date();
 
-    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
+    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true, memberSchema: memberSchema });
     const activeSession = findActiveSession(sessions, now);
 
     if (!activeSession) {
@@ -2455,17 +2771,23 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
       return { success: false, message: '출석 가능한 시간이 종료되었습니다.' };
     }
 
-    const targetRowIndex = findMemberRowIndex(values, cleanedInputPhone);
-    if (targetRowIndex === -1) {
+    const lookup = findMemberRowIndexByPhone(values, memberSchema, cleanedInputPhone);
+    if (lookup.duplicateRowIndexes.length > 0) {
+      return buildPhoneSuperkeyDuplicateResult(lookup.duplicateRowIndexes);
+    }
+
+    const targetRowIndex = lookup.rowIndex;
+    if (targetRowIndex < 0) {
       return { success: false, message: '등록되지 않은 전화번호입니다.' };
     }
+
+    const member = readMemberFromRow(values[targetRowIndex], memberSchema);
+    const seasonDisplay = member.seasonLabel || '미정기수';
 
     const targetRange = sheet.getRange(targetRowIndex + 1, activeSession.colIndex + 1);
     const existing = targetRange.getValue();
     if (existing && String(existing).trim() !== '') {
-      const name = values[targetRowIndex][0];
-      const grade = values[targetRowIndex][1];
-      return { success: false, message: `(${grade}) ${name}님은 이미 출석체크를 완료했습니다.` };
+      return { success: false, message: `(${seasonDisplay}) ${member.name}님은 이미 출석체크를 완료했습니다.` };
     }
 
     const writeTime = new Date();
@@ -2516,14 +2838,15 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
       ? Math.round((attendedCount / denominator) * 100)
       : 0;
 
-    const name = values[targetRowIndex][0];
-    const grade = values[targetRowIndex][1];
+    const seasonLabel = member.seasonLabel || seasonDisplay;
     const fortune = getRandomFortune();
 
     return {
       success: true,
-      name: name,
-      grade: grade,
+      name: member.name,
+      grade: seasonLabel,
+      season: member.season,
+      seasonLabel: seasonLabel,
       time: formattedTime,
       attendanceType: attendanceType,
       sessionKey: activeSession.sessionKey,
@@ -2594,16 +2917,21 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
   }
 
   const values = sheet.getDataRange().getValues();
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false });
+  const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
 
-  const targetRowIndex = findMemberRowIndex(values, cleanedInputPhone);
-  if (targetRowIndex === -1) {
+  const lookup = findMemberRowIndexByPhone(values, memberSchema, cleanedInputPhone);
+  if (lookup.duplicateRowIndexes.length > 0) {
+    return buildPhoneSuperkeyDuplicateResult(lookup.duplicateRowIndexes);
+  }
+
+  const targetRowIndex = lookup.rowIndex;
+  if (targetRowIndex < 0) {
     return { success: false, message: '등록되지 않은 전화번호입니다.' };
   }
 
   const now = new Date();
-  const name = values[targetRowIndex][0];
-  const grade = values[targetRowIndex][1];
+  const member = readMemberFromRow(values[targetRowIndex], memberSchema);
 
   const attendanceDetails = [];
   let attendedCount = 0;
@@ -2652,8 +2980,10 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
   return {
     success: true,
     data: {
-      name: name,
-      grade: grade,
+      name: member.name,
+      grade: member.seasonLabel || formatSeasonLabel(member.season),
+      season: member.season,
+      seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
       seasonAlias: seasonAlias || toSeasonAlias(sheet.getName()),
       attended: attendedCount,
       total: attendanceDetails.length,
@@ -2676,12 +3006,13 @@ function getAllPhoneNumbers() {
     if (!sheet) return [];
 
     const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
     const phoneNumbers = [];
 
     for (let i = 1; i < values.length; i++) {
-      if (values[i][2]) {
-        phoneNumbers.push(normalizePhone(values[i][2]));
-      }
+      const memberPhone = normalizePhone(getMemberFieldValue(values[i], memberSchema, 'phone'));
+      if (!memberPhone) continue;
+      phoneNumbers.push(memberPhone);
     }
 
     return phoneNumbers;
@@ -2818,9 +3149,10 @@ function getSeasonAttendanceRanking(seasonName) {
  */
 function getAttendanceRankingFromSheet(sheet, seasonAlias) {
   const values = sheet.getDataRange().getValues();
+  const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
   const now = new Date();
 
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false });
+  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
   const closedSessions = sessions.filter(session => session.lateDeadline <= now);
 
   if (closedSessions.length === 0) {
@@ -2830,10 +3162,8 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
   const rankings = [];
 
   for (let i = 1; i < values.length; i++) {
-    const name = values[i][0];
-    const grade = values[i][1];
-    const phone = values[i][2];
-    if (!name || !phone) continue;
+    const member = readMemberFromRow(values[i], memberSchema);
+    if (!member.name || !member.phone) continue;
 
     let attendedCount = 0;
     let effectiveSessionCount = 0;
@@ -2884,8 +3214,10 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
     }
 
     rankings.push({
-      name: name,
-      grade: grade,
+      name: member.name,
+      grade: member.seasonLabel || formatSeasonLabel(member.season),
+      season: member.season,
+      seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
       attendedCount: attendedCount,
       totalSessions: effectiveSessionCount,
       attendanceRate: Math.round(attendanceRate),
@@ -2947,6 +3279,85 @@ function getSheetLink(seasonName) {
     return {
       success: false,
       message: error.message || '시트 링크 생성 중 오류가 발생했습니다.'
+    };
+  }
+}
+
+function buildSheetSchemaAuditReport(sheet, seasonAlias) {
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0] || [];
+  const schema = resolveMemberSchemaFromHeaders(headers);
+
+  const strictRequired = ['name', 'season', 'phone', 'email'];
+  const requiredMissingCounts = {};
+  strictRequired.forEach(field => {
+    requiredMissingCounts[field] = 0;
+  });
+
+  const phoneRowsByValue = {};
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const member = readMemberFromRow(row, schema);
+
+    if (!member.name) requiredMissingCounts.name++;
+    if (!member.phone) requiredMissingCounts.phone++;
+    if (member.season === null || isNaN(Number(member.season))) requiredMissingCounts.season++;
+    if (!member.email || !isValidImportEmail(member.email)) requiredMissingCounts.email++;
+
+    if (member.phone) {
+      if (!phoneRowsByValue[member.phone]) {
+        phoneRowsByValue[member.phone] = [];
+      }
+      phoneRowsByValue[member.phone].push(i + 1);
+    }
+  }
+
+  const duplicatePhones = [];
+  Object.keys(phoneRowsByValue).forEach(phone => {
+    const rows = phoneRowsByValue[phone];
+    if (rows.length > 1) {
+      duplicatePhones.push({ phone: phone, rows: rows });
+    }
+  });
+
+  return {
+    seasonAlias: seasonAlias || toSeasonAlias(sheet.getName()),
+    sheetName: sheet.getName(),
+    headerMap: schema.fieldMap,
+    headerRow: headers,
+    mode: schema.isV2 ? 'v2' : 'v1_or_custom',
+    sessionStartColIndex: schema.sessionStartColIndex,
+    sessionDetectedCount: schema.sessionColumns.length,
+    requiredMissingCounts: requiredMissingCounts,
+    duplicatePhones: duplicatePhones,
+    strictMissingRequired: schema.strictMissingRequired
+  };
+}
+
+function getSheetSchemaAudit(seasonName) {
+  try {
+    const requested = String(seasonName || '').trim();
+    const reports = [];
+
+    if (requested) {
+      const info = getRequestedSeasonSheetInfo(requested);
+      reports.push(buildSheetSchemaAuditReport(info.sheet, info.seasonAlias));
+    } else {
+      const candidates = getSeasonSheetCandidates();
+      candidates.forEach(item => {
+        reports.push(buildSheetSchemaAuditReport(item.sheet, item.alias));
+      });
+    }
+
+    return {
+      success: true,
+      generatedAt: new Date().getTime(),
+      reports: reports
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || '시트 스키마 감사 중 오류가 발생했습니다.'
     };
   }
 }
@@ -3171,23 +3582,733 @@ function countAttendanceRecordsInSession(sheet, colIndex) {
   return count;
 }
 
+function parseImportMode(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  return raw === 'all' ? 'all' : 'yb';
+}
+
+function parseSeasonNumberFromAlias(alias) {
+  const m = String(alias || '').trim().match(SEASON_NAME_REGEX);
+  if (!m) return NaN;
+  return parseInt(m[1], 10);
+}
+
+function parseCohortNumber(value) {
+  const text = String(value || '').trim();
+  if (!text) return NaN;
+
+  let match = text.match(/season_(\d{1,2})/i);
+  if (match) return parseInt(match[1], 10);
+
+  match = text.match(/(\d{1,2})\s*기/);
+  if (match) return parseInt(match[1], 10);
+
+  match = text.match(/^(\d{1,2})$/);
+  if (match) return parseInt(match[1], 10);
+
+  return NaN;
+}
+
+function normalizeImportSeason(value) {
+  const seasonNo = normalizeSeasonNumber(value);
+  if (isNaN(seasonNo)) return NaN;
+  return seasonNo;
+}
+
+function normalizeImportPhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!/^010\d{8}$/.test(digits)) return '';
+  return digits;
+}
+
+function normalizeImportEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isValidImportEmail(value) {
+  const email = normalizeImportEmail(value);
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizeOptionalImportEmail(value) {
+  const email = normalizeImportEmail(value);
+  if (!email) return '';
+  return isValidImportEmail(email) ? email : '';
+}
+
+function toImportBooleanCell(value) {
+  const parsed = parseBooleanLikeValue(value);
+  if (!parsed.valid) return null;
+  return parsed.value;
+}
+
+function toImportJsonText(value, maxLength) {
+  const limit = Math.max(1000, Number(maxLength || 20000));
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text.length > limit ? text.slice(0, limit) : text;
+}
+
+function parseImportRowsJson(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+
+  try {
+    const parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    throw new Error('rowsJson 파싱에 실패했습니다.');
+  }
+}
+
+function ensureImportMetaSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(IMPORT_META_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(IMPORT_META_SHEET_NAME);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, IMPORT_META_HEADERS.length);
+  const headers = headerRange.getValues()[0];
+  if (String(headers[0] || '').trim() !== IMPORT_META_HEADERS[0]) {
+    headerRange.clearContent();
+    headerRange.setValues([IMPORT_META_HEADERS]);
+  }
+
+  if (!sheet.isSheetHidden()) {
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+function getImportMetaRows() {
+  const metaSheet = ensureImportMetaSheet();
+  const lastRow = metaSheet.getLastRow();
+  if (lastRow < 2) {
+    return { metaSheet: metaSheet, rows: [] };
+  }
+
+  const values = metaSheet.getRange(2, 1, lastRow - 1, IMPORT_META_HEADERS.length).getValues();
+  const rows = values.map((row, idx) => ({
+    rowIndex: idx + 2,
+    importId: String(row[0] || '').trim(),
+    seasonAlias: String(row[1] || '').trim(),
+    stagingSheetName: String(row[2] || '').trim(),
+    status: String(row[3] || '').trim(),
+    importMode: parseImportMode(row[4] || ''),
+    schemaSummaryJson: toImportJsonText(row[5], 50000),
+    createdAt: String(row[6] || '').trim(),
+    updatedAt: String(row[7] || '').trim(),
+    insertedCount: Math.max(0, parseInt(row[8], 10) || 0),
+    skippedDuplicateCount: Math.max(0, parseInt(row[9], 10) || 0),
+    droppedInvalidCount: Math.max(0, parseInt(row[10], 10) || 0),
+    skippedNonTargetCount: Math.max(0, parseInt(row[11], 10) || 0)
+  })).filter(item => !!item.importId);
+
+  return { metaSheet: metaSheet, rows: rows };
+}
+
+function getImportMetaRecord(importId) {
+  const id = String(importId || '').trim();
+  if (!id) return null;
+  const pack = getImportMetaRows();
+  const found = pack.rows.find(item => item.importId === id);
+  if (!found) return null;
+  found.metaSheet = pack.metaSheet;
+  return found;
+}
+
+function setImportMetaRecord(record) {
+  if (!record || !record.rowIndex) return;
+  const metaSheet = record.metaSheet || ensureImportMetaSheet();
+  const nowText = formatDateTime(new Date());
+
+  const row = [
+    record.importId,
+    record.seasonAlias,
+    record.stagingSheetName,
+    record.status,
+    parseImportMode(record.importMode),
+    toImportJsonText(record.schemaSummaryJson, 50000),
+    record.createdAt || nowText,
+    nowText,
+    Math.max(0, Number(record.insertedCount || 0)),
+    Math.max(0, Number(record.skippedDuplicateCount || 0)),
+    Math.max(0, Number(record.droppedInvalidCount || 0)),
+    Math.max(0, Number(record.skippedNonTargetCount || 0))
+  ];
+  metaSheet.getRange(record.rowIndex, 1, 1, IMPORT_META_HEADERS.length).setValues([row]);
+}
+
+function appendImportMetaRecord(record) {
+  const metaSheet = ensureImportMetaSheet();
+  const nowText = formatDateTime(new Date());
+  const row = [
+    String(record.importId || '').trim(),
+    String(record.seasonAlias || '').trim(),
+    String(record.stagingSheetName || '').trim(),
+    String(record.status || IMPORT_STATUS_ACTIVE).trim(),
+    parseImportMode(record.importMode || 'yb'),
+    toImportJsonText(record.schemaSummaryJson, 50000),
+    String(record.createdAt || nowText).trim(),
+    String(record.updatedAt || nowText).trim(),
+    Math.max(0, Number(record.insertedCount || 0)),
+    Math.max(0, Number(record.skippedDuplicateCount || 0)),
+    Math.max(0, Number(record.droppedInvalidCount || 0)),
+    Math.max(0, Number(record.skippedNonTargetCount || 0))
+  ];
+  const rowIndex = metaSheet.getLastRow() + 1;
+  metaSheet.getRange(rowIndex, 1, 1, IMPORT_META_HEADERS.length).setValues([row]);
+  return rowIndex;
+}
+
+function findSeasonSheetByAlias(alias) {
+  const targetAlias = toSeasonAlias(alias);
+  if (!targetAlias) return null;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const exact = ss.getSheetByName(targetAlias);
+  if (exact) return exact;
+
+  const legacy = ss.getSheetByName(getLegacySeasonName(targetAlias));
+  return legacy || null;
+}
+
+function findActiveImportBySeason(alias) {
+  const seasonAlias = toSeasonAlias(alias);
+  if (!seasonAlias) return null;
+
+  const pack = getImportMetaRows();
+  return pack.rows.find(item => item.seasonAlias === seasonAlias && item.status === IMPORT_STATUS_ACTIVE) || null;
+}
+
+function makeImportStagingSheetName(seasonAlias) {
+  const suffix = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+  const rand = Utilities.getUuid().replace(/-/g, '').slice(0, 6);
+  return `_import_${seasonAlias}_${suffix}_${rand}`;
+}
+
+function beginSeasonImport(params) {
+  const alias = toSeasonAlias(params.season || params.seasonNo || '');
+  if (!alias) {
+    return {
+      success: false,
+      errorCode: 'INVALID_SEASON',
+      message: '유효한 시즌 번호가 필요합니다. (예: 9 또는 season_09)'
+    };
+  }
+
+  const importMode = parseImportMode(params.importMode || params.mode);
+  const schemaSummaryJson = toImportJsonText(params.schemaSummaryJson || params.schemaSummary || '', 50000);
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(5000);
+
+  try {
+    if (findSeasonSheetByAlias(alias)) {
+      return {
+        success: false,
+        errorCode: 'DUPLICATE_SEASON',
+        message: `${alias} 시즌 시트가 이미 존재합니다.`
+      };
+    }
+
+    const activeImport = findActiveImportBySeason(alias);
+    if (activeImport) {
+      return {
+        success: false,
+        errorCode: 'IMPORT_ALREADY_ACTIVE',
+        message: `${alias} 시즌에 진행 중인 업로드가 있습니다. 먼저 완료/중단해주세요.`,
+        importId: activeImport.importId
+      };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const stagingSheet = ss.insertSheet(makeImportStagingSheetName(alias));
+    const stagingHeaders = MEMBER_V2_SHEET_HEADERS.concat([MEMBER_IMPORT_INTERNAL_PHONE_KEY_HEADER]);
+    stagingSheet.getRange(1, 1, 1, stagingHeaders.length).setValues([stagingHeaders]);
+    stagingSheet.hideSheet();
+
+    const importId = Utilities.getUuid().replace(/-/g, '');
+    const nowText = formatDateTime(new Date());
+    appendImportMetaRecord({
+      importId: importId,
+      seasonAlias: alias,
+      stagingSheetName: stagingSheet.getName(),
+      status: IMPORT_STATUS_ACTIVE,
+      importMode: importMode,
+      schemaSummaryJson: schemaSummaryJson,
+      createdAt: nowText,
+      updatedAt: nowText,
+      insertedCount: 0,
+      skippedDuplicateCount: 0,
+      droppedInvalidCount: 0,
+      skippedNonTargetCount: 0
+    });
+
+    return {
+      success: true,
+      importId: importId,
+      seasonAlias: alias,
+      stagingSheetName: stagingSheet.getName(),
+      importMode: importMode,
+      createdAt: nowText
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: 'IMPORT_BEGIN_FAILED',
+      message: error.message || '업로드 시작 중 오류가 발생했습니다.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getStagingSeenKeys(stagingSheet) {
+  const seenPhones = {};
+  const lastRow = stagingSheet.getLastRow();
+  if (lastRow < 2) {
+    return { phones: seenPhones };
+  }
+
+  const values = stagingSheet.getRange(2, 1, lastRow - 1, MEMBER_V2_SHEET_HEADERS.length + 1).getValues();
+  values.forEach(row => {
+    const phone = normalizeImportPhone(row[2]);
+    const phoneKey = normalizePhone(row[12] || row[2]);
+    if (phone) seenPhones[phone] = true;
+    if (phoneKey) seenPhones[phoneKey] = true;
+  });
+
+  return { phones: seenPhones };
+}
+
+function classifyImportRow(rawRow, options) {
+  const opts = options || {};
+  const sourceRow = Math.max(1, parseInt(rawRow.sourceRow || rawRow.rowNumber || 0, 10) || 0);
+  const seasonNo = Number(opts.seasonNo || 0);
+  const importMode = parseImportMode(opts.importMode || 'yb');
+  const seenPhones = opts.seenPhones || {};
+
+  const name = String(rawRow.name !== undefined ? rawRow.name : (rawRow.Name || '')).trim();
+  const rowSeason = rawRow.season !== undefined
+    ? rawRow.season
+    : (rawRow.Season !== undefined
+      ? rawRow.Season
+      : (rawRow.cohort || rawRow.cohortRaw || rawRow.grade || rawRow.seasonRaw || ''));
+  const seasonValue = normalizeImportSeason(rowSeason);
+  const rawPhone = rawRow.phone !== undefined ? rawRow.phone : (rawRow.Phone !== undefined ? rawRow.Phone : rawRow.phoneRaw);
+  const phone = normalizeImportPhone(rawPhone || '');
+  const phoneKey = normalizePhone(phone);
+  const rawEmail = rawRow.email !== undefined ? rawRow.email : (rawRow.Email !== undefined ? rawRow.Email : rawRow.emailRaw);
+  const email = normalizeImportEmail(rawEmail || '');
+
+  const githubId = String(rawRow.githubId || rawRow['Github ID'] || '').trim();
+  const rawGithubEmail = rawRow.githubEmail !== undefined ? rawRow.githubEmail : rawRow['Github Email'];
+  const rawNotionEmail = rawRow.notionEmail !== undefined ? rawRow.notionEmail : rawRow['Notion Email'];
+  const rawSlackEmail = rawRow.slackEmail !== undefined ? rawRow.slackEmail : rawRow['Slack Email'];
+  const rawFeeChecked = rawRow.feeChecked !== undefined ? rawRow.feeChecked : rawRow['회비 체크'];
+  const rawCompleted = rawRow.completed !== undefined ? rawRow.completed : rawRow['수료 여부'];
+  const rawIsStaff = rawRow.isStaff !== undefined ? rawRow.isStaff : rawRow['운영진 여부'];
+  const githubEmail = normalizeOptionalImportEmail(rawGithubEmail || '');
+  const notionEmail = normalizeOptionalImportEmail(rawNotionEmail || '');
+  const discordId = String(rawRow.discordId || rawRow.discorId || rawRow['Discord ID'] || rawRow['Discor ID'] || '').trim();
+  const slackEmail = normalizeOptionalImportEmail(rawSlackEmail || '');
+  const feeChecked = toImportBooleanCell(rawFeeChecked);
+  const completed = toImportBooleanCell(rawCompleted);
+  const isStaff = toImportBooleanCell(rawIsStaff);
+
+  if (!name) {
+    return {
+      action: 'invalid',
+      sourceRow: sourceRow,
+      reasonCode: 'MISSING_NAME',
+      reason: '이름 값이 비어 있습니다.'
+    };
+  }
+
+  if (!phone) {
+    return {
+      action: 'invalid',
+      sourceRow: sourceRow,
+      reasonCode: 'INVALID_PHONE',
+      reason: '전화번호 형식이 올바르지 않습니다. (010xxxxxxxx)'
+    };
+  }
+
+  if (!email || !isValidImportEmail(email)) {
+    return {
+      action: 'invalid',
+      sourceRow: sourceRow,
+      reasonCode: 'INVALID_REQUIRED_EMAIL',
+      reason: '필수 이메일 형식이 올바르지 않습니다.'
+    };
+  }
+
+  if (isNaN(seasonValue)) {
+    return {
+      action: 'invalid',
+      sourceRow: sourceRow,
+      reasonCode: 'INVALID_SEASON',
+      reason: '필수 Season 값이 없거나 형식이 올바르지 않습니다.'
+    };
+  }
+
+  if (importMode === 'yb' && seasonValue !== seasonNo) {
+    return {
+      action: 'non_target',
+      sourceRow: sourceRow,
+      reasonCode: 'NON_TARGET_COHORT',
+      reason: `대상 시즌(${seasonNo}기)과 다른 기수(${seasonValue}기)입니다.`
+    };
+  }
+
+  if (seenPhones[phoneKey]) {
+    return {
+      action: 'duplicate',
+      sourceRow: sourceRow,
+      reasonCode: 'DUPLICATE_PHONE',
+      reason: '전화번호 기준 중복입니다.'
+    };
+  }
+
+  const warningCodes = [];
+  if (rawGithubEmail !== undefined && rawGithubEmail !== null && String(rawGithubEmail).trim() !== '' && !githubEmail) {
+    warningCodes.push('WARN_INVALID_GITHUB_EMAIL');
+  }
+  if (rawNotionEmail !== undefined && rawNotionEmail !== null && String(rawNotionEmail).trim() !== '' && !notionEmail) {
+    warningCodes.push('WARN_INVALID_NOTION_EMAIL');
+  }
+  if (rawSlackEmail !== undefined && rawSlackEmail !== null && String(rawSlackEmail).trim() !== '' && !slackEmail) {
+    warningCodes.push('WARN_INVALID_SLACK_EMAIL');
+  }
+  if (rawFeeChecked !== undefined && rawFeeChecked !== null && String(rawFeeChecked).trim() !== '' && feeChecked === null) {
+    warningCodes.push('WARN_INVALID_FEE_CHECKED');
+  }
+  if (rawCompleted !== undefined && rawCompleted !== null && String(rawCompleted).trim() !== '' && completed === null) {
+    warningCodes.push('WARN_INVALID_COMPLETED');
+  }
+  if (rawIsStaff !== undefined && rawIsStaff !== null && String(rawIsStaff).trim() !== '' && isStaff === null) {
+    warningCodes.push('WARN_INVALID_IS_STAFF');
+  }
+
+  return {
+    action: 'insert',
+    sourceRow: sourceRow,
+    rowValues: [
+      name,
+      seasonValue,
+      phone,
+      email,
+      githubId,
+      githubEmail,
+      notionEmail,
+      discordId,
+      slackEmail,
+      feeChecked === null ? '' : feeChecked,
+      completed === null ? '' : completed,
+      isStaff === null ? '' : isStaff,
+      phoneKey
+    ],
+    warningCodes: warningCodes
+  };
+}
+
+function importSeasonChunk(params) {
+  const importId = String(params.importId || '').trim();
+  if (!importId) {
+    return { success: false, errorCode: 'INVALID_IMPORT_ID', message: 'importId 파라미터가 필요합니다.' };
+  }
+
+  let rows;
+  try {
+    rows = parseImportRowsJson(params.rowsJson || params.rows || '[]');
+  } catch (error) {
+    return { success: false, errorCode: 'INVALID_ROWS', message: error.message || 'rows 파싱 실패' };
+  }
+
+  if (rows.length === 0) {
+    const snapshot = getImportMetaRecord(importId);
+    return {
+      success: true,
+      importId: importId,
+      chunkSeq: parseInt(params.chunkSeq, 10) || 0,
+      inserted_count: 0,
+      skipped_duplicate_count: 0,
+      dropped_invalid_count: 0,
+      skipped_non_target_count: 0,
+      cumulative: snapshot ? {
+        inserted_count: snapshot.insertedCount,
+        skipped_duplicate_count: snapshot.skippedDuplicateCount,
+        dropped_invalid_count: snapshot.droppedInvalidCount,
+        skipped_non_target_count: snapshot.skippedNonTargetCount
+      } : null,
+      dropped: []
+    };
+  }
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(5000);
+  try {
+    const record = getImportMetaRecord(importId);
+    if (!record) {
+      return { success: false, errorCode: 'IMPORT_NOT_FOUND', message: '진행 중인 업로드 세션을 찾을 수 없습니다.' };
+    }
+    if (record.status !== IMPORT_STATUS_ACTIVE) {
+      return { success: false, errorCode: 'IMPORT_NOT_ACTIVE', message: '이미 종료된 업로드 세션입니다.' };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const stagingSheet = ss.getSheetByName(record.stagingSheetName);
+    if (!stagingSheet) {
+      return { success: false, errorCode: 'STAGING_NOT_FOUND', message: '스테이징 시트를 찾을 수 없습니다.' };
+    }
+
+    const seasonNo = parseSeasonNumberFromAlias(record.seasonAlias);
+    if (isNaN(seasonNo)) {
+      return { success: false, errorCode: 'INVALID_SEASON', message: '시즌 번호 해석에 실패했습니다.' };
+    }
+
+    const seen = getStagingSeenKeys(stagingSheet);
+    const appendRows = [];
+    const dropped = [];
+    let insertedCount = 0;
+    let skippedDuplicateCount = 0;
+    let droppedInvalidCount = 0;
+    let skippedNonTargetCount = 0;
+
+    rows.forEach(item => {
+      const result = classifyImportRow(item || {}, {
+        seasonNo: seasonNo,
+        importMode: record.importMode,
+        seenPhones: seen.phones
+      });
+
+      if (result.action === 'insert') {
+        appendRows.push(result.rowValues);
+        const phoneKey = normalizePhone(result.rowValues[12] || result.rowValues[2]);
+        if (phoneKey) {
+          seen.phones[phoneKey] = true;
+        }
+        insertedCount++;
+
+        (result.warningCodes || []).forEach(code => {
+          dropped.push({
+            sourceRow: result.sourceRow,
+            reasonCode: code,
+            reason: '선택 필드 값이 유효하지 않아 빈 값으로 저장됩니다.'
+          });
+        });
+        return;
+      }
+
+      if (result.action === 'duplicate') {
+        skippedDuplicateCount++;
+      } else if (result.action === 'non_target') {
+        skippedNonTargetCount++;
+      } else {
+        droppedInvalidCount++;
+      }
+
+      dropped.push({
+        sourceRow: result.sourceRow,
+        reasonCode: result.reasonCode,
+        reason: result.reason
+      });
+    });
+
+    if (appendRows.length > 0) {
+      const startRow = stagingSheet.getLastRow() + 1;
+      stagingSheet.getRange(startRow, 1, appendRows.length, MEMBER_V2_SHEET_HEADERS.length + 1).setValues(appendRows);
+    }
+
+    record.insertedCount += insertedCount;
+    record.skippedDuplicateCount += skippedDuplicateCount;
+    record.droppedInvalidCount += droppedInvalidCount;
+    record.skippedNonTargetCount += skippedNonTargetCount;
+    setImportMetaRecord(record);
+
+    return {
+      success: true,
+      importId: importId,
+      seasonAlias: record.seasonAlias,
+      chunkSeq: parseInt(params.chunkSeq, 10) || 0,
+      inserted_count: insertedCount,
+      skipped_duplicate_count: skippedDuplicateCount,
+      dropped_invalid_count: droppedInvalidCount,
+      skipped_non_target_count: skippedNonTargetCount,
+      cumulative: {
+        inserted_count: record.insertedCount,
+        skipped_duplicate_count: record.skippedDuplicateCount,
+        dropped_invalid_count: record.droppedInvalidCount,
+        skipped_non_target_count: record.skippedNonTargetCount
+      },
+      dropped: dropped.slice(0, 200)
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: 'IMPORT_CHUNK_FAILED',
+      message: error.message || '업로드 청크 처리 중 오류가 발생했습니다.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function finalizeSeasonImport(params) {
+  const importId = String(params.importId || '').trim();
+  if (!importId) {
+    return { success: false, errorCode: 'INVALID_IMPORT_ID', message: 'importId 파라미터가 필요합니다.' };
+  }
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(5000);
+  try {
+    const record = getImportMetaRecord(importId);
+    if (!record) {
+      return { success: false, errorCode: 'IMPORT_NOT_FOUND', message: '진행 중인 업로드 세션을 찾을 수 없습니다.' };
+    }
+    if (record.status !== IMPORT_STATUS_ACTIVE) {
+      return { success: false, errorCode: 'IMPORT_NOT_ACTIVE', message: '이미 종료된 업로드 세션입니다.' };
+    }
+
+    if (findSeasonSheetByAlias(record.seasonAlias)) {
+      return {
+        success: false,
+        errorCode: 'DUPLICATE_SEASON',
+        message: `${record.seasonAlias} 시즌 시트가 이미 존재합니다.`
+      };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const stagingSheet = ss.getSheetByName(record.stagingSheetName);
+    if (!stagingSheet) {
+      return { success: false, errorCode: 'STAGING_NOT_FOUND', message: '스테이징 시트를 찾을 수 없습니다.' };
+    }
+
+    const internalCol = MEMBER_V2_SHEET_HEADERS.length + 1;
+    const internalHeader = String(stagingSheet.getRange(1, internalCol).getValue() || '').trim();
+    if (internalHeader === MEMBER_IMPORT_INTERNAL_PHONE_KEY_HEADER) {
+      stagingSheet.deleteColumn(internalCol);
+    }
+
+    stagingSheet.getRange(1, 1, 1, MEMBER_V2_SHEET_HEADERS.length).setValues([MEMBER_V2_SHEET_HEADERS]);
+    if (stagingSheet.isSheetHidden()) {
+      stagingSheet.showSheet();
+    }
+
+    stagingSheet.setName(record.seasonAlias);
+    PropertiesService.getScriptProperties().setProperty('activeSheet', record.seasonAlias);
+
+    record.stagingSheetName = record.seasonAlias;
+    record.status = IMPORT_STATUS_FINALIZED;
+    setImportMetaRecord(record);
+
+    return {
+      success: true,
+      importId: importId,
+      seasonAlias: record.seasonAlias,
+      sheetName: record.seasonAlias,
+      inserted_count: record.insertedCount,
+      skipped_duplicate_count: record.skippedDuplicateCount,
+      dropped_invalid_count: record.droppedInvalidCount,
+      skipped_non_target_count: record.skippedNonTargetCount
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: 'IMPORT_FINALIZE_FAILED',
+      message: error.message || '업로드 완료 처리 중 오류가 발생했습니다.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function abortSeasonImport(params) {
+  const importId = String(params.importId || '').trim();
+  if (!importId) {
+    return { success: false, errorCode: 'INVALID_IMPORT_ID', message: 'importId 파라미터가 필요합니다.' };
+  }
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(5000);
+  try {
+    const record = getImportMetaRecord(importId);
+    if (!record) {
+      return { success: false, errorCode: 'IMPORT_NOT_FOUND', message: '업로드 세션을 찾을 수 없습니다.' };
+    }
+
+    if (record.status === IMPORT_STATUS_FINALIZED) {
+      return {
+        success: false,
+        errorCode: 'IMPORT_ALREADY_FINALIZED',
+        message: '이미 완료된 업로드 세션은 중단할 수 없습니다.'
+      };
+    }
+
+    if (record.status === IMPORT_STATUS_ABORTED) {
+      return {
+        success: true,
+        importId: importId,
+        seasonAlias: record.seasonAlias,
+        message: '이미 중단 처리된 업로드 세션입니다.'
+      };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const stagingSheet = ss.getSheetByName(record.stagingSheetName);
+    if (stagingSheet) {
+      ss.deleteSheet(stagingSheet);
+    }
+
+    record.status = IMPORT_STATUS_ABORTED;
+    setImportMetaRecord(record);
+
+    return {
+      success: true,
+      importId: importId,
+      seasonAlias: record.seasonAlias,
+      message: '업로드 세션이 중단되었습니다.'
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: 'IMPORT_ABORT_FAILED',
+      message: error.message || '업로드 중단 중 오류가 발생했습니다.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function getMembers(seasonName) {
   try {
     const info = getRequestedSeasonSheetInfo(seasonName);
     const sheet = info.sheet;
     const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
 
     const members = [];
     for (let i = 1; i < values.length; i++) {
-      const name = String(values[i][0] || '').trim();
-      const grade = String(values[i][1] || '').trim();
-      const phone = normalizePhone(values[i][2]);
-      if (!name || !phone) continue;
+      const member = readMemberFromRow(values[i], memberSchema);
+      if (!member.name || !member.phone) continue;
 
       members.push({
-        name: name,
-        grade: grade,
-        phone: phone,
+        name: member.name,
+        grade: member.seasonLabel || formatSeasonLabel(member.season),
+        season: member.season,
+        seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
+        phone: member.phone,
+        email: member.email,
+        githubId: member.githubId,
+        githubEmail: member.githubEmail,
+        notionEmail: member.notionEmail,
+        discordId: member.discordId,
+        slackEmail: member.slackEmail,
+        feeChecked: member.feeChecked,
+        completed: member.completed,
+        isStaff: member.isStaff,
         rowIndex: i + 1
       });
     }
@@ -3226,18 +4347,25 @@ function manualApproveAttendance(params) {
   try {
     const info = resolveSeasonSheetInfo(seasonName);
     const sheet = info.sheet;
-    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
+    const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true, memberSchema: memberSchema });
     const session = sessions.find(s => s.sessionKey === sessionKey);
 
     if (!session) {
       return { success: false, message: '회차를 찾을 수 없습니다.' };
     }
 
-    const values = sheet.getDataRange().getValues();
-    const rowIndex = findMemberRowIndex(values, cleanedPhone);
-    if (rowIndex === -1) {
+    const lookup = findMemberRowIndexByPhone(values, memberSchema, cleanedPhone);
+    if (lookup.duplicateRowIndexes.length > 0) {
+      return buildPhoneSuperkeyDuplicateResult(lookup.duplicateRowIndexes);
+    }
+
+    const rowIndex = lookup.rowIndex;
+    if (rowIndex < 0) {
       return { success: false, message: '해당 전화번호의 회원을 찾을 수 없습니다.' };
     }
+    const member = readMemberFromRow(values[rowIndex], memberSchema);
 
     const targetRange = sheet.getRange(rowIndex + 1, session.colIndex + 1);
     const existing = targetRange.getValue();
@@ -3259,8 +4387,10 @@ function manualApproveAttendance(params) {
       sessionKey: session.sessionKey,
       attendanceType: 'late',
       time: formattedTime,
-      name: values[rowIndex][0],
-      grade: values[rowIndex][1],
+      name: member.name,
+      grade: member.seasonLabel || formatSeasonLabel(member.season),
+      season: member.season,
+      seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
       phone: cleanedPhone
     };
   } finally {
@@ -3327,16 +4457,22 @@ function setExcusedAttendance(params) {
   try {
     const info = resolveSeasonSheetInfo(seasonName);
     const sheet = info.sheet;
-    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
+    const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true, memberSchema: memberSchema });
     const session = sessions.find(s => s.sessionKey === sessionKey);
 
     if (!session) {
       return { success: false, message: '회차를 찾을 수 없습니다.' };
     }
 
-    const values = sheet.getDataRange().getValues();
-    const rowIndex = findMemberRowIndex(values, cleanedPhone);
-    if (rowIndex === -1) {
+    const lookup = findMemberRowIndexByPhone(values, memberSchema, cleanedPhone);
+    if (lookup.duplicateRowIndexes.length > 0) {
+      return buildPhoneSuperkeyDuplicateResult(lookup.duplicateRowIndexes);
+    }
+
+    const rowIndex = lookup.rowIndex;
+    if (rowIndex < 0) {
       return { success: false, message: '해당 전화번호의 회원을 찾을 수 없습니다.' };
     }
 
@@ -3475,9 +4611,10 @@ function getGraduationReport(seasonName) {
     const info = getRequestedSeasonSheetInfo(seasonName);
     const sheet = info.sheet;
     const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
 
     const variableConfig = getVariableConfig();
-    const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: false });
+    const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: false, memberSchema: memberSchema });
     const now = new Date();
 
     const requiredPositions = parseRequiredSessionPositions(variableConfig.required_session_positions);
@@ -3491,17 +4628,16 @@ function getGraduationReport(seasonName) {
       maxAbsenceEquivalent = Math.max(0, toNumberWithDefault(maxAbsenceEquivalent, 0));
     }
 
-    const notes = sheet.getLastRow() >= 2 && sheet.getLastColumn() >= 4
-      ? sheet.getRange(2, 4, sheet.getLastRow() - 1, sheet.getLastColumn() - 3).getNotes()
+    const sessionStartCol = Math.max(0, memberSchema.sessionStartColIndex);
+    const notes = sheet.getLastRow() >= 2 && sheet.getLastColumn() > sessionStartCol
+      ? sheet.getRange(2, sessionStartCol + 1, sheet.getLastRow() - 1, sheet.getLastColumn() - sessionStartCol).getNotes()
       : [];
 
     const members = [];
 
     for (let i = 1; i < values.length; i++) {
-      const name = String(values[i][0] || '').trim();
-      const grade = String(values[i][1] || '').trim();
-      const phone = normalizePhone(values[i][2]);
-      if (!name || !phone) continue;
+      const member = readMemberFromRow(values[i], memberSchema);
+      if (!member.name || !member.phone) continue;
 
       let attendedCount = 0;
       let lateCount = 0;
@@ -3519,7 +4655,7 @@ function getGraduationReport(seasonName) {
         const attendTime = parseAttendanceTime(cellValue);
 
         const note = notes.length > 0 && notes[i - 1]
-          ? String(notes[i - 1][session.colIndex - 3] || '').trim()
+          ? String(notes[i - 1][session.colIndex - sessionStartCol] || '').trim()
           : '';
 
         statusMap[session.sessionKey] = status;
@@ -3582,9 +4718,20 @@ function getGraduationReport(seasonName) {
       const isGraduationPossible = requiredPossible && attendancePossible && meetsAbsence;
 
       members.push({
-        name: name,
-        grade: grade,
-        phone: phone,
+        name: member.name,
+        grade: member.seasonLabel || formatSeasonLabel(member.season),
+        season: member.season,
+        seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
+        phone: member.phone,
+        email: member.email,
+        githubId: member.githubId,
+        githubEmail: member.githubEmail,
+        notionEmail: member.notionEmail,
+        discordId: member.discordId,
+        slackEmail: member.slackEmail,
+        feeChecked: member.feeChecked,
+        completed: member.completed,
+        isStaff: member.isStaff,
         attendedCount: attendedCount,
         lateCount: lateCount,
         absentCount: absentCount,

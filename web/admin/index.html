@@ -8,6 +8,8 @@
   <title>Cloud Club 출석체크 관리자</title>
   <!-- 라이브러리 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@2.5.0/fonts/remixicon.css">
@@ -1098,6 +1100,148 @@
       cursor: not-allowed;
     }
 
+    .import-controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .import-controls-grid .form-group {
+      margin: 0;
+      max-width: none;
+      text-align: left;
+    }
+
+    .import-controls-grid .form-label {
+      text-align: left;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    .import-controls-grid .form-input,
+    .import-controls-grid .sheet-select {
+      text-align: left;
+      letter-spacing: 0;
+      font-size: 14px;
+      min-height: 44px;
+      width: 100%;
+    }
+
+    .import-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .import-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.6);
+    }
+
+    .import-chip.pass {
+      border-color: rgba(74, 222, 128, 0.5);
+      color: #4ade80;
+    }
+
+    .import-chip.warn {
+      border-color: rgba(251, 191, 36, 0.5);
+      color: #fbbf24;
+    }
+
+    .import-chip.fail {
+      border-color: rgba(248, 113, 113, 0.5);
+      color: #f87171;
+    }
+
+    .import-mapping-table td {
+      font-size: 13px;
+      line-height: 1.45;
+      color: #dbeafe;
+    }
+
+    .import-mapping-select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(15, 23, 42, 0.85);
+      color: #fff;
+      font-size: 13px;
+    }
+
+    .import-debug-wrap {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 12px;
+      min-height: 80px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .import-debug-item {
+      padding: 9px 10px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(30, 41, 59, 0.46);
+      font-size: 12px;
+      line-height: 1.45;
+      color: #dbeafe;
+    }
+
+    .import-debug-item.blocker {
+      border-color: rgba(248, 113, 113, 0.4);
+      background: rgba(127, 29, 29, 0.2);
+    }
+
+    .import-debug-item.warning {
+      border-color: rgba(251, 191, 36, 0.4);
+      background: rgba(120, 53, 15, 0.22);
+    }
+
+    .import-preview-table td.status-cell {
+      white-space: nowrap;
+    }
+
+    .status-chip.insert {
+      background: #d9ead3;
+    }
+
+    .status-chip.drop {
+      background: #f4cccc;
+    }
+
+    .status-chip.skip {
+      background: #fce5cd;
+    }
+
+    .import-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .import-confirm-box {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -1714,6 +1858,10 @@
         <i class="fas fa-calendar-alt"></i>
         <span>일정 관리</span>
       </button>
+      <button class="tab-button" onclick="openTab('seasonImport', event)">
+        <i class="fas fa-file-import"></i>
+        <span>시즌 생성/업로드</span>
+      </button>
       <button class="tab-button" onclick="openTab('variables', event)">
         <i class="fas fa-sliders-h"></i>
         <span>변수명 관리</span>
@@ -1970,6 +2118,125 @@
         <div id="scheduleCalendarGrid" class="schedule-calendar-grid">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- 시즌 생성/업로드 탭 -->
+    <div id="seasonImport" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-file-upload card-icon"></i>
+          <h2 class="card-title">합격자 업로드로 시즌 생성</h2>
+        </div>
+        <p class="info-text">
+          CSV/TSV/XLSX 파일을 즉시 반영하지 않고, 먼저 <strong>스키마 추론 + 가상 시트 미리보기</strong>를 제공합니다.<br>
+          헤더가 달라도 셀 패턴(이름/Season/전화번호/이메일/boolean) 기반으로 자동 분류하며, 필요 시 수동 매핑으로 보정할 수 있습니다.
+        </p>
+
+        <div class="import-controls-grid">
+          <div class="form-group">
+            <label for="importSeasonNoInput" class="form-label">생성할 시즌 번호</label>
+            <input id="importSeasonNoInput" class="form-input" type="text" placeholder="예: 9 또는 season_09">
+          </div>
+          <div class="form-group">
+            <label for="importModeSelect" class="form-label">적재 모드</label>
+            <select id="importModeSelect" class="sheet-select">
+              <option value="yb">YB만 적재 (기본)</option>
+              <option value="all">전체 적재 (OB+YB)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="importFileInput" class="form-label">업로드 파일</label>
+            <input id="importFileInput" class="form-input" type="file" accept=".csv,.tsv,.xlsx,.xls,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+          </div>
+        </div>
+
+        <div class="sheet-actions" style="margin-top: 14px;">
+          <button type="button" class="btn" onclick="analyzeImportFile()">
+            <i class="fas fa-vial"></i>
+            <span>파싱/미리보기 분석</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="resetImportFlow()">
+            <i class="fas fa-undo"></i>
+            <span>초기화</span>
+          </button>
+        </div>
+        <div id="importAnalyzeResult" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-clipboard-check card-icon"></i>
+          <h2 class="card-title">시트 스키마 감사</h2>
+        </div>
+        <p class="info-text">선택 시즌의 헤더 매핑/Phone 중복/필수값 결측/세션 시작열을 점검합니다.</p>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-secondary" onclick="refreshSheetSchemaAudit()">
+            <i class="fas fa-search"></i>
+            <span>감사 리포트 새로고침</span>
+          </button>
+        </div>
+        <div id="sheetSchemaAuditWrap" class="table-wrap">
+          <p class="info-text">시즌 생성/업로드 탭 진입 시 자동으로 리포트를 불러옵니다.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-brain card-icon"></i>
+          <h2 class="card-title">스키마 추론 결과</h2>
+        </div>
+        <p class="info-text">컬럼명 힌트 + 셀 패턴 점수로 필드를 자동 추론합니다. 신뢰도가 낮으면 수동 매핑을 확정해야 업로드가 열립니다.</p>
+        <div id="importSchemaInferenceWrap" class="table-wrap">
+          <p class="info-text">분석 전입니다.</p>
+        </div>
+        <div id="importManualMappingWrap" class="table-wrap" style="margin-top:12px;">
+          <p class="info-text">분석 후 수동 매핑 항목이 표시됩니다.</p>
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-secondary" onclick="confirmImportManualMapping()">
+            <i class="fas fa-check-double"></i>
+            <span>현재 매핑 확정</span>
+          </button>
+        </div>
+        <label class="import-confirm-box">
+          <input id="importPreviewConfirmed" type="checkbox" onchange="refreshImportExecuteButtonState()">
+          <span>미리보기 결과를 확인했고, 시즌 생성/업로드를 진행합니다.</span>
+        </label>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-bug card-icon"></i>
+          <h2 class="card-title">파싱 디버그 로그</h2>
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-secondary" onclick="downloadImportDebugJson()">
+            <i class="fas fa-download"></i>
+            <span>디버그 JSON 다운로드</span>
+          </button>
+        </div>
+        <div id="importDebugWrap" class="import-debug-wrap">
+          <p class="info-text">분석 후 메시지가 표시됩니다.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-table card-icon"></i>
+          <h2 class="card-title">가상 시즌 시트 미리보기 (A:L)</h2>
+        </div>
+        <div id="importPreviewSummary" class="import-summary"></div>
+        <div id="importPreviewWrap" class="table-wrap">
+          <p class="info-text">분석 후 미리보기 테이블이 표시됩니다.</p>
+        </div>
+        <div class="sheet-actions">
+          <button id="importExecuteBtn" type="button" class="btn" disabled onclick="executeSeasonImport()">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>시즌 생성 + 업로드 반영</span>
+          </button>
+        </div>
+        <div id="importExecuteResult" style="display:none;"></div>
       </div>
     </div>
 
