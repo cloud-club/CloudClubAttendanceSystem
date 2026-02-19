@@ -89,3 +89,6 @@ Secret이 비어 있거나 주입 실패면 배포를 실패시켜야 조용한 
 ## 관련 문서
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/005_관리자기능_확장_연대기_2026-02-18.md`
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/012_운영자_개발자_통합_검증체크리스트.md`
+- `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/013_시즌업데이트_운영한계_및_임시운영정책.md`
+- `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/014_시즌업로드_파일정규화_및_파싱트러블슈팅_런북.md`
+- `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/015_시즌업데이트_Diff고도화_로드맵.md`
