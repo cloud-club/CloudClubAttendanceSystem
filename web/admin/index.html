@@ -1533,6 +1533,10 @@
       text-align: left;
     }
 
+    .dashboard-input-group-wide {
+      grid-column: span 2;
+    }
+
     .dashboard-input-group label {
       color: #bfdbfe;
       font-size: 12px;
@@ -1549,12 +1553,185 @@
       max-width: 100%;
     }
 
-    .dashboard-session-select,
-    .dashboard-member-select {
-      min-height: 96px !important;
-      height: 96px;
-      padding-right: 10px !important;
-      background-image: none;
+    .dashboard-hidden-select {
+      position: absolute;
+      width: 0;
+      height: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .dashboard-multi-toolbar {
+      display: grid;
+      gap: 8px;
+    }
+
+    .dashboard-quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .dashboard-quick-btn {
+      border: 1px solid rgba(191, 219, 254, 0.35);
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.42);
+      color: #dbeafe;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .dashboard-quick-btn:hover {
+      border-color: rgba(147, 197, 253, 0.8);
+      color: #ffffff;
+    }
+
+    .dashboard-selection-hint {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .dashboard-option-list {
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.45);
+      max-height: 196px;
+      overflow-y: auto;
+      padding: 6px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .dashboard-option-empty {
+      color: #94a3b8;
+      font-size: 12px;
+      text-align: center;
+      padding: 12px;
+    }
+
+    .dashboard-option-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(30, 41, 59, 0.5);
+      cursor: pointer;
+    }
+
+    .dashboard-option-row:hover {
+      border-color: rgba(147, 197, 253, 0.45);
+      background: rgba(30, 64, 175, 0.25);
+    }
+
+    .dashboard-option-row.is-disabled {
+      opacity: 0.52;
+      cursor: not-allowed;
+    }
+
+    .dashboard-option-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin-top: 2px;
+      accent-color: #60a5fa;
+    }
+
+    .dashboard-option-content {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .dashboard-option-main {
+      color: #dbeafe;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dashboard-option-sub {
+      color: #93bbfc;
+      font-size: 11px;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dashboard-option-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #cbd5e1;
+      background: rgba(15, 23, 42, 0.45);
+    }
+
+    .dashboard-option-badge.closed {
+      color: #86efac;
+      border-color: rgba(74, 222, 128, 0.4);
+      background: rgba(20, 83, 45, 0.35);
+    }
+
+    .dashboard-option-badge.open {
+      color: #fde68a;
+      border-color: rgba(251, 191, 36, 0.4);
+      background: rgba(120, 53, 15, 0.35);
+    }
+
+    .dashboard-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 30px;
+    }
+
+    .dashboard-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      border: 1px solid rgba(147, 197, 253, 0.35);
+      background: rgba(30, 64, 175, 0.2);
+      color: #dbeafe;
+      font-size: 12px;
+      font-weight: 700;
+      max-width: 100%;
+    }
+
+    .dashboard-chip-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 220px;
+    }
+
+    .dashboard-chip-remove {
+      border: none;
+      background: transparent;
+      color: #bfdbfe;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .dashboard-chip-remove:hover {
+      color: #ffffff;
     }
 
     .dashboard-action-row {
@@ -1634,6 +1811,41 @@
       font-size: 14px;
       font-weight: 700;
       margin-bottom: 8px;
+    }
+
+    .dashboard-chart-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .dashboard-chart-title-row .dashboard-chart-title {
+      margin-bottom: 0;
+    }
+
+    .dashboard-pill-toggle {
+      display: inline-flex;
+      border-radius: 999px;
+      border: 1px solid rgba(147, 197, 253, 0.35);
+      background: rgba(15, 23, 42, 0.38);
+      overflow: hidden;
+    }
+
+    .dashboard-pill-btn {
+      border: none;
+      background: transparent;
+      color: #bfdbfe;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .dashboard-pill-btn.active {
+      color: #ffffff;
+      background: rgba(59, 130, 246, 0.38);
     }
 
     .dashboard-chart-subtitle {
@@ -2148,10 +2360,12 @@
         grid-template-columns: 1fr;
       }
 
-      .dashboard-session-select,
-      .dashboard-member-select {
-        height: 120px;
-        min-height: 120px !important;
+      .dashboard-input-group-wide {
+        grid-column: span 1;
+      }
+
+      .dashboard-option-list {
+        max-height: 156px;
       }
 
       .dashboard-action-row {
@@ -2178,6 +2392,11 @@
 
       .dashboard-kpi-grid {
         grid-template-columns: 1fr 1fr;
+      }
+
+      .dashboard-chart-title-row {
+        flex-direction: column;
+        align-items: flex-start;
       }
     }
     
@@ -2466,9 +2685,23 @@
               <label for="dashboardDateToInput">기간 종료일</label>
               <input id="dashboardDateToInput" type="date" class="form-input">
             </div>
-            <div class="dashboard-input-group">
-              <label for="dashboardSessionSelect">행사(다중 선택)</label>
-              <select id="dashboardSessionSelect" class="sheet-select dashboard-session-select" multiple></select>
+            <div class="dashboard-input-group dashboard-input-group-wide">
+              <label for="dashboardSessionSearchInput">행사(다중 선택)</label>
+              <div class="dashboard-multi-toolbar">
+                <input id="dashboardSessionSearchInput" type="text" class="form-input" placeholder="회차/일시 검색">
+                <div class="dashboard-quick-actions">
+                  <button type="button" class="dashboard-quick-btn" onclick="dashboardSelectAllSessions()">전체 선택</button>
+                  <button type="button" class="dashboard-quick-btn" onclick="dashboardSelectClosedSessions()">종료 회차</button>
+                  <button type="button" class="dashboard-quick-btn" onclick="dashboardSelectRecentSessions()">최근 4회차</button>
+                  <button type="button" class="dashboard-quick-btn" onclick="dashboardClearSessionSelection()">선택 해제</button>
+                </div>
+                <div class="dashboard-selection-hint" id="dashboardSessionSelectionHint">선택된 회차를 기준으로 KPI/차트/테이블이 함께 갱신됩니다.</div>
+                <div id="dashboardSessionOptionList" class="dashboard-option-list">
+                  <div class="dashboard-option-empty">회차 데이터를 불러오는 중입니다.</div>
+                </div>
+                <div id="dashboardSessionChipList" class="dashboard-chip-list"></div>
+              </div>
+              <select id="dashboardSessionSelect" class="sheet-select dashboard-hidden-select" multiple aria-hidden="true" tabindex="-1"></select>
             </div>
             <div class="dashboard-input-group">
               <label for="dashboardTopNSelect">Top-N</label>
@@ -2494,13 +2727,21 @@
                 <option value="line">라인</option>
               </select>
             </div>
-            <div class="dashboard-input-group">
-              <label for="dashboardMemberSearchInput">개인 시계열 검색</label>
-              <input id="dashboardMemberSearchInput" type="text" class="form-input" placeholder="이름/기수 검색">
-            </div>
-            <div class="dashboard-input-group">
-              <label for="dashboardMemberSelect">개인 시계열 대상(다중 선택)</label>
-              <select id="dashboardMemberSelect" class="sheet-select dashboard-member-select" multiple></select>
+            <div class="dashboard-input-group dashboard-input-group-wide">
+              <label for="dashboardMemberSearchInput">개인 시계열 대상(다중 선택)</label>
+              <div class="dashboard-multi-toolbar">
+                <input id="dashboardMemberSearchInput" type="text" class="form-input" placeholder="이름/기수/그룹 검색">
+                <div class="dashboard-quick-actions">
+                  <button type="button" class="dashboard-quick-btn" onclick="dashboardSelectTopMembers()">상위 3명 추천</button>
+                  <button type="button" class="dashboard-quick-btn" onclick="dashboardClearMemberSelection()">선택 해제</button>
+                </div>
+                <div class="dashboard-selection-hint" id="dashboardMemberSelectionHint">최대 5명까지 선택할 수 있습니다.</div>
+                <div id="dashboardMemberOptionList" class="dashboard-option-list">
+                  <div class="dashboard-option-empty">회원 데이터를 불러오는 중입니다.</div>
+                </div>
+                <div id="dashboardMemberChipList" class="dashboard-chip-list"></div>
+              </div>
+              <select id="dashboardMemberSelect" class="sheet-select dashboard-hidden-select" multiple aria-hidden="true" tabindex="-1"></select>
             </div>
           </div>
 
@@ -2576,6 +2817,19 @@
             <div class="dashboard-chart-subtitle">hover에 출석일시/상태/유고사유(note) 노출</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardMemberTrendChart"></canvas>
+            </div>
+          </div>
+          <div class="dashboard-chart-card">
+            <div class="dashboard-chart-title-row">
+              <div class="dashboard-chart-title">전체 비율(원형)</div>
+              <div class="dashboard-pill-toggle" id="dashboardDonutModeToggle">
+                <button type="button" class="dashboard-pill-btn active" data-donut-mode="status">출석 상태</button>
+                <button type="button" class="dashboard-pill-btn" data-donut-mode="cohort">OB/YB</button>
+              </div>
+            </div>
+            <div class="dashboard-chart-subtitle" id="dashboardDonutSubtitle">출석/지각/결석/유고 비율</div>
+            <div class="dashboard-canvas-wrap">
+              <canvas id="dashboardDonutChart"></canvas>
             </div>
           </div>
         </div>

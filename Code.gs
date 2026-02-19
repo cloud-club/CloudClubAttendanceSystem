@@ -3358,6 +3358,8 @@ function getAttendanceDashboardSummary(params) {
     let totalLate = 0;
     let totalAbsent = 0;
     let totalEffective = 0;
+    let minActualAttendanceMs = null;
+    let maxActualAttendanceMs = null;
 
     for (let i = 1; i < values.length; i++) {
       const member = readMemberFromRow(values[i], memberSchema);
@@ -3411,6 +3413,13 @@ function getAttendanceDashboardSummary(params) {
 
           const attendTime = parseAttendanceTime(cellValue);
           if (!attendTime || isNaN(attendTime.getTime())) return;
+          const attendMs = attendTime.getTime();
+          if (minActualAttendanceMs === null || attendMs < minActualAttendanceMs) {
+            minActualAttendanceMs = attendMs;
+          }
+          if (maxActualAttendanceMs === null || attendMs > maxActualAttendanceMs) {
+            maxActualAttendanceMs = attendMs;
+          }
 
           const diffSec = Math.floor((attendTime - session.startTime) / 1000);
           const minAllowed = Math.floor((session.openTime - session.startTime) / 1000);
@@ -3534,6 +3543,25 @@ function getAttendanceDashboardSummary(params) {
     const totalLateCount = sessionRows.reduce((sum, row) => sum + Number(row.lateCount || 0), 0);
     const totalAbsentCount = sessionRows.reduce((sum, row) => sum + Number(row.absentCount || 0), 0);
     const totalExcusedCount = sessionRows.reduce((sum, row) => sum + Number(row.excusedCount || 0), 0);
+    const selectedSessionDateRange = buildDashboardDateRangeFromSessions(selectedSessions);
+    const closedSessionDateRange = buildDashboardDateRangeFromSessions(closedSelectedSessions);
+
+    let defaultDateFrom = '';
+    let defaultDateTo = '';
+    let defaultDateSource = 'none';
+    if (minActualAttendanceMs !== null && maxActualAttendanceMs !== null) {
+      defaultDateFrom = formatDateKey(new Date(minActualAttendanceMs));
+      defaultDateTo = formatDateKey(new Date(maxActualAttendanceMs));
+      defaultDateSource = 'actual_attendance';
+    } else if (closedSessionDateRange.fromDate && closedSessionDateRange.toDate) {
+      defaultDateFrom = closedSessionDateRange.fromDate;
+      defaultDateTo = closedSessionDateRange.toDate;
+      defaultDateSource = 'closed_sessions';
+    } else if (selectedSessionDateRange.fromDate && selectedSessionDateRange.toDate) {
+      defaultDateFrom = selectedSessionDateRange.fromDate;
+      defaultDateTo = selectedSessionDateRange.toDate;
+      defaultDateSource = 'selected_sessions';
+    }
 
     const payload = {
       success: true,
@@ -3572,6 +3600,21 @@ function getAttendanceDashboardSummary(params) {
           lateCount: totalLateCount,
           absentCount: totalAbsentCount,
           excusedCount: totalExcusedCount
+        },
+        donut: {
+          statusRatio: {
+            onTimeCount: totalOnTime,
+            lateCount: totalLateCount,
+            absentCount: totalAbsentCount,
+            excusedCount: totalExcusedCount,
+            totalCount: totalOnTime + totalLateCount + totalAbsentCount + totalExcusedCount
+          },
+          cohortRatio: {
+            obCount: obMembers,
+            ybCount: ybMembers,
+            unknownCount: unknownMembers,
+            totalCount: totalMembers
+          }
         }
       },
       ranking: rankings.slice(0, 10),
@@ -3592,6 +3635,17 @@ function getAttendanceDashboardSummary(params) {
         memberOptions: memberOptions,
         defaultMemberKeys: memberOptions.slice(0, 3).map(item => item.memberKey),
         notesEnabled: true,
+        actualAttendanceRange: {
+          minAttendAtMs: minActualAttendanceMs,
+          maxAttendAtMs: maxActualAttendanceMs,
+          minAttendAt: minActualAttendanceMs === null ? '' : formatDateTimeMinute(new Date(minActualAttendanceMs)),
+          maxAttendAt: maxActualAttendanceMs === null ? '' : formatDateTimeMinute(new Date(maxActualAttendanceMs))
+        },
+        defaultDateRange: {
+          fromDate: defaultDateFrom,
+          toDate: defaultDateTo,
+          source: defaultDateSource
+        },
         fromCache: false
       }
     };
@@ -3938,6 +3992,31 @@ function filterSessionsForDashboard(sessions, filters) {
     if (filters.dateTo && dateKey > filters.dateTo) return false;
     return true;
   });
+}
+
+function buildDashboardDateRangeFromSessions(sessions) {
+  const list = Array.isArray(sessions) ? sessions : [];
+  if (list.length === 0) {
+    return { fromDate: '', toDate: '' };
+  }
+
+  let minMs = null;
+  let maxMs = null;
+  list.forEach(session => {
+    if (!session || !session.startTime || isNaN(session.startTime.getTime())) return;
+    const startMs = session.startTime.getTime();
+    if (minMs === null || startMs < minMs) minMs = startMs;
+    if (maxMs === null || startMs > maxMs) maxMs = startMs;
+  });
+
+  if (minMs === null || maxMs === null) {
+    return { fromDate: '', toDate: '' };
+  }
+
+  return {
+    fromDate: formatDateKey(new Date(minMs)),
+    toDate: formatDateKey(new Date(maxMs))
+  };
 }
 
 function getDashboardSeasonNo(seasonAlias) {

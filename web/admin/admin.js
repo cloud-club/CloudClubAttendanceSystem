@@ -50,15 +50,21 @@ let attendanceDashboardMemberSeriesCache = {};
 let attendanceDashboardEventRateChart = null;
 let attendanceDashboardEventStatusChart = null;
 let attendanceDashboardMemberTrendChart = null;
+let attendanceDashboardDonutChart = null;
 let attendanceDashboardLastEventRows = [];
+let attendanceDashboardDateRangeUserEdited = false;
+let attendanceDashboardAutoDateHydratedOnce = false;
+let attendanceDashboardDateInputSyncing = false;
 let attendanceDashboardState = {
   group: 'all',
   dateFrom: '',
   dateTo: '',
+  sessionSearch: '',
   sessionKeys: [],
   topN: 10,
   sortBy: 'attendanceRate',
   chartType: 'bar',
+  donutMode: 'status',
   selectedMemberKeys: [],
   memberSearch: ''
 };
@@ -2856,10 +2862,12 @@ function getDefaultAttendanceDashboardState() {
     group: 'all',
     dateFrom: '',
     dateTo: '',
+    sessionSearch: '',
     sessionKeys: [],
     topN: 10,
     sortBy: 'attendanceRate',
     chartType: 'bar',
+    donutMode: 'status',
     selectedMemberKeys: [],
     memberSearch: ''
   };
@@ -2875,12 +2883,14 @@ function normalizeAttendanceDashboardState(rawState) {
       : base.group,
     dateFrom: /^\d{4}-\d{2}-\d{2}$/.test(String(source.dateFrom || '')) ? String(source.dateFrom || '') : '',
     dateTo: /^\d{4}-\d{2}-\d{2}$/.test(String(source.dateTo || '')) ? String(source.dateTo || '') : '',
+    sessionSearch: String(source.sessionSearch || '').trim(),
     sessionKeys: Array.isArray(source.sessionKeys) ? source.sessionKeys.map(v => String(v || '').trim()).filter(v => !!v) : [],
     topN: Math.max(1, Math.min(30, parseInt(String(source.topN || base.topN), 10) || base.topN)),
     sortBy: ['attendanceRate', 'absenceRate', 'participants'].includes(String(source.sortBy || ''))
       ? String(source.sortBy || '')
       : base.sortBy,
     chartType: String(source.chartType || '').toLowerCase() === 'line' ? 'line' : 'bar',
+    donutMode: String(source.donutMode || '').toLowerCase() === 'cohort' ? 'cohort' : 'status',
     selectedMemberKeys: Array.isArray(source.selectedMemberKeys)
       ? source.selectedMemberKeys.map(v => String(v || '').trim()).filter(v => !!v).slice(0, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION)
       : [],
@@ -2923,10 +2933,12 @@ function readAttendanceDashboardStateFromQuery() {
     if (query.has('dash_group')) state.group = query.get('dash_group');
     if (query.has('dash_from')) state.dateFrom = query.get('dash_from');
     if (query.has('dash_to')) state.dateTo = query.get('dash_to');
+    if (query.has('dash_session_q')) state.sessionSearch = query.get('dash_session_q');
     if (query.has('dash_sessions')) state.sessionKeys = String(query.get('dash_sessions') || '').split(',').map(v => v.trim()).filter(v => !!v);
     if (query.has('dash_top')) state.topN = query.get('dash_top');
     if (query.has('dash_sort')) state.sortBy = query.get('dash_sort');
     if (query.has('dash_chart')) state.chartType = query.get('dash_chart');
+    if (query.has('dash_donut')) state.donutMode = query.get('dash_donut');
     if (query.has('dash_members')) state.selectedMemberKeys = String(query.get('dash_members') || '').split(',').map(v => v.trim()).filter(v => !!v);
     if (query.has('dash_member_q')) state.memberSearch = query.get('dash_member_q');
     return Object.keys(state).length > 0 ? normalizeAttendanceDashboardState(state) : null;
@@ -2949,10 +2961,12 @@ function buildAttendanceDashboardShareUrl() {
   setOrDelete('dash_group', state.group);
   setOrDelete('dash_from', state.dateFrom);
   setOrDelete('dash_to', state.dateTo);
+  setOrDelete('dash_session_q', state.sessionSearch);
   setOrDelete('dash_sessions', state.sessionKeys.join(','));
   setOrDelete('dash_top', state.topN);
   setOrDelete('dash_sort', state.sortBy);
   setOrDelete('dash_chart', state.chartType);
+  setOrDelete('dash_donut', state.donutMode);
   setOrDelete('dash_members', state.selectedMemberKeys.join(','));
   setOrDelete('dash_member_q', state.memberSearch);
 
@@ -2963,14 +2977,18 @@ function applyAttendanceDashboardStateToControls() {
   const groupSelect = document.getElementById('dashboardGroupSelect');
   const dateFromInput = document.getElementById('dashboardDateFromInput');
   const dateToInput = document.getElementById('dashboardDateToInput');
+  const sessionSearchInput = document.getElementById('dashboardSessionSearchInput');
   const topNSelect = document.getElementById('dashboardTopNSelect');
   const sortBySelect = document.getElementById('dashboardSortBySelect');
   const chartTypeSelect = document.getElementById('dashboardChartTypeSelect');
   const memberSearchInput = document.getElementById('dashboardMemberSearchInput');
 
   if (groupSelect) groupSelect.value = attendanceDashboardState.group;
+  attendanceDashboardDateInputSyncing = true;
   if (dateFromInput) dateFromInput.value = attendanceDashboardState.dateFrom || '';
   if (dateToInput) dateToInput.value = attendanceDashboardState.dateTo || '';
+  attendanceDashboardDateInputSyncing = false;
+  if (sessionSearchInput) sessionSearchInput.value = attendanceDashboardState.sessionSearch || '';
   if (topNSelect) topNSelect.value = String(attendanceDashboardState.topN || 10);
   if (sortBySelect) sortBySelect.value = attendanceDashboardState.sortBy || 'attendanceRate';
   if (chartTypeSelect) chartTypeSelect.value = attendanceDashboardState.chartType || 'bar';
@@ -2978,6 +2996,7 @@ function applyAttendanceDashboardStateToControls() {
 
   syncDashboardSessionSelectSelection();
   syncDashboardMemberSelectSelection();
+  renderAttendanceDashboardDonutModeToggle();
 }
 
 function syncDashboardSessionSelectSelection() {
@@ -3004,6 +3023,7 @@ function collectAttendanceDashboardStateFromControls() {
   const groupSelect = document.getElementById('dashboardGroupSelect');
   const dateFromInput = document.getElementById('dashboardDateFromInput');
   const dateToInput = document.getElementById('dashboardDateToInput');
+  const sessionSearchInput = document.getElementById('dashboardSessionSearchInput');
   const sessionSelect = document.getElementById('dashboardSessionSelect');
   const topNSelect = document.getElementById('dashboardTopNSelect');
   const sortBySelect = document.getElementById('dashboardSortBySelect');
@@ -3022,10 +3042,12 @@ function collectAttendanceDashboardStateFromControls() {
     group: groupSelect ? groupSelect.value : attendanceDashboardState.group,
     dateFrom: dateFromInput ? dateFromInput.value : attendanceDashboardState.dateFrom,
     dateTo: dateToInput ? dateToInput.value : attendanceDashboardState.dateTo,
+    sessionSearch: sessionSearchInput ? sessionSearchInput.value : attendanceDashboardState.sessionSearch,
     sessionKeys: sessionKeys.length > 0 ? sessionKeys : attendanceDashboardState.sessionKeys,
     topN: topNSelect ? topNSelect.value : attendanceDashboardState.topN,
     sortBy: sortBySelect ? sortBySelect.value : attendanceDashboardState.sortBy,
     chartType: chartTypeSelect ? chartTypeSelect.value : attendanceDashboardState.chartType,
+    donutMode: attendanceDashboardState.donutMode,
     selectedMemberKeys: selectedMemberKeys.length > 0 ? selectedMemberKeys : attendanceDashboardState.selectedMemberKeys,
     memberSearch: memberSearchInput ? memberSearchInput.value : attendanceDashboardState.memberSearch
   });
@@ -3081,6 +3103,15 @@ function formatSignedOffsetMinutes(seconds) {
   return `${sign}${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
+function formatDateKeyFromTimestamp(ms) {
+  const date = new Date(Number(ms));
+  if (isNaN(date.getTime())) return '';
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function getDashboardCohortBadge(tag) {
   if (tag === 'OB' || tag === 'YB') return tag;
   return '미분류';
@@ -3094,6 +3125,30 @@ function renderAttendanceDashboardKpis(payload) {
   setAttendanceDashboardKpiValue('dashboardKpiAttendanceRate', formatDashboardPercent(kpi.averageAttendanceRate || 0));
   setAttendanceDashboardKpiValue('dashboardKpiLateRate', formatDashboardPercent(kpi.averageLateRate || 0));
   setAttendanceDashboardKpiValue('dashboardKpiAbsenceRate', formatDashboardPercent(kpi.averageAbsenceRate || 0));
+}
+
+function getAttendanceDashboardAvailableSessions() {
+  return attendanceDashboardPayload && attendanceDashboardPayload.meta && Array.isArray(attendanceDashboardPayload.meta.availableSessions)
+    ? attendanceDashboardPayload.meta.availableSessions
+    : [];
+}
+
+function getAttendanceDashboardMemberOptions() {
+  return attendanceDashboardPayload && attendanceDashboardPayload.meta && Array.isArray(attendanceDashboardPayload.meta.memberOptions)
+    ? attendanceDashboardPayload.meta.memberOptions
+    : [];
+}
+
+function getFilteredDashboardSessionOptions() {
+  const options = getAttendanceDashboardAvailableSessions();
+  const keyword = String(attendanceDashboardState.sessionSearch || '').trim().toLowerCase();
+  if (!keyword) return options;
+
+  return options.filter(item => {
+    const key = String(item.sessionKey || '').toLowerCase();
+    const date = String(item.date || '').toLowerCase();
+    return key.includes(keyword) || date.includes(keyword);
+  });
 }
 
 function renderAttendanceDashboardSessionOptions(payload) {
@@ -3118,12 +3173,12 @@ function renderAttendanceDashboardSessionOptions(payload) {
   const validSet = {};
   sessions.forEach(item => { validSet[item.sessionKey] = true; });
   attendanceDashboardState.sessionKeys = (attendanceDashboardState.sessionKeys || []).filter(key => !!validSet[key]);
+  syncDashboardSessionSelectSelection();
+  renderAttendanceDashboardSessionPicker();
 }
 
 function getFilteredDashboardMemberOptions() {
-  const options = attendanceDashboardPayload && attendanceDashboardPayload.meta && Array.isArray(attendanceDashboardPayload.meta.memberOptions)
-    ? attendanceDashboardPayload.meta.memberOptions
-    : [];
+  const options = getAttendanceDashboardMemberOptions();
   const keyword = String(attendanceDashboardState.memberSearch || '').trim().toLowerCase();
   if (!keyword) return options;
 
@@ -3139,15 +3194,12 @@ function renderAttendanceDashboardMemberOptions() {
   const memberSelect = document.getElementById('dashboardMemberSelect');
   if (!memberSelect) return;
 
-  const allOptions = attendanceDashboardPayload && attendanceDashboardPayload.meta && Array.isArray(attendanceDashboardPayload.meta.memberOptions)
-    ? attendanceDashboardPayload.meta.memberOptions
-    : [];
-  const options = getFilteredDashboardMemberOptions();
+  const allOptions = getAttendanceDashboardMemberOptions();
   const selectedSet = {};
   (attendanceDashboardState.selectedMemberKeys || []).forEach(key => { selectedSet[key] = true; });
 
   memberSelect.innerHTML = '';
-  options.forEach(item => {
+  allOptions.forEach(item => {
     const option = document.createElement('option');
     option.value = item.memberKey;
     option.textContent = `${item.seasonLabel} ${item.name} (${item.attendedCount}회/${item.attendanceRate}%)`;
@@ -3158,6 +3210,173 @@ function renderAttendanceDashboardMemberOptions() {
   const validSet = {};
   allOptions.forEach(item => { validSet[item.memberKey] = true; });
   attendanceDashboardState.selectedMemberKeys = (attendanceDashboardState.selectedMemberKeys || []).filter(key => !!validSet[key]);
+  syncDashboardMemberSelectSelection();
+  renderAttendanceDashboardMemberPicker();
+}
+
+function renderAttendanceDashboardSessionPicker() {
+  const optionList = document.getElementById('dashboardSessionOptionList');
+  const chipList = document.getElementById('dashboardSessionChipList');
+  const hintNode = document.getElementById('dashboardSessionSelectionHint');
+  if (!optionList || !chipList) return;
+
+  const allSessions = getAttendanceDashboardAvailableSessions();
+  const filtered = getFilteredDashboardSessionOptions();
+  const selectedKeys = attendanceDashboardState.sessionKeys || [];
+  const selectedSet = {};
+  selectedKeys.forEach(key => { selectedSet[key] = true; });
+  const sessionMap = {};
+  allSessions.forEach(item => { sessionMap[item.sessionKey] = item; });
+
+  if (filtered.length === 0) {
+    optionList.innerHTML = '<div class="dashboard-option-empty">조건에 맞는 회차가 없습니다.</div>';
+  } else {
+    optionList.innerHTML = filtered.map(item => `
+      <label class="dashboard-option-row">
+        <input type="checkbox" data-session-key="${escapeHtml(item.sessionKey)}" ${selectedSet[item.sessionKey] ? 'checked' : ''}>
+        <span class="dashboard-option-content">
+          <span class="dashboard-option-main">${escapeHtml(item.sessionKey || '-')}</span>
+          <span class="dashboard-option-sub">${escapeHtml(item.date || '-')}</span>
+        </span>
+        <span class="dashboard-option-badge ${item.isClosed ? 'closed' : 'open'}">${item.isClosed ? '종료' : '예정'}</span>
+      </label>
+    `).join('');
+  }
+
+  chipList.innerHTML = selectedKeys.length === 0
+    ? '<span class="dashboard-selection-hint">선택된 회차 없음</span>'
+    : selectedKeys.map(key => {
+      const session = sessionMap[key];
+      const label = session ? `${session.sessionKey} (${session.date})` : key;
+      return `
+        <span class="dashboard-chip">
+          <span class="dashboard-chip-text">${escapeHtml(label)}</span>
+          <button type="button" class="dashboard-chip-remove" data-session-remove-key="${escapeHtml(key)}">x</button>
+        </span>
+      `;
+    }).join('');
+
+  if (hintNode) {
+    const closedCount = selectedKeys.filter(key => {
+      const item = sessionMap[key];
+      return item && item.isClosed;
+    }).length;
+    hintNode.textContent = `선택 회차 ${selectedKeys.length}개 (종료 ${closedCount}개). 필터 적용 시 KPI/차트/테이블/순위가 함께 갱신됩니다.`;
+  }
+}
+
+function renderAttendanceDashboardMemberPicker() {
+  const optionList = document.getElementById('dashboardMemberOptionList');
+  const chipList = document.getElementById('dashboardMemberChipList');
+  const hintNode = document.getElementById('dashboardMemberSelectionHint');
+  if (!optionList || !chipList) return;
+
+  const allOptions = getAttendanceDashboardMemberOptions();
+  const filtered = getFilteredDashboardMemberOptions();
+  const selectedKeys = attendanceDashboardState.selectedMemberKeys || [];
+  const selectedSet = {};
+  selectedKeys.forEach(key => { selectedSet[key] = true; });
+  const optionMap = {};
+  allOptions.forEach(item => { optionMap[item.memberKey] = item; });
+  const reachedLimit = selectedKeys.length >= ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION;
+
+  if (filtered.length === 0) {
+    optionList.innerHTML = '<div class="dashboard-option-empty">조건에 맞는 회원이 없습니다.</div>';
+  } else {
+    optionList.innerHTML = filtered.map(item => {
+      const checked = !!selectedSet[item.memberKey];
+      const disabled = reachedLimit && !checked;
+      const cohortTag = getDashboardCohortBadge(item.cohortTag || '');
+      return `
+        <label class="dashboard-option-row${disabled ? ' is-disabled' : ''}">
+          <input type="checkbox" data-member-key="${escapeHtml(item.memberKey)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+          <span class="dashboard-option-content">
+            <span class="dashboard-option-main">${escapeHtml(item.seasonLabel || '-')} ${escapeHtml(item.name || '-')}</span>
+            <span class="dashboard-option-sub">${escapeHtml(cohortTag)} | ${Number(item.attendedCount || 0)}회 / ${Number(item.attendanceRate || 0)}%</span>
+          </span>
+        </label>
+      `;
+    }).join('');
+  }
+
+  chipList.innerHTML = selectedKeys.length === 0
+    ? '<span class="dashboard-selection-hint">선택된 회원 없음</span>'
+    : selectedKeys.map(key => {
+      const item = optionMap[key];
+      const label = item ? `${item.seasonLabel} ${item.name}` : key;
+      return `
+        <span class="dashboard-chip">
+          <span class="dashboard-chip-text">${escapeHtml(label)}</span>
+          <button type="button" class="dashboard-chip-remove" data-member-remove-key="${escapeHtml(key)}">x</button>
+        </span>
+      `;
+    }).join('');
+
+  if (hintNode) {
+    hintNode.textContent = `선택 ${selectedKeys.length}/${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명. hover에서 출석일시/상태/유고사유(note) 확인 가능`;
+  }
+}
+
+function setAttendanceDashboardSessionKeys(keys, options) {
+  const opts = options || {};
+  const validSet = {};
+  getAttendanceDashboardAvailableSessions().forEach(item => {
+    validSet[item.sessionKey] = true;
+  });
+
+  const next = [];
+  const unique = {};
+  (Array.isArray(keys) ? keys : []).forEach(raw => {
+    const key = String(raw || '').trim();
+    if (!key || unique[key] || !validSet[key]) return;
+    unique[key] = true;
+    next.push(key);
+  });
+
+  attendanceDashboardState.sessionKeys = next;
+  syncDashboardSessionSelectSelection();
+  renderAttendanceDashboardSessionPicker();
+  if (opts.save !== false) {
+    saveAttendanceDashboardStateToStorage();
+  }
+}
+
+function setAttendanceDashboardMemberKeys(keys, options) {
+  const opts = options || {};
+  const validSet = {};
+  getAttendanceDashboardMemberOptions().forEach(item => {
+    validSet[item.memberKey] = true;
+  });
+
+  const next = [];
+  const unique = {};
+  (Array.isArray(keys) ? keys : []).forEach(raw => {
+    const key = String(raw || '').trim();
+    if (!key || unique[key] || !validSet[key]) return;
+    unique[key] = true;
+    next.push(key);
+  });
+
+  let trimmed = next;
+  if (trimmed.length > ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION) {
+    trimmed = trimmed.slice(0, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION);
+    if (opts.showLimitToast !== false) {
+      showToast(`<i class="fas fa-info-circle"></i> 개인 시계열은 최대 ${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명까지 선택됩니다.`, true);
+    }
+  }
+
+  attendanceDashboardState.selectedMemberKeys = trimmed;
+  syncDashboardMemberSelectSelection();
+  renderAttendanceDashboardMemberPicker();
+  if (opts.save !== false) {
+    saveAttendanceDashboardStateToStorage();
+  }
+  if (opts.renderTrend !== false) {
+    renderAttendanceDashboardMemberTrendChart();
+  }
+  if (opts.drilldown !== false && trimmed.length === 1) {
+    loadAttendanceDashboardDrilldown('member', trimmed[0]);
+  }
 }
 
 function destroyAttendanceDashboardCharts() {
@@ -3173,6 +3392,10 @@ function destroyAttendanceDashboardCharts() {
     attendanceDashboardMemberTrendChart.destroy();
     attendanceDashboardMemberTrendChart = null;
   }
+  if (attendanceDashboardDonutChart) {
+    attendanceDashboardDonutChart.destroy();
+    attendanceDashboardDonutChart = null;
+  }
 }
 
 function getDashboardColor(index) {
@@ -3186,6 +3409,109 @@ function ensureChartLibraryAvailable() {
     return false;
   }
   return true;
+}
+
+function renderAttendanceDashboardDonutModeToggle() {
+  const wrap = document.getElementById('dashboardDonutModeToggle');
+  if (!wrap) return;
+  Array.from(wrap.querySelectorAll('[data-donut-mode]')).forEach(button => {
+    const mode = String(button.dataset.donutMode || '').trim().toLowerCase();
+    button.classList.toggle('active', mode === attendanceDashboardState.donutMode);
+  });
+}
+
+function renderAttendanceDashboardDonutChart(payload) {
+  if (!ensureChartLibraryAvailable()) return;
+
+  const canvas = document.getElementById('dashboardDonutChart');
+  if (!canvas) return;
+  const subtitle = document.getElementById('dashboardDonutSubtitle');
+
+  const donutSource = payload && payload.charts && payload.charts.donut ? payload.charts.donut : {};
+  const statusRatio = donutSource.statusRatio || {};
+  const cohortRatio = donutSource.cohortRatio || {};
+  let labels = [];
+  let values = [];
+  let colors = [];
+  let title = '출석/지각/결석/유고 비율';
+
+  if (attendanceDashboardState.donutMode === 'cohort') {
+    labels = ['OB', 'YB', '미분류'];
+    values = [
+      Number(cohortRatio.obCount || (payload && payload.kpi ? payload.kpi.obMembers : 0) || 0),
+      Number(cohortRatio.ybCount || (payload && payload.kpi ? payload.kpi.ybMembers : 0) || 0),
+      Number(cohortRatio.unknownCount || (payload && payload.kpi ? payload.kpi.unknownMembers : 0) || 0)
+    ];
+    colors = ['#60a5fa', '#34d399', '#94a3b8'];
+    title = 'OB/YB 구성 비율';
+  } else {
+    labels = ['출석', '지각', '결석', '유고'];
+    values = [
+      Number(statusRatio.onTimeCount || 0),
+      Number(statusRatio.lateCount || 0),
+      Number(statusRatio.absentCount || 0),
+      Number(statusRatio.excusedCount || 0)
+    ];
+    colors = ['#4ade80', '#fbbf24', '#f87171', '#93c5fd'];
+  }
+
+  if (subtitle) {
+    subtitle.textContent = title;
+  }
+  renderAttendanceDashboardDonutModeToggle();
+
+  const hasValue = values.some(value => value > 0);
+  if (!hasValue) {
+    if (attendanceDashboardDonutChart) {
+      attendanceDashboardDonutChart.destroy();
+      attendanceDashboardDonutChart = null;
+    }
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  if (attendanceDashboardDonutChart) {
+    attendanceDashboardDonutChart.destroy();
+    attendanceDashboardDonutChart = null;
+  }
+
+  attendanceDashboardDonutChart = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        borderWidth: 1,
+        borderColor: 'rgba(15, 23, 42, 0.35)',
+        backgroundColor: colors
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      cutout: '58%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#dbeafe',
+            boxWidth: 10,
+            boxHeight: 10
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const all = values.reduce((sum, value) => sum + Number(value || 0), 0);
+              const current = Number(context.raw || 0);
+              const ratio = all > 0 ? Math.round((current / all) * 100) : 0;
+              return `${context.label}: ${current}명 (${ratio}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 function renderAttendanceDashboardEventRateChart(payload) {
@@ -3663,6 +3989,7 @@ function renderAttendanceDashboard(payload) {
   renderAttendanceDashboardMemberOptions();
   renderAttendanceDashboardEventRateChart(payload);
   renderAttendanceDashboardEventStatusChart(payload);
+  renderAttendanceDashboardDonutChart(payload);
 
   attendanceDashboardLastEventRows = payload && payload.table && Array.isArray(payload.table.eventTopRows)
     ? payload.table.eventTopRows.slice()
@@ -3673,12 +4000,102 @@ function renderAttendanceDashboard(payload) {
     ? payload.meta.defaultMemberKeys
     : [];
   if ((attendanceDashboardState.selectedMemberKeys || []).length === 0 && defaultMemberKeys.length > 0) {
-    attendanceDashboardState.selectedMemberKeys = defaultMemberKeys.slice(0, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION);
-    syncDashboardMemberSelectSelection();
-    saveAttendanceDashboardStateToStorage();
+    setAttendanceDashboardMemberKeys(defaultMemberKeys, {
+      save: true,
+      renderTrend: false,
+      drilldown: false,
+      showLimitToast: false
+    });
   }
 
   renderAttendanceDashboardMemberTrendChart();
+}
+
+function getDashboardAutoDateRange(payload) {
+  const meta = payload && payload.meta ? payload.meta : {};
+  const defaultRange = meta.defaultDateRange || {};
+  let fromDate = String(defaultRange.fromDate || '').trim();
+  let toDate = String(defaultRange.toDate || '').trim();
+  let source = String(defaultRange.source || '').trim() || 'none';
+
+  const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+  if (validDate(fromDate) && validDate(toDate)) {
+    if (fromDate > toDate) {
+      const temp = fromDate;
+      fromDate = toDate;
+      toDate = temp;
+    }
+    return { fromDate, toDate, source };
+  }
+
+  const actualRange = meta.actualAttendanceRange || {};
+  const fromByMs = formatDateKeyFromTimestamp(actualRange.minAttendAtMs);
+  const toByMs = formatDateKeyFromTimestamp(actualRange.maxAttendAtMs);
+  if (fromByMs && toByMs) {
+    return { fromDate: fromByMs, toDate: toByMs, source: 'actual_attendance' };
+  }
+
+  return { fromDate: '', toDate: '', source: 'none' };
+}
+
+function tryHydrateAttendanceDashboardDateRange(payload, options) {
+  const opts = options || {};
+  if (opts.skipAutoDateHydration) return false;
+  if (attendanceDashboardAutoDateHydratedOnce) return false;
+  if (attendanceDashboardDateRangeUserEdited) return false;
+  if (attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo) return false;
+
+  const range = getDashboardAutoDateRange(payload);
+  if (!range.fromDate || !range.toDate) return false;
+
+  attendanceDashboardState.dateFrom = range.fromDate;
+  attendanceDashboardState.dateTo = range.toDate;
+  attendanceDashboardAutoDateHydratedOnce = true;
+  applyAttendanceDashboardStateToControls();
+  saveAttendanceDashboardStateToStorage();
+  setAttendanceDashboardMetaText(`기본 기간을 자동 설정했습니다. (${range.fromDate} ~ ${range.toDate}, source: ${range.source})`);
+  return true;
+}
+
+function setAttendanceDashboardDonutMode(mode) {
+  const normalized = String(mode || '').toLowerCase() === 'cohort' ? 'cohort' : 'status';
+  attendanceDashboardState.donutMode = normalized;
+  renderAttendanceDashboardDonutModeToggle();
+  renderAttendanceDashboardDonutChart(attendanceDashboardPayload);
+  saveAttendanceDashboardStateToStorage();
+}
+
+function dashboardSelectAllSessions() {
+  const options = getFilteredDashboardSessionOptions();
+  setAttendanceDashboardSessionKeys(options.map(item => item.sessionKey));
+}
+
+function dashboardSelectClosedSessions() {
+  const options = getFilteredDashboardSessionOptions().filter(item => item.isClosed);
+  setAttendanceDashboardSessionKeys(options.map(item => item.sessionKey));
+}
+
+function dashboardSelectRecentSessions() {
+  const options = getAttendanceDashboardAvailableSessions()
+    .filter(item => item.isClosed)
+    .slice(-4)
+    .map(item => item.sessionKey);
+  setAttendanceDashboardSessionKeys(options);
+}
+
+function dashboardClearSessionSelection() {
+  setAttendanceDashboardSessionKeys([]);
+}
+
+function dashboardSelectTopMembers() {
+  const options = getFilteredDashboardMemberOptions()
+    .slice(0, Math.min(3, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION))
+    .map(item => item.memberKey);
+  setAttendanceDashboardMemberKeys(options, { drilldown: false, showLimitToast: false });
+}
+
+function dashboardClearMemberSelection() {
+  setAttendanceDashboardMemberKeys([], { drilldown: false, showLimitToast: false });
 }
 
 function initializeAttendanceDashboardUi() {
@@ -3693,9 +4110,16 @@ function initializeAttendanceDashboardUi() {
     queryState || {}
   );
   attendanceDashboardState = normalizeAttendanceDashboardState(merged);
+  attendanceDashboardDateRangeUserEdited = !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
+  attendanceDashboardAutoDateHydratedOnce = !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
   applyAttendanceDashboardStateToControls();
 
+  const sessionSearchInput = document.getElementById('dashboardSessionSearchInput');
   const memberSearchInput = document.getElementById('dashboardMemberSearchInput');
+  const sessionOptionList = document.getElementById('dashboardSessionOptionList');
+  const sessionChipList = document.getElementById('dashboardSessionChipList');
+  const memberOptionList = document.getElementById('dashboardMemberOptionList');
+  const memberChipList = document.getElementById('dashboardMemberChipList');
   const memberSelect = document.getElementById('dashboardMemberSelect');
   const sessionSelect = document.getElementById('dashboardSessionSelect');
   const topNSelect = document.getElementById('dashboardTopNSelect');
@@ -3704,31 +4128,120 @@ function initializeAttendanceDashboardUi() {
   const groupSelect = document.getElementById('dashboardGroupSelect');
   const dateFromInput = document.getElementById('dashboardDateFromInput');
   const dateToInput = document.getElementById('dashboardDateToInput');
+  const donutToggle = document.getElementById('dashboardDonutModeToggle');
+
+  if (sessionSearchInput) {
+    sessionSearchInput.addEventListener('input', () => {
+      attendanceDashboardState.sessionSearch = sessionSearchInput.value.trim();
+      renderAttendanceDashboardSessionPicker();
+      saveAttendanceDashboardStateToStorage();
+    });
+  }
 
   if (memberSearchInput) {
     memberSearchInput.addEventListener('input', () => {
       attendanceDashboardState.memberSearch = memberSearchInput.value.trim();
-      renderAttendanceDashboardMemberOptions();
-      syncDashboardMemberSelectSelection();
+      renderAttendanceDashboardMemberPicker();
       saveAttendanceDashboardStateToStorage();
+    });
+  }
+
+  if (sessionOptionList) {
+    sessionOptionList.addEventListener('change', event => {
+      const target = event.target;
+      if (!target || target.type !== 'checkbox' || !target.dataset || !target.dataset.sessionKey) return;
+      const key = String(target.dataset.sessionKey || '').trim();
+      const selected = attendanceDashboardState.sessionKeys || [];
+      const next = target.checked
+        ? selected.concat([key])
+        : selected.filter(item => item !== key);
+      setAttendanceDashboardSessionKeys(next);
+    });
+  }
+
+  if (sessionChipList) {
+    sessionChipList.addEventListener('click', event => {
+      const button = event.target && event.target.closest ? event.target.closest('[data-session-remove-key]') : null;
+      if (!button) return;
+      const key = String(button.getAttribute('data-session-remove-key') || '').trim();
+      if (!key) return;
+      setAttendanceDashboardSessionKeys((attendanceDashboardState.sessionKeys || []).filter(item => item !== key));
+    });
+  }
+
+  if (memberOptionList) {
+    memberOptionList.addEventListener('change', event => {
+      const target = event.target;
+      if (!target || target.type !== 'checkbox' || !target.dataset || !target.dataset.memberKey) return;
+      const key = String(target.dataset.memberKey || '').trim();
+      const selected = attendanceDashboardState.selectedMemberKeys || [];
+      const next = target.checked
+        ? selected.concat([key])
+        : selected.filter(item => item !== key);
+      setAttendanceDashboardMemberKeys(next, { drilldown: true });
+    });
+  }
+
+  if (memberChipList) {
+    memberChipList.addEventListener('click', event => {
+      const button = event.target && event.target.closest ? event.target.closest('[data-member-remove-key]') : null;
+      if (!button) return;
+      const key = String(button.getAttribute('data-member-remove-key') || '').trim();
+      if (!key) return;
+      setAttendanceDashboardMemberKeys(
+        (attendanceDashboardState.selectedMemberKeys || []).filter(item => item !== key),
+        { drilldown: true, showLimitToast: false }
+      );
     });
   }
 
   if (memberSelect) {
     memberSelect.addEventListener('change', () => {
-      attendanceDashboardState.selectedMemberKeys = Array.from(memberSelect.selectedOptions || [])
+      const keys = Array.from(memberSelect.selectedOptions || [])
         .map(option => option.value)
-        .filter(value => !!value)
-        .slice(0, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION);
-      saveAttendanceDashboardStateToStorage();
-      renderAttendanceDashboardMemberTrendChart();
-      if (attendanceDashboardState.selectedMemberKeys.length === 1) {
-        loadAttendanceDashboardDrilldown('member', attendanceDashboardState.selectedMemberKeys[0]);
-      }
+        .filter(value => !!value);
+      setAttendanceDashboardMemberKeys(keys, { drilldown: true, showLimitToast: false });
     });
   }
 
-  const simpleControls = [sessionSelect, topNSelect, sortSelect, chartTypeSelect, groupSelect, dateFromInput, dateToInput];
+  if (sessionSelect) {
+    sessionSelect.addEventListener('change', () => {
+      const keys = Array.from(sessionSelect.selectedOptions || [])
+        .map(option => option.value)
+        .filter(value => !!value);
+      setAttendanceDashboardSessionKeys(keys);
+    });
+  }
+
+  if (dateFromInput) {
+    ['input', 'change'].forEach(eventName => {
+      dateFromInput.addEventListener(eventName, () => {
+        if (attendanceDashboardDateInputSyncing) return;
+        attendanceDashboardDateRangeUserEdited = true;
+        attendanceDashboardAutoDateHydratedOnce = true;
+      });
+    });
+  }
+
+  if (dateToInput) {
+    ['input', 'change'].forEach(eventName => {
+      dateToInput.addEventListener(eventName, () => {
+        if (attendanceDashboardDateInputSyncing) return;
+        attendanceDashboardDateRangeUserEdited = true;
+        attendanceDashboardAutoDateHydratedOnce = true;
+      });
+    });
+  }
+
+  if (donutToggle) {
+    donutToggle.addEventListener('click', event => {
+      const button = event.target && event.target.closest ? event.target.closest('[data-donut-mode]') : null;
+      if (!button) return;
+      setAttendanceDashboardDonutMode(button.dataset.donutMode || 'status');
+    });
+  }
+
+  const simpleControls = [topNSelect, sortSelect, chartTypeSelect, groupSelect, dateFromInput, dateToInput];
   simpleControls.forEach(node => {
     if (!node) return;
     node.addEventListener('change', () => {
@@ -3736,6 +4249,10 @@ function initializeAttendanceDashboardUi() {
       saveAttendanceDashboardStateToStorage();
     });
   });
+
+  renderAttendanceDashboardSessionPicker();
+  renderAttendanceDashboardMemberPicker();
+  renderAttendanceDashboardDonutModeToggle();
 
   attendanceDashboardInitialized = true;
 }
@@ -3766,6 +4283,8 @@ function applyAttendanceDashboardPreset(type) {
 
   attendanceDashboardState = normalizeAttendanceDashboardState(current);
   applyAttendanceDashboardStateToControls();
+  renderAttendanceDashboardSessionPicker();
+  renderAttendanceDashboardMemberPicker();
   saveAttendanceDashboardStateToStorage();
   applyAttendanceDashboardFilters();
 }
@@ -3778,7 +4297,11 @@ function applyAttendanceDashboardFilters() {
 
 function resetAttendanceDashboardFilters() {
   attendanceDashboardState = getDefaultAttendanceDashboardState();
+  attendanceDashboardDateRangeUserEdited = false;
+  attendanceDashboardAutoDateHydratedOnce = false;
   applyAttendanceDashboardStateToControls();
+  renderAttendanceDashboardSessionPicker();
+  renderAttendanceDashboardMemberPicker();
   saveAttendanceDashboardStateToStorage();
   loadAttendanceDashboard({ forceReload: true });
 }
@@ -3902,6 +4425,12 @@ async function loadAttendanceDashboard(options) {
       return;
     }
 
+    if (tryHydrateAttendanceDashboardDateRange(response, opts)) {
+      attendanceDashboardLoading = false;
+      await loadAttendanceDashboard({ forceReload: true, skipAutoDateHydration: true });
+      return;
+    }
+
     attendanceDashboardPayload = response;
     attendanceDashboardDrilldownPayload = null;
     attendanceDashboardMemberSeriesCache = {};
@@ -3912,8 +4441,14 @@ async function loadAttendanceDashboard(options) {
     });
 
     const fromCache = response.meta && response.meta.fromCache ? ' (cache)' : '';
+    const rangeMeta = response.meta && response.meta.actualAttendanceRange
+      ? response.meta.actualAttendanceRange
+      : {};
+    const rangeLabel = rangeMeta.minAttendAt && rangeMeta.maxAttendAt
+      ? ` / 실제출석 ${rangeMeta.minAttendAt} ~ ${rangeMeta.maxAttendAt}`
+      : '';
     setAttendanceDashboardMetaText(
-      `시즌 ${response.seasonAlias} / 선택 회차 ${response.meta && response.meta.selectedSessionCount ? response.meta.selectedSessionCount : 0} / 종료 회차 ${response.meta && response.meta.closedSessionCount ? response.meta.closedSessionCount : 0}${fromCache}`
+      `시즌 ${response.seasonAlias} / 선택 회차 ${response.meta && response.meta.selectedSessionCount ? response.meta.selectedSessionCount : 0} / 종료 회차 ${response.meta && response.meta.closedSessionCount ? response.meta.closedSessionCount : 0}${rangeLabel}${fromCache}`
     );
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
