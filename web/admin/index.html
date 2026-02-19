@@ -1478,6 +1478,239 @@
       margin-top: 12px;
       text-align: center;
     }
+
+    .dashboard-toolbar {
+      display: grid;
+      gap: 14px;
+      margin-top: 10px;
+      margin-bottom: 16px;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(96, 165, 250, 0.28);
+      background: rgba(30, 64, 175, 0.14);
+    }
+
+    .dashboard-preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .dashboard-preset-label {
+      color: #bfdbfe;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+
+    .dashboard-preset-btn {
+      border: 1px solid rgba(191, 219, 254, 0.4);
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.45);
+      color: #dbeafe;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .dashboard-preset-btn:hover {
+      border-color: rgba(147, 197, 253, 0.8);
+      color: #ffffff;
+    }
+
+    .dashboard-filter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+
+    .dashboard-input-group {
+      display: grid;
+      gap: 6px;
+      text-align: left;
+    }
+
+    .dashboard-input-group label {
+      color: #bfdbfe;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .dashboard-input-group .form-input,
+    .dashboard-input-group .sheet-select {
+      min-height: 40px;
+      padding: 10px 12px;
+      text-align: left;
+      letter-spacing: 0;
+      font-size: 14px;
+      max-width: 100%;
+    }
+
+    .dashboard-session-select,
+    .dashboard-member-select {
+      min-height: 96px !important;
+      height: 96px;
+      padding-right: 10px !important;
+      background-image: none;
+    }
+
+    .dashboard-action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .dashboard-action-left,
+    .dashboard-action-right {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .dashboard-action-row .btn {
+      padding: 10px 12px;
+      font-size: 13px;
+      gap: 6px;
+    }
+
+    .dashboard-meta-text {
+      font-size: 12px;
+      color: #bfdbfe;
+      margin: 0;
+    }
+
+    .dashboard-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .dashboard-kpi-card {
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 14px;
+      text-align: left;
+    }
+
+    .dashboard-kpi-card .kpi-label {
+      font-size: 12px;
+      color: #93bbfc;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .dashboard-kpi-card .kpi-value {
+      font-size: 24px;
+      color: #ffffff;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .dashboard-chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .dashboard-chart-card {
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(15, 23, 42, 0.5);
+      padding: 12px;
+      min-height: 290px;
+    }
+
+    .dashboard-chart-title {
+      color: #dbeafe;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .dashboard-chart-subtitle {
+      color: #94a3b8;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .dashboard-canvas-wrap {
+      position: relative;
+      height: 220px;
+    }
+
+    .dashboard-table-wrap {
+      overflow-x: auto;
+      margin-top: 8px;
+    }
+
+    .dashboard-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    .dashboard-table th,
+    .dashboard-table td {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 10px 12px;
+      text-align: left;
+      color: #dbeafe;
+      font-size: 13px;
+      vertical-align: top;
+    }
+
+    .dashboard-table th {
+      color: #93bbfc;
+      background: rgba(59, 130, 246, 0.08);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .dashboard-note-chip {
+      display: inline-flex;
+      max-width: 240px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f172a;
+      background: #bfdbfe;
+      cursor: help;
+    }
+
+    .dashboard-drilldown-card {
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 14px;
+      margin-top: 10px;
+    }
+
+    .dashboard-drilldown-title {
+      color: #dbeafe;
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .dashboard-drilldown-summary {
+      color: #94a3b8;
+      font-size: 12px;
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
     
     /* Ranking Table */
     .ranking-table {
@@ -1910,6 +2143,42 @@
         height: 20px;
         font-size: 13px;
       }
+
+      .dashboard-filter-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .dashboard-session-select,
+      .dashboard-member-select {
+        height: 120px;
+        min-height: 120px !important;
+      }
+
+      .dashboard-action-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .dashboard-action-left,
+      .dashboard-action-right {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .dashboard-action-left .btn,
+      .dashboard-action-right .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .dashboard-chart-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .dashboard-kpi-grid {
+        grid-template-columns: 1fr 1fr;
+      }
     }
     
     /* Cloud Animation */
@@ -2163,6 +2432,163 @@
     
     <!-- 출석현황 탭 -->
     <div id="status" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-chart-pie card-icon"></i>
+          <h2 class="card-title">출석 현황 대시보드</h2>
+        </div>
+        <p class="info-text">필터 기준이 KPI/차트/드릴다운/순위에 함께 반영됩니다. 회원 직군(현직자/학생)은 데이터 준비 후 확장 예정입니다. <code>TODO(member_role)</code></p>
+
+        <div class="dashboard-toolbar">
+          <div class="dashboard-preset-row">
+            <span class="dashboard-preset-label">빠른 프리셋</span>
+            <button type="button" class="dashboard-preset-btn" onclick="applyAttendanceDashboardPreset('all')">전체</button>
+            <button type="button" class="dashboard-preset-btn" onclick="applyAttendanceDashboardPreset('yb')">YB만</button>
+            <button type="button" class="dashboard-preset-btn" onclick="applyAttendanceDashboardPreset('ob')">OB만</button>
+            <button type="button" class="dashboard-preset-btn" onclick="applyAttendanceDashboardPreset('recent4')">최근 4회차</button>
+            <button type="button" class="dashboard-preset-btn" onclick="applyAttendanceDashboardPreset('high_absence')">결석 높은 회차</button>
+          </div>
+
+          <div class="dashboard-filter-grid">
+            <div class="dashboard-input-group">
+              <label for="dashboardGroupSelect">그룹</label>
+              <select id="dashboardGroupSelect" class="sheet-select">
+                <option value="all">전체</option>
+                <option value="ob">OB</option>
+                <option value="yb">YB</option>
+              </select>
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardDateFromInput">기간 시작일</label>
+              <input id="dashboardDateFromInput" type="date" class="form-input">
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardDateToInput">기간 종료일</label>
+              <input id="dashboardDateToInput" type="date" class="form-input">
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardSessionSelect">행사(다중 선택)</label>
+              <select id="dashboardSessionSelect" class="sheet-select dashboard-session-select" multiple></select>
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardTopNSelect">Top-N</label>
+              <select id="dashboardTopNSelect" class="sheet-select">
+                <option value="5">Top 5</option>
+                <option value="10" selected>Top 10</option>
+                <option value="20">Top 20</option>
+                <option value="30">Top 30</option>
+              </select>
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardSortBySelect">이벤트 정렬</label>
+              <select id="dashboardSortBySelect" class="sheet-select">
+                <option value="attendanceRate">출석률</option>
+                <option value="absenceRate">결석률</option>
+                <option value="participants">참여 인원</option>
+              </select>
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardChartTypeSelect">출석률 차트 타입</label>
+              <select id="dashboardChartTypeSelect" class="sheet-select">
+                <option value="bar">막대</option>
+                <option value="line">라인</option>
+              </select>
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardMemberSearchInput">개인 시계열 검색</label>
+              <input id="dashboardMemberSearchInput" type="text" class="form-input" placeholder="이름/기수 검색">
+            </div>
+            <div class="dashboard-input-group">
+              <label for="dashboardMemberSelect">개인 시계열 대상(다중 선택)</label>
+              <select id="dashboardMemberSelect" class="sheet-select dashboard-member-select" multiple></select>
+            </div>
+          </div>
+
+          <div class="dashboard-action-row">
+            <div class="dashboard-action-left">
+              <button type="button" class="btn" id="dashboardApplyBtn" onclick="applyAttendanceDashboardFilters()">
+                <i class="fas fa-filter"></i>
+                <span>필터 적용</span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="dashboardResetBtn" onclick="resetAttendanceDashboardFilters()">
+                <i class="fas fa-undo-alt"></i>
+                <span>필터 초기화</span>
+              </button>
+            </div>
+            <div class="dashboard-action-right">
+              <button type="button" class="btn btn-secondary" id="dashboardShareBtn" onclick="copyAttendanceDashboardShareLink()">
+                <i class="fas fa-link"></i>
+                <span>뷰 링크 복사</span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="dashboardCsvBtn" onclick="downloadAttendanceDashboardCsv()">
+                <i class="fas fa-file-csv"></i>
+                <span>CSV 내보내기</span>
+              </button>
+            </div>
+          </div>
+          <p class="dashboard-meta-text" id="dashboardMetaText">필터를 적용하면 대시보드가 갱신됩니다.</p>
+        </div>
+
+        <div class="dashboard-kpi-grid">
+          <div class="dashboard-kpi-card">
+            <div class="kpi-label">전체 인원</div>
+            <div class="kpi-value" id="dashboardKpiTotalMembers">-</div>
+          </div>
+          <div class="dashboard-kpi-card">
+            <div class="kpi-label">OB 인원</div>
+            <div class="kpi-value" id="dashboardKpiObMembers">-</div>
+          </div>
+          <div class="dashboard-kpi-card">
+            <div class="kpi-label">YB 인원</div>
+            <div class="kpi-value" id="dashboardKpiYbMembers">-</div>
+          </div>
+          <div class="dashboard-kpi-card">
+            <div class="kpi-label">평균 출석률</div>
+            <div class="kpi-value" id="dashboardKpiAttendanceRate">-</div>
+          </div>
+          <div class="dashboard-kpi-card">
+            <div class="kpi-label">평균 지각률</div>
+            <div class="kpi-value" id="dashboardKpiLateRate">-</div>
+          </div>
+          <div class="dashboard-kpi-card">
+            <div class="kpi-label">평균 결석률</div>
+            <div class="kpi-value" id="dashboardKpiAbsenceRate">-</div>
+          </div>
+        </div>
+
+        <div class="dashboard-chart-grid">
+          <div class="dashboard-chart-card">
+            <div class="dashboard-chart-title">행사별 출석률</div>
+            <div class="dashboard-chart-subtitle">hover로 상세 수치, click으로 행사 드릴다운</div>
+            <div class="dashboard-canvas-wrap">
+              <canvas id="dashboardEventRateChart"></canvas>
+            </div>
+          </div>
+          <div class="dashboard-chart-card">
+            <div class="dashboard-chart-title">행사별 출석/지각/결석/유고 분포</div>
+            <div class="dashboard-chart-subtitle">stacked bar 기준</div>
+            <div class="dashboard-canvas-wrap">
+              <canvas id="dashboardEventStatusChart"></canvas>
+            </div>
+          </div>
+          <div class="dashboard-chart-card">
+            <div class="dashboard-chart-title">개인별 출석 시간 추이</div>
+            <div class="dashboard-chart-subtitle">hover에 출석일시/상태/유고사유(note) 노출</div>
+            <div class="dashboard-canvas-wrap">
+              <canvas id="dashboardMemberTrendChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-drilldown-card">
+          <div class="dashboard-drilldown-title" id="dashboardDrilldownTitle">드릴다운</div>
+          <div class="dashboard-drilldown-summary" id="dashboardDrilldownSummary">차트를 클릭하거나 개인을 선택하면 상세가 표시됩니다.</div>
+          <div class="dashboard-table-wrap" id="dashboardDrilldownTableWrap">
+            <p class="info-text">표시할 드릴다운 데이터가 없습니다.</p>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <i class="fas fa-chart-line card-icon"></i>
@@ -2630,6 +3056,7 @@
   <script src="../shared/env.js"></script>
   <script src="../shared/config.js"></script>
   <script src="../shared/api-jsonp.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <script src="./admin.js"></script>
 </body>
 </html>
