@@ -40,6 +40,8 @@ let importServerModeHint = 'create';
 let importPendingImportId = '';
 let importDiffState = null;
 let importDiffToken = '';
+let importAbortInFlight = null;
+let importDiffFilterMode = 'all';
 
 const IMPORT_FIELD_ORDER = [
   'name',
@@ -916,15 +918,95 @@ function refreshImportModeUi() {
       : '미리보기 결과를 확인했고, 시즌 생성/업로드를 진행합니다.';
   }
 
-  setImportExecuteButtonLabel(false);
+  setImportExecuteButtonLabel(!!(importPendingImportId && importServerMode === 'update' && importDiffState && importDiffToken));
 }
 
-function invalidatePendingImportPreparation() {
-  if (!importPendingImportId && !importDiffState && !importDiffToken) return;
+function clearImportPendingState() {
   importPendingImportId = '';
   importServerMode = 'create';
   importDiffState = null;
   importDiffToken = '';
+  importDiffFilterMode = 'all';
+}
+
+function toImportSessionShortId(importId) {
+  const text = String(importId || '').trim();
+  if (!text) return '-';
+  return text.length > 10 ? `${text.slice(0, 8)}...` : text;
+}
+
+function canResumeActiveImportSession(activeImport, schemaSummaryJson) {
+  if (!activeImport) return false;
+  const targetMode = String(activeImport.targetMode || '').toLowerCase();
+  if (targetMode !== 'update') return false;
+  const activeSchemaSummary = String(activeImport.schemaSummaryJson || '');
+  const incomingSchemaSummary = String(schemaSummaryJson || '');
+  if (!activeSchemaSummary || !incomingSchemaSummary) return false;
+  return activeSchemaSummary === incomingSchemaSummary;
+}
+
+async function abortImportSession(importId, reason, options) {
+  const targetImportId = String(importId || '').trim();
+  const opts = options || {};
+  if (!targetImportId) {
+    return { success: true, skipped: true };
+  }
+
+  if (importAbortInFlight && importAbortInFlight.importId === targetImportId) {
+    return importAbortInFlight.promise;
+  }
+
+  const task = (async () => {
+    try {
+      const response = await CloudClubApi.call('seasonImportAbort', {
+        importId: targetImportId,
+        adminToken: adminToken
+      });
+      if (!response || !response.success) {
+        const error = new Error((response && response.message) ? response.message : '업로드 세션 중단 실패');
+        error.code = (response && response.errorCode) ? response.errorCode : 'IMPORT_ABORT_FAILED';
+        return { success: false, importId: targetImportId, error: error };
+      }
+      return { success: true, importId: targetImportId, response: response };
+    } catch (error) {
+      console.error(`abort import session failed (${reason || 'unknown-reason'}):`, error);
+      return { success: false, importId: targetImportId, error: error };
+    }
+  })();
+
+  importAbortInFlight = {
+    importId: targetImportId,
+    promise: task
+  };
+
+  const result = await task;
+  if (importAbortInFlight && importAbortInFlight.importId === targetImportId) {
+    importAbortInFlight = null;
+  }
+
+  if (!result.success && !opts.quiet) {
+    const message = getDisplayErrorMessage(result.error, '기존 업로드 세션 중단에 실패했습니다.');
+    showToast(`<i class="fas fa-exclamation-triangle"></i> ${escapeHtml(message)}`, false);
+  }
+
+  return result;
+}
+
+async function discardPendingImportPreparation(reason, options) {
+  const opts = options || {};
+  const staleImportId = String(importPendingImportId || '').trim();
+  clearImportPendingState();
+  if (!staleImportId) {
+    return { success: true, skipped: true };
+  }
+  return abortImportSession(staleImportId, reason || 'discard-pending-import', {
+    quiet: !!opts.quiet
+  });
+}
+
+function invalidatePendingImportPreparation(reason) {
+  if (!importPendingImportId && !importDiffState && !importDiffToken) return;
+  void discardPendingImportPreparation(reason || 'invalidate-pending-import', { quiet: true });
 }
 
 function findFallbackValueInRow(row, predicate) {
@@ -1363,11 +1445,16 @@ function getImportCellDiffClass(kind) {
 function renderImportPreview(previewState) {
   const summaryNode = document.getElementById('importPreviewSummary');
   const wrap = document.getElementById('importPreviewWrap');
+  const diffMetaNode = document.getElementById('importDiffMeta');
+  const diffControlsNode = document.getElementById('importDiffControls');
+  const diffFilterSelect = document.getElementById('importDiffFilterSelect');
   if (!summaryNode || !wrap) return;
 
   if (!previewState) {
     summaryNode.innerHTML = '';
     wrap.innerHTML = '<p class="info-text">분석 후 미리보기 테이블이 표시됩니다.</p>';
+    if (diffMetaNode) diffMetaNode.innerHTML = '';
+    if (diffControlsNode) diffControlsNode.style.display = 'none';
     return;
   }
 
@@ -1396,8 +1483,32 @@ function renderImportPreview(previewState) {
   }
   summaryNode.innerHTML = summaryParts.join('');
 
+  if (diffFilterSelect) {
+    diffFilterSelect.value = importDiffFilterMode;
+  }
+  if (diffActive) {
+    const rawToken = String(importDiffToken || importDiffState.diffToken || '').trim();
+    const tokenLabel = rawToken
+      ? (rawToken.length > 18 ? `${rawToken.slice(0, 8)}...${rawToken.slice(-6)}` : rawToken)
+      : '-';
+    const targetSheetName = String(importDiffState.targetSheetName || '').trim() || '-';
+    if (diffMetaNode) {
+      diffMetaNode.innerHTML =
+        `<span class="import-chip">TARGET ${escapeHtml(targetSheetName)}</span>` +
+        `<span class="import-chip">DIFF_TOKEN ${escapeHtml(tokenLabel)}</span>`;
+    }
+    if (diffControlsNode) {
+      diffControlsNode.style.display = 'flex';
+    }
+  } else {
+    importDiffFilterMode = 'all';
+    if (diffMetaNode) diffMetaNode.innerHTML = '';
+    if (diffControlsNode) diffControlsNode.style.display = 'none';
+  }
+
   const rowHtml = [];
   const phoneSeenInPreview = {};
+  const changedOnlyMode = diffActive && importDiffFilterMode === 'changed';
 
   function renderDataCell(item, phoneKey, field, fallbackValue, beforeValueFromDiff) {
     const valueText = formatImportPreviewFieldValue(field, item[field], fallbackValue);
@@ -1458,6 +1569,10 @@ function renderImportPreview(previewState) {
       remarkParts.push(item.reasonCode);
     }
     const remarkText = remarkParts.length > 0 ? remarkParts.join(' | ') : '-';
+    const isChangedRow = statusLabel === 'ADD' || statusLabel === 'UPDATE';
+    if (changedOnlyMode && !isChangedRow) {
+      return;
+    }
 
     rowHtml.push(`
       <tr>
@@ -1524,6 +1639,10 @@ function renderImportPreview(previewState) {
     });
   }
 
+  if (rowHtml.length === 0) {
+    rowHtml.push('<tr><td colspan="15">표시할 행이 없습니다. (필터 조건 확인)</td></tr>');
+  }
+
   wrap.innerHTML = `
     <table class="management-table import-preview-table">
       <thead>
@@ -1548,6 +1667,11 @@ function renderImportPreview(previewState) {
       <tbody>${rowHtml.join('')}</tbody>
     </table>
   `;
+}
+
+function onImportDiffFilterChange(value) {
+  importDiffFilterMode = String(value || '').toLowerCase() === 'changed' ? 'changed' : 'all';
+  renderImportPreview(importPreviewState);
 }
 
 function refreshImportExecuteButtonState() {
@@ -1641,6 +1765,7 @@ async function analyzeImportFile() {
 
   try {
     showBoxMessage('importAnalyzeResult', '분석 중입니다. 잠시만 기다려주세요...', true);
+    await discardPendingImportPreparation('analyze-import-file', { quiet: true });
     const loaded = await loadImportMatrixFromFile(file);
     importRawMatrix = loaded.matrix || [];
     importFileMeta = {
@@ -1666,10 +1791,7 @@ async function analyzeImportFile() {
     };
     importManualMapping = createImportManualMappingFromAuto(columnPack, autoFieldMap);
     importManualConfirmed = false;
-    importServerMode = 'create';
-    importPendingImportId = '';
-    importDiffState = null;
-    importDiffToken = '';
+    clearImportPendingState();
     const previewConfirm = document.getElementById('importPreviewConfirmed');
     if (previewConfirm) previewConfirm.checked = false;
     refreshImportModeUi();
@@ -1682,7 +1804,7 @@ async function analyzeImportFile() {
 }
 
 function onImportMappingChanged(colIndex, fieldValue) {
-  invalidatePendingImportPreparation();
+  invalidatePendingImportPreparation('mapping-changed');
   importManualMapping[String(colIndex)] = String(fieldValue || 'ignore');
   importManualConfirmed = false;
   rebuildImportPreview();
@@ -1699,6 +1821,7 @@ function confirmImportManualMapping() {
 }
 
 function resetImportFlow(resetFileInput) {
+  invalidatePendingImportPreparation('reset-import-flow');
   importRawMatrix = [];
   importFileMeta = null;
   importInference = null;
@@ -1706,11 +1829,8 @@ function resetImportFlow(resetFileInput) {
   importManualConfirmed = false;
   importPreviewState = null;
   importDebugReport = null;
-  importServerMode = 'create';
   importServerModeHint = 'create';
-  importPendingImportId = '';
-  importDiffState = null;
-  importDiffToken = '';
+  clearImportPendingState();
 
   if (resetFileInput !== false) {
     const fileInput = document.getElementById('importFileInput');
@@ -1795,6 +1915,119 @@ function buildImportPayloadChunks(rows, maxEncodedSize) {
   return chunks;
 }
 
+async function fetchSeasonImportDiff(importId) {
+  const response = await CloudClubApi.call('seasonImportDiff', {
+    importId: importId,
+    limit: 500,
+    offset: 0,
+    adminToken: adminToken
+  });
+
+  if (!response || !response.success) {
+    const error = new Error((response && response.message) ? response.message : '변경사항 Diff 계산 실패');
+    error.code = (response && response.errorCode) ? response.errorCode : 'IMPORT_DIFF_FAILED';
+    throw error;
+  }
+
+  return response;
+}
+
+function applyImportDiffState(diffResponse, options) {
+  const opts = options || {};
+  importDiffState = diffResponse;
+  importDiffToken = String(diffResponse && diffResponse.diffToken ? diffResponse.diffToken : '');
+  if (!importDiffToken) {
+    const error = new Error('변경사항 토큰을 생성하지 못했습니다.');
+    error.code = 'DIFF_TOKEN_MISSING';
+    throw error;
+  }
+  if (opts.resetFilter !== false) {
+    importDiffFilterMode = 'all';
+  }
+}
+
+async function beginImportSessionWithRecovery(seasonInfo, importMode, schemaSummaryJson, setProgress) {
+  const beginPayload = {
+    season: seasonInfo.seasonAlias,
+    importMode: importMode,
+    schemaSummaryJson: schemaSummaryJson,
+    adminToken: adminToken
+  };
+
+  let begin = await CloudClubApi.call('seasonImportBegin', beginPayload);
+  if (begin && begin.success && begin.importId) {
+    return {
+      success: true,
+      importId: String(begin.importId),
+      targetMode: String(begin.targetMode || 'create'),
+      recoveredFromActive: false
+    };
+  }
+
+  if (!(begin && begin.errorCode === 'IMPORT_ALREADY_ACTIVE' && begin.importId)) {
+    return {
+      success: false,
+      errorCode: begin && begin.errorCode ? begin.errorCode : 'IMPORT_BEGIN_FAILED',
+      message: begin && begin.message ? begin.message : '업로드 시작 중 오류가 발생했습니다.'
+    };
+  }
+
+  const activeImport = begin.activeImport || null;
+  const activeImportId = String(begin.importId || '').trim();
+  if (!activeImportId) {
+    return {
+      success: false,
+      errorCode: 'IMPORT_ALREADY_ACTIVE',
+      message: begin.message || '진행 중 업로드가 감지되었지만 세션 ID가 없습니다.'
+    };
+  }
+
+  const canResume = canResumeActiveImportSession(activeImport, schemaSummaryJson);
+  if (canResume) {
+    const shortId = toImportSessionShortId(activeImportId);
+    setProgress(
+      `⚠️ 기존 진행 세션(${escapeHtml(shortId)})이 감지되었습니다. 같은 설정으로 이어서 반영합니다.`,
+      true
+    );
+    return {
+      success: true,
+      importId: activeImportId,
+      targetMode: 'update',
+      recoveredFromActive: true
+    };
+  }
+
+  const shortId = toImportSessionShortId(activeImportId);
+  setProgress(
+    `⚠️ 기존 진행 세션(${escapeHtml(shortId)})이 현재 분석 정보와 달라 자동 중단 후 새로 시작합니다.`,
+    true
+  );
+  const aborted = await abortImportSession(activeImportId, 'begin-active-conflict', { quiet: true });
+  if (!aborted.success) {
+    return {
+      success: false,
+      errorCode: 'IMPORT_ABORT_FAILED',
+      message: `기존 진행 세션(${shortId}) 중단에 실패했습니다. 잠시 후 다시 시도해주세요.`
+    };
+  }
+
+  begin = await CloudClubApi.call('seasonImportBegin', beginPayload);
+  if (begin && begin.success && begin.importId) {
+    return {
+      success: true,
+      importId: String(begin.importId),
+      targetMode: String(begin.targetMode || 'create'),
+      recoveredFromActive: false
+    };
+  }
+
+  return {
+    success: false,
+    errorCode: begin && begin.errorCode ? begin.errorCode : 'IMPORT_BEGIN_FAILED',
+    message: begin && begin.message ? begin.message : '업로드 세션 재시작에 실패했습니다.'
+  };
+}
+
 async function executeSeasonImport() {
   if (!importPreviewState) {
     alert('먼저 파일 분석을 진행해주세요.');
@@ -1811,14 +2044,10 @@ async function executeSeasonImport() {
     return;
   }
 
-  if (importPendingImportId && importServerMode === 'update' && (!importDiffState || !importDiffToken)) {
-    alert('업데이트 Diff 상태를 다시 준비해주세요.');
-    return;
-  }
-
   const normalizedSeason = normalizeSeasonInputFieldValue();
   const seasonInfo = normalizedSeason || importPreviewState.seasonInfo;
   const importMode = importPreviewState.importMode;
+  const schemaSummaryJson = JSON.stringify(buildImportSchemaSummary());
   const candidates = (importPreviewState.previewRows || [])
     .filter(row => row.status === 'VALID_INSERT')
     .map(row => ({
@@ -1854,29 +2083,38 @@ async function executeSeasonImport() {
   if (executeBtn) executeBtn.disabled = true;
 
   let importId = importPendingImportId || '';
+  let shouldUploadChunks = false;
   try {
     if (!importPendingImportId) {
-      const begin = await CloudClubApi.call('seasonImportBegin', {
-        season: seasonInfo.seasonAlias,
-        importMode: importMode,
-        schemaSummaryJson: JSON.stringify(buildImportSchemaSummary()),
-        adminToken: adminToken
-      });
+      const beginResult = await beginImportSessionWithRecovery(
+        seasonInfo,
+        importMode,
+        schemaSummaryJson,
+        setProgress
+      );
 
-      if (!begin.success || !begin.importId) {
-        setProgress(`❌ 업로드 시작 실패: ${escapeHtml(begin.message || '알 수 없는 오류')}`, false);
+      if (!beginResult.success || !beginResult.importId) {
+        setProgress(`❌ 업로드 시작 실패: ${escapeHtml(beginResult.message || '알 수 없는 오류')}`, false);
         refreshImportExecuteButtonState();
         return;
       }
 
-      importId = begin.importId;
+      importId = beginResult.importId;
       importPendingImportId = importId;
-      importServerMode = String(begin.targetMode || 'create');
+      importServerMode = String(beginResult.targetMode || 'create');
       importServerModeHint = importServerMode;
+      shouldUploadChunks = true;
 
-      setProgress('업로드 세션 생성 완료. 데이터 전송 중...', true);
+      setProgress(
+        beginResult.recoveredFromActive
+          ? '기존 진행 세션을 이어받았습니다. 현재 파일 기준으로 데이터 동기화 중...'
+          : '업로드 세션 생성 완료. 데이터 전송 중...',
+        true
+      );
       refreshImportModeUi();
+    }
 
+    if (shouldUploadChunks) {
       const chunks = buildImportPayloadChunks(candidates, 4200);
       let cumulative = {
         inserted_count: 0,
@@ -1905,46 +2143,23 @@ async function executeSeasonImport() {
           true
         );
       }
-
       if (importServerMode === 'update') {
-        const diffResponse = await CloudClubApi.call('seasonImportDiff', {
-          importId: importId,
-          limit: 500,
-          offset: 0,
-          adminToken: adminToken
-        });
-        if (!diffResponse.success) {
-          throw new Error(diffResponse.message || '변경사항 Diff 계산 실패');
-        }
-
-        importDiffState = diffResponse;
-        importDiffToken = String(diffResponse.diffToken || '');
-        renderImportPreview(importPreviewState);
-        setImportExecuteButtonLabel(false);
-        setProgress(
-          `⚠️ 업데이트 모드 감지: ${escapeHtml(diffResponse.targetSheetName || seasonInfo.seasonAlias)}<br>` +
-          `미리보기의 셀 단위 변경사항(OB/YB 포함 가능)을 확인한 뒤, 같은 체크 상태로 다시 버튼을 눌러 최종 반영하세요.`,
-          true
-        );
-        refreshImportExecuteButtonState();
-        return;
+        importDiffState = null;
+        importDiffToken = '';
       }
     }
 
     if (importServerMode === 'update' && (!importDiffState || !importDiffToken)) {
-      const diffResponse = await CloudClubApi.call('seasonImportDiff', {
-        importId: importId,
-        limit: 500,
-        offset: 0,
-        adminToken: adminToken
-      });
-      if (!diffResponse.success) {
-        throw new Error(diffResponse.message || '변경사항 Diff 계산 실패');
-      }
-      importDiffState = diffResponse;
-      importDiffToken = String(diffResponse.diffToken || '');
+      const diffResponse = await fetchSeasonImportDiff(importId);
+      applyImportDiffState(diffResponse);
+      if (previewConfirm) previewConfirm.checked = false;
       renderImportPreview(importPreviewState);
-      setProgress('변경사항을 최신 상태로 다시 계산했습니다. 내용을 확인 후 다시 반영 버튼을 눌러주세요.', true);
+      setImportExecuteButtonLabel(true);
+      setProgress(
+        `⚠️ 업데이트 모드 감지: ${escapeHtml(diffResponse.targetSheetName || seasonInfo.seasonAlias)}<br>` +
+        `셀 단위 변경사항을 확인한 뒤 체크하고 다시 버튼을 눌러 최종 반영하세요.`,
+        true
+      );
       refreshImportExecuteButtonState();
       return;
     }
@@ -1986,10 +2201,7 @@ async function executeSeasonImport() {
     }
 
     showToast('<i class="fas fa-check-circle"></i> 시즌 생성/업로드 완료', true);
-    importPendingImportId = '';
-    importServerMode = 'create';
-    importDiffState = null;
-    importDiffToken = '';
+    clearImportPendingState();
     importServerModeHint = hasSeasonAliasInLoadedSheets(seasonInfo.seasonAlias) ? 'update' : 'create';
     if (previewConfirm) previewConfirm.checked = false;
     setImportExecuteButtonLabel(false);
@@ -1999,38 +2211,25 @@ async function executeSeasonImport() {
   } catch (error) {
     if (error && error.code === 'DIFF_TOKEN_MISMATCH' && importId && importServerMode === 'update') {
       try {
-        const latestDiff = await CloudClubApi.call('seasonImportDiff', {
-          importId: importId,
-          limit: 500,
-          offset: 0,
-          adminToken: adminToken
-        });
-        if (latestDiff && latestDiff.success) {
-          importDiffState = latestDiff;
-          importDiffToken = String(latestDiff.diffToken || '');
-          if (previewConfirm) previewConfirm.checked = false;
-          renderImportPreview(importPreviewState);
-          setProgress(
-            '⚠️ 변경사항이 갱신되어 토큰이 바뀌었습니다. 셀 단위 변경을 다시 확인하고 체크 후 재반영해주세요.',
-            false
-          );
-          refreshImportExecuteButtonState();
-          return;
-        }
+        const latestDiff = await fetchSeasonImportDiff(importId);
+        applyImportDiffState(latestDiff);
+        if (previewConfirm) previewConfirm.checked = false;
+        renderImportPreview(importPreviewState);
+        setImportExecuteButtonLabel(true);
+        setProgress(
+          '⚠️ 변경사항이 갱신되어 토큰이 바뀌었습니다. 셀 단위 변경을 다시 확인하고 체크 후 재반영해주세요.',
+          false
+        );
+        refreshImportExecuteButtonState();
+        return;
       } catch (refreshError) {
         console.error('diff refresh after token mismatch failed:', refreshError);
       }
     }
 
     if (importId && !importDiffState) {
-      try {
-        await CloudClubApi.call('seasonImportAbort', {
-          importId: importId,
-          adminToken: adminToken
-        });
-      } catch (abortError) {
-        console.error('import abort failed:', abortError);
-      }
+      await abortImportSession(importId, 'execute-import-error', { quiet: true });
+      clearImportPendingState();
     }
     const message = getDisplayErrorMessage(error, '시즌 업로드 중 오류가 발생했습니다.');
     setProgress(`❌ ${escapeHtml(message)}`, false);
@@ -2421,7 +2620,7 @@ async function initializeDashboard() {
   const importSeasonNoInput = document.getElementById('importSeasonNoInput');
   if (importSeasonNoInput) {
     importSeasonNoInput.addEventListener('input', () => {
-      invalidatePendingImportPreparation();
+      invalidatePendingImportPreparation('season-input-typing');
       importManualConfirmed = false;
       updateImportModeHintFromInput();
       if (importInference) {
@@ -2429,7 +2628,7 @@ async function initializeDashboard() {
       }
     });
     importSeasonNoInput.addEventListener('blur', () => {
-      invalidatePendingImportPreparation();
+      invalidatePendingImportPreparation('season-input-blur');
       const parsed = normalizeSeasonInputFieldValue();
       updateImportModeHintFromInput();
       if (parsed && importInference) {
@@ -2441,7 +2640,7 @@ async function initializeDashboard() {
   const importModeSelect = document.getElementById('importModeSelect');
   if (importModeSelect) {
     importModeSelect.addEventListener('change', () => {
-      invalidatePendingImportPreparation();
+      invalidatePendingImportPreparation('import-mode-changed');
       importManualConfirmed = false;
       if (importInference) {
         rebuildImportPreview();

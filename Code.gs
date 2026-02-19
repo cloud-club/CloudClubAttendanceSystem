@@ -3862,6 +3862,26 @@ function findActiveImportBySeason(alias) {
   return pack.rows.find(item => item.seasonAlias === seasonAlias && item.status === IMPORT_STATUS_ACTIVE) || null;
 }
 
+function buildActiveImportClientPayload(record) {
+  if (!record) return null;
+  return {
+    importId: String(record.importId || '').trim(),
+    seasonAlias: String(record.seasonAlias || '').trim(),
+    stagingSheetName: String(record.stagingSheetName || '').trim(),
+    status: String(record.status || '').trim(),
+    importMode: parseImportMode(record.importMode || ''),
+    targetMode: parseImportTargetMode(record.targetMode || ''),
+    targetSheetName: String(record.targetSheetName || '').trim(),
+    schemaSummaryJson: toImportJsonText(record.schemaSummaryJson || '', 50000),
+    createdAt: String(record.createdAt || '').trim(),
+    updatedAt: String(record.updatedAt || '').trim(),
+    insertedCount: Math.max(0, parseInt(record.insertedCount, 10) || 0),
+    skippedDuplicateCount: Math.max(0, parseInt(record.skippedDuplicateCount, 10) || 0),
+    droppedInvalidCount: Math.max(0, parseInt(record.droppedInvalidCount, 10) || 0),
+    skippedNonTargetCount: Math.max(0, parseInt(record.skippedNonTargetCount, 10) || 0)
+  };
+}
+
 function makeImportStagingSheetName(seasonAlias) {
   const suffix = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
   const rand = Utilities.getUuid().replace(/-/g, '').slice(0, 6);
@@ -3890,7 +3910,8 @@ function beginSeasonImport(params) {
         success: false,
         errorCode: 'IMPORT_ALREADY_ACTIVE',
         message: `${alias} 시즌에 진행 중인 업로드가 있습니다. 먼저 완료/중단해주세요.`,
-        importId: activeImport.importId
+        importId: activeImport.importId,
+        activeImport: buildActiveImportClientPayload(activeImport)
       };
     }
 

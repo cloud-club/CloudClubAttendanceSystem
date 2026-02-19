@@ -1233,6 +1233,78 @@
       margin-bottom: 12px;
     }
 
+    .import-diff-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .import-diff-controls {
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(96, 165, 250, 0.36);
+      background: rgba(30, 64, 175, 0.16);
+    }
+
+    .import-diff-filter {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #dbeafe;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .import-diff-filter .sheet-select {
+      min-height: 34px;
+      height: 34px;
+      padding: 5px 10px;
+      font-size: 13px;
+      border-radius: 8px;
+      width: auto;
+    }
+
+    .import-diff-legend {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .import-diff-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
+    .import-diff-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      display: inline-block;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.5);
+    }
+
+    .import-diff-swatch.add {
+      background: rgba(59, 130, 246, 0.82);
+    }
+
+    .import-diff-swatch.update {
+      background: rgba(245, 158, 11, 0.9);
+    }
+
+    .import-diff-swatch.delete {
+      background: rgba(239, 68, 68, 0.9);
+    }
+
     .import-mode-banner {
       margin-top: 10px;
       margin-bottom: 12px;
@@ -1325,15 +1397,19 @@
       background: rgba(185, 28, 28, 0.18);
     }
 
-    .import-preview-table td.cell-diff-add,
+    .import-preview-table td.cell-diff-add {
+      background: rgba(37, 99, 235, 0.3);
+      box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.68);
+    }
+
     .import-preview-table td.cell-diff-update {
-      background: rgba(22, 163, 74, 0.24);
-      box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.42);
+      background: rgba(217, 119, 6, 0.3);
+      box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.7);
     }
 
     .import-preview-table td.cell-diff-delete {
-      background: rgba(185, 28, 28, 0.24);
-      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.42);
+      background: rgba(185, 28, 28, 0.32);
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.72);
     }
 
     .modal-backdrop {
@@ -2329,6 +2405,21 @@
           <h2 class="card-title">가상 시즌 시트 미리보기 (A:L)</h2>
         </div>
         <div id="importPreviewSummary" class="import-summary"></div>
+        <div id="importDiffMeta" class="import-diff-meta"></div>
+        <div id="importDiffControls" class="import-diff-controls">
+          <label class="import-diff-filter" for="importDiffFilterSelect">
+            <span>Diff 보기</span>
+            <select id="importDiffFilterSelect" class="sheet-select" onchange="onImportDiffFilterChange(this.value)">
+              <option value="all">전체</option>
+              <option value="changed">변경만</option>
+            </select>
+          </label>
+          <div class="import-diff-legend">
+            <span class="import-diff-legend-item"><i class="import-diff-swatch add"></i>ADD</span>
+            <span class="import-diff-legend-item"><i class="import-diff-swatch update"></i>UPDATE</span>
+            <span class="import-diff-legend-item"><i class="import-diff-swatch delete"></i>DELETE_CANDIDATE</span>
+          </div>
+        </div>
         <div id="importPreviewWrap" class="table-wrap">
           <p class="info-text">분석 후 미리보기 테이블이 표시됩니다.</p>
         </div>
