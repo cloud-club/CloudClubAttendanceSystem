@@ -35,6 +35,11 @@ let importManualMapping = {};
 let importManualConfirmed = false;
 let importPreviewState = null;
 let importDebugReport = null;
+let importServerMode = 'create';
+let importPendingImportId = '';
+let importDiffState = null;
+let importDiffToken = '';
+let importDiffConfirmed = false;
 
 const IMPORT_FIELD_ORDER = [
   'name',
@@ -495,6 +500,12 @@ function normalizeImportPhoneLocal(value) {
   return /^010\d{8}$/.test(digits) ? digits : '';
 }
 
+function formatImportPhoneDisplay(value) {
+  const digits = normalizeImportPhoneLocal(value);
+  if (!digits) return '';
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
+
 function isValidImportEmailLocal(value) {
   const email = String(value || '').trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -509,6 +520,8 @@ function parseImportSeasonNo(value) {
   m = text.match(/(\d{1,2})\s*기/);
   if (m) return parseInt(m[1], 10);
   m = text.match(/^(\d{1,2})$/);
+  if (m) return parseInt(m[1], 10);
+  m = text.match(/(\d{1,2})/);
   if (m) return parseInt(m[1], 10);
   return NaN;
 }
@@ -535,13 +548,13 @@ function parseImportBooleanLocal(value) {
   if (value === true) return { value: true, valid: true };
   if (value === false) return { value: false, valid: true };
   const text = String(value || '').trim().toLowerCase();
-  if (!text) return { value: null, valid: true };
+  if (!text) return { value: false, valid: true, defaulted: true };
 
   const truthy = { true: true, '1': true, y: true, yes: true, o: true, '예': true, '체크': true };
   const falsy = { false: true, '0': true, n: true, no: true, x: true, '아니오': true, '미체크': true };
-  if (truthy[text]) return { value: true, valid: true };
-  if (falsy[text]) return { value: false, valid: true };
-  return { value: null, valid: false };
+  if (truthy[text]) return { value: true, valid: true, defaulted: false };
+  if (falsy[text]) return { value: false, valid: true, defaulted: false };
+  return { value: false, valid: false, defaulted: false };
 }
 
 function isLikelyNameValue(value) {
@@ -850,6 +863,15 @@ function parseSeasonFromInput(raw) {
   };
 }
 
+function normalizeSeasonInputFieldValue() {
+  const input = document.getElementById('importSeasonNoInput');
+  if (!input) return null;
+  const parsed = parseSeasonFromInput(input.value || '');
+  if (!parsed.valid) return null;
+  input.value = parsed.seasonAlias;
+  return parsed;
+}
+
 function findFallbackValueInRow(row, predicate) {
   for (let i = 0; i < row.length; i++) {
     const value = normalizeImportCell(row[i]);
@@ -981,7 +1003,8 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
 
     const name = String(nameSource.value || '').trim();
     const seasonNo = parseImportSeasonNo(seasonSource.value || '');
-    const phone = normalizeImportPhoneLocal(phoneSource.value || '');
+    const phoneDigits = normalizeImportPhoneLocal(phoneSource.value || '');
+    const phone = formatImportPhoneDisplay(phoneDigits || '');
     const email = String(emailSource.value || '').trim().toLowerCase();
     const githubId = String(githubIdSource.value || '').trim();
     const githubEmailRaw = String(githubEmailSource.value || '').trim().toLowerCase();
@@ -1003,7 +1026,7 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
       status = 'DROP_INVALID';
       reasonCode = `ROW_${rowNumber}_MISSING_NAME`;
       reason = '이름을 찾을 수 없습니다.';
-    } else if (!phone) {
+    } else if (!phoneDigits) {
       status = 'DROP_INVALID';
       reasonCode = `ROW_${rowNumber}_INVALID_PHONE`;
       reason = '전화번호 형식이 올바르지 않습니다.';
@@ -1019,14 +1042,14 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
       status = 'SKIP_NON_TARGET_COHORT';
       reasonCode = `ROW_${rowNumber}_NON_TARGET_COHORT`;
       reason = `대상 시즌(${seasonInfo.seasonNo}기)과 다른 기수(${seasonNo}기)`;
-    } else if (seenPhones[phone]) {
+    } else if (seenPhones[phoneDigits]) {
       status = 'SKIP_DUPLICATE';
       reasonCode = `ROW_${rowNumber}_DUPLICATE_PHONE`;
       reason = '전화번호 기준 중복';
     }
 
     if (status === 'VALID_INSERT') {
-      seenPhones[phone] = true;
+      seenPhones[phoneDigits] = true;
       stats.valid_insert++;
 
       if (githubEmailRaw && !githubEmail) {
@@ -1078,9 +1101,9 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
       notionEmail: notionEmail,
       discordId: discordId,
       slackEmail: slackEmail,
-      feeChecked: feeCheckedParsed.value,
-      completed: completedParsed.value,
-      isStaff: isStaffParsed.value,
+      feeChecked: !!feeCheckedParsed.value,
+      completed: !!completedParsed.value,
+      isStaff: !!isStaffParsed.value,
       provenance: {
         name: nameSource.source,
         season: seasonSource.source,
@@ -1282,9 +1305,9 @@ function renderImportPreview(previewState) {
         <td>${escapeHtml(item.notionEmail || '-')}</td>
         <td>${escapeHtml(item.discordId || '-')}</td>
         <td>${escapeHtml(item.slackEmail || '-')}</td>
-        <td>${item.feeChecked === null ? '-' : (item.feeChecked ? 'TRUE' : 'FALSE')}</td>
-        <td>${item.completed === null ? '-' : (item.completed ? 'TRUE' : 'FALSE')}</td>
-        <td>${item.isStaff === null ? '-' : (item.isStaff ? 'TRUE' : 'FALSE')}</td>
+        <td>${item.feeChecked ? 'TRUE' : 'FALSE'}</td>
+        <td>${item.completed ? 'TRUE' : 'FALSE'}</td>
+        <td>${item.isStaff ? 'TRUE' : 'FALSE'}</td>
         <td>${escapeHtml(item.reasonCode || '-')}</td>
       </tr>
     `;
@@ -1321,8 +1344,20 @@ function refreshImportExecuteButtonState() {
   if (!btn) return;
 
   const previewConfirmed = !!(document.getElementById('importPreviewConfirmed') && document.getElementById('importPreviewConfirmed').checked);
+  const diffConfirmed = !!(document.getElementById('importDiffConfirmed') && document.getElementById('importDiffConfirmed').checked);
   const hasBlocker = !!(importPreviewState && Array.isArray(importPreviewState.blockers) && importPreviewState.blockers.length > 0);
-  btn.disabled = !importPreviewState || hasBlocker || !previewConfirmed;
+  const baseReady = !!importPreviewState && !hasBlocker && previewConfirmed;
+  if (!baseReady) {
+    btn.disabled = true;
+    return;
+  }
+
+  if (importPendingImportId && importServerMode === 'update') {
+    btn.disabled = !importDiffState || !importDiffToken || !diffConfirmed;
+    return;
+  }
+
+  btn.disabled = false;
 }
 
 function rebuildImportPreview() {
@@ -1346,7 +1381,7 @@ function rebuildImportPreview() {
     return;
   }
 
-  const importMode = String(document.getElementById('importModeSelect') ? document.getElementById('importModeSelect').value : 'yb');
+  const importMode = String(document.getElementById('importModeSelect') ? document.getElementById('importModeSelect').value : 'all');
   importPreviewState = buildImportPreviewState(importRawMatrix, importInference, importManualMapping, seasonInfo, importMode);
   importDebugReport = {
     generatedAt: Date.now(),
@@ -1378,7 +1413,8 @@ async function analyzeImportFile() {
     return;
   }
 
-  const seasonInfo = parseSeasonFromInput(document.getElementById('importSeasonNoInput') ? document.getElementById('importSeasonNoInput').value : '');
+  const normalizedSeason = normalizeSeasonInputFieldValue();
+  const seasonInfo = normalizedSeason || parseSeasonFromInput(document.getElementById('importSeasonNoInput') ? document.getElementById('importSeasonNoInput').value : '');
   if (!seasonInfo.valid) {
     alert('시즌 번호를 입력해주세요. (예: 9 또는 season_09)');
     return;
@@ -1411,8 +1447,17 @@ async function analyzeImportFile() {
     };
     importManualMapping = createImportManualMappingFromAuto(columnPack, autoFieldMap);
     importManualConfirmed = false;
+    importServerMode = 'create';
+    importPendingImportId = '';
+    importDiffState = null;
+    importDiffToken = '';
+    importDiffConfirmed = false;
     const previewConfirm = document.getElementById('importPreviewConfirmed');
     if (previewConfirm) previewConfirm.checked = false;
+    const diffConfirm = document.getElementById('importDiffConfirmed');
+    if (diffConfirm) diffConfirm.checked = false;
+    setImportExecuteButtonLabel(false);
+    renderImportDiffState(null);
 
     rebuildImportPreview();
     showBoxMessage('importAnalyzeResult', `✅ 분석 완료: ${escapeHtml(file.name)} (${columnPack.rowCount}행)`, true);
@@ -1445,6 +1490,11 @@ function resetImportFlow(resetFileInput) {
   importManualConfirmed = false;
   importPreviewState = null;
   importDebugReport = null;
+  importServerMode = 'create';
+  importPendingImportId = '';
+  importDiffState = null;
+  importDiffToken = '';
+  importDiffConfirmed = false;
 
   if (resetFileInput !== false) {
     const fileInput = document.getElementById('importFileInput');
@@ -1453,11 +1503,15 @@ function resetImportFlow(resetFileInput) {
 
   const previewConfirm = document.getElementById('importPreviewConfirmed');
   if (previewConfirm) previewConfirm.checked = false;
+  const diffConfirm = document.getElementById('importDiffConfirmed');
+  if (diffConfirm) diffConfirm.checked = false;
 
   renderImportSchemaInference(null, null);
   renderImportManualMapping(null);
   renderImportDebug([]);
   renderImportPreview(null);
+  renderImportDiffState(null);
+  setImportExecuteButtonLabel(false);
   refreshImportExecuteButtonState();
 }
 
@@ -1544,7 +1598,20 @@ async function executeSeasonImport() {
     return;
   }
 
-  const seasonInfo = importPreviewState.seasonInfo;
+  const diffConfirm = document.getElementById('importDiffConfirmed');
+  if (importPendingImportId && importServerMode === 'update') {
+    if (!importDiffState || !importDiffToken) {
+      alert('변경사항 Diff를 먼저 조회해주세요.');
+      return;
+    }
+    if (!diffConfirm || !diffConfirm.checked) {
+      alert('변경사항 반영 동의를 먼저 체크해주세요.');
+      return;
+    }
+  }
+
+  const normalizedSeason = normalizeSeasonInputFieldValue();
+  const seasonInfo = normalizedSeason || importPreviewState.seasonInfo;
   const importMode = importPreviewState.importMode;
   const candidates = (importPreviewState.previewRows || [])
     .filter(row => row.status === 'VALID_INSERT')
@@ -1580,73 +1647,130 @@ async function executeSeasonImport() {
   const executeBtn = document.getElementById('importExecuteBtn');
   if (executeBtn) executeBtn.disabled = true;
 
-  let importId = '';
+  let importId = importPendingImportId || '';
   try {
-    const begin = await CloudClubApi.call('seasonImportBegin', {
-      season: seasonInfo.seasonAlias,
-      importMode: importMode,
-      schemaSummaryJson: JSON.stringify(buildImportSchemaSummary()),
-      adminToken: adminToken
-    });
-
-    if (!begin.success || !begin.importId) {
-      setProgress(`❌ 업로드 시작 실패: ${escapeHtml(begin.message || '알 수 없는 오류')}`, false);
-      refreshImportExecuteButtonState();
-      return;
-    }
-
-    importId = begin.importId;
-    setProgress('업로드 세션 생성 완료. 데이터 전송 중...', true);
-
-    const chunks = buildImportPayloadChunks(candidates, 4200);
-    let cumulative = {
-      inserted_count: 0,
-      skipped_duplicate_count: 0,
-      dropped_invalid_count: 0,
-      skipped_non_target_count: 0
-    };
-
-    for (let i = 0; i < chunks.length; i++) {
-      const response = await CloudClubApi.call('seasonImportChunk', {
-        importId: importId,
-        chunkSeq: i + 1,
-        rowsJson: JSON.stringify(chunks[i]),
+    if (!importPendingImportId) {
+      const begin = await CloudClubApi.call('seasonImportBegin', {
+        season: seasonInfo.seasonAlias,
+        importMode: importMode,
+        schemaSummaryJson: JSON.stringify(buildImportSchemaSummary()),
         adminToken: adminToken
       });
 
-      if (!response.success) {
-        throw new Error(response.message || `청크 ${i + 1} 업로드 실패`);
+      if (!begin.success || !begin.importId) {
+        setProgress(`❌ 업로드 시작 실패: ${escapeHtml(begin.message || '알 수 없는 오류')}`, false);
+        refreshImportExecuteButtonState();
+        return;
       }
 
-      cumulative = response.cumulative || cumulative;
-      setProgress(
-        `청크 업로드 진행 중... (${i + 1}/${chunks.length})<br>` +
-        `INSERT ${cumulative.inserted_count} / DUP ${cumulative.skipped_duplicate_count} / ` +
-        `DROP ${cumulative.dropped_invalid_count} / SKIP_COHORT ${cumulative.skipped_non_target_count}`,
-        true
-      );
+      importId = begin.importId;
+      importPendingImportId = importId;
+      importServerMode = String(begin.targetMode || 'create');
+
+      setProgress('업로드 세션 생성 완료. 데이터 전송 중...', true);
+
+      const chunks = buildImportPayloadChunks(candidates, 4200);
+      let cumulative = {
+        inserted_count: 0,
+        skipped_duplicate_count: 0,
+        dropped_invalid_count: 0,
+        skipped_non_target_count: 0
+      };
+
+      for (let i = 0; i < chunks.length; i++) {
+        const response = await CloudClubApi.call('seasonImportChunk', {
+          importId: importId,
+          chunkSeq: i + 1,
+          rowsJson: JSON.stringify(chunks[i]),
+          adminToken: adminToken
+        });
+
+        if (!response.success) {
+          throw new Error(response.message || `청크 ${i + 1} 업로드 실패`);
+        }
+
+        cumulative = response.cumulative || cumulative;
+        setProgress(
+          `청크 업로드 진행 중... (${i + 1}/${chunks.length})<br>` +
+          `INSERT ${cumulative.inserted_count} / DUP ${cumulative.skipped_duplicate_count} / ` +
+          `DROP ${cumulative.dropped_invalid_count} / SKIP_COHORT ${cumulative.skipped_non_target_count}`,
+          true
+        );
+      }
+
+      if (importServerMode === 'update') {
+        const diffResponse = await CloudClubApi.call('seasonImportDiff', {
+          importId: importId,
+          limit: 500,
+          offset: 0,
+          adminToken: adminToken
+        });
+        if (!diffResponse.success) {
+          throw new Error(diffResponse.message || '변경사항 Diff 계산 실패');
+        }
+
+        importDiffState = diffResponse;
+        importDiffToken = String(diffResponse.diffToken || '');
+        importDiffConfirmed = false;
+        if (diffConfirm) diffConfirm.checked = false;
+        renderImportDiffState(diffResponse);
+        expandImportCard('importDiffCard');
+        setImportExecuteButtonLabel(true);
+        setProgress(
+          `⚠️ 업데이트 모드 감지: ${escapeHtml(diffResponse.targetSheetName || seasonInfo.seasonAlias)}<br>` +
+          `Diff를 확인하고 동의 체크 후 다시 버튼을 눌러 최종 반영하세요.`,
+          true
+        );
+        refreshImportExecuteButtonState();
+        return;
+      }
     }
 
-    const finalized = await CloudClubApi.call('seasonImportFinalize', {
+    const finalizePayload = {
       importId: importId,
       adminToken: adminToken
-    });
+    };
+    if (importServerMode === 'update') {
+      finalizePayload.confirmDiff = true;
+      finalizePayload.diffToken = importDiffToken;
+      finalizePayload.applyDeletes = false;
+    }
+
+    const finalized = await CloudClubApi.call('seasonImportFinalize', finalizePayload);
     if (!finalized.success) {
       throw new Error(finalized.message || '업로드 완료 처리 실패');
     }
 
-    setProgress(
-      `✅ 시즌 생성/업로드 완료 (${escapeHtml(finalized.sheetName || seasonInfo.seasonAlias)})<br>` +
-      `INSERT ${finalized.inserted_count || 0}, DUP ${finalized.skipped_duplicate_count || 0}, ` +
-      `DROP ${finalized.dropped_invalid_count || 0}, SKIP_COHORT ${finalized.skipped_non_target_count || 0}`,
-      true
-    );
+    if (importServerMode === 'update') {
+      setProgress(
+        `✅ 시즌 업데이트 완료 (${escapeHtml(finalized.sheetName || seasonInfo.seasonAlias)})<br>` +
+        `ADD ${Number(finalized.added_count || 0)}, UPDATE_ROW ${Number(finalized.updated_row_count || 0)}, ` +
+        `DELETE_CANDIDATE ${Number(finalized.delete_candidate_count || 0)}(미반영), ` +
+        `PROTECTED_SKIP ${Number(finalized.protected_skip_count || 0)}`,
+        true
+      );
+    } else {
+      setProgress(
+        `✅ 시즌 생성/업로드 완료 (${escapeHtml(finalized.sheetName || seasonInfo.seasonAlias)})<br>` +
+        `INSERT ${finalized.inserted_count || 0}, DUP ${finalized.skipped_duplicate_count || 0}, ` +
+        `DROP ${finalized.dropped_invalid_count || 0}, SKIP_COHORT ${finalized.skipped_non_target_count || 0}`,
+        true
+      );
+    }
 
     showToast('<i class="fas fa-check-circle"></i> 시즌 생성/업로드 완료', true);
+    importPendingImportId = '';
+    importServerMode = 'create';
+    importDiffState = null;
+    importDiffToken = '';
+    importDiffConfirmed = false;
+    if (diffConfirm) diffConfirm.checked = false;
+    setImportExecuteButtonLabel(false);
+    renderImportDiffState(null);
     await loadSheets();
     await refreshSeasonData();
   } catch (error) {
-    if (importId) {
+    if (importId && !importDiffState) {
       try {
         await CloudClubApi.call('seasonImportAbort', {
           importId: importId,
@@ -1670,6 +1794,108 @@ function syncImportSeasonInputByCurrentSelection() {
   if (alias && !String(input.value || '').trim()) {
     input.value = alias;
   }
+}
+
+function setImportExecuteButtonLabel(waitingDiff) {
+  const label = document.getElementById('importExecuteBtnLabel');
+  if (!label) return;
+  label.textContent = waitingDiff ? '변경사항 최종 반영' : '시즌 생성 + 업로드 반영';
+}
+
+function setImportCardCollapsed(cardId, collapsed) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  const body = card.querySelector('.collapsible-body');
+  const header = card.querySelector('.collapsible-header');
+  if (!body || !header) return;
+
+  card.classList.toggle('collapsed', !!collapsed);
+  header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
+function initializeImportCollapsibleCards() {
+  const cards = document.querySelectorAll('[data-import-card][data-collapsible="true"]');
+  cards.forEach(card => {
+    const cardId = card.id;
+    const defaultOpen = String(card.dataset.defaultOpen || 'false') === 'true';
+    setImportCardCollapsed(cardId, !defaultOpen);
+  });
+}
+
+function toggleImportCard(cardId) {
+  const card = document.getElementById(cardId);
+  if (!card || card.dataset.collapsible !== 'true') return;
+  const isCollapsed = card.classList.contains('collapsed');
+  setImportCardCollapsed(cardId, !isCollapsed);
+}
+
+function handleImportCardHeaderKey(event, cardId) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  toggleImportCard(cardId);
+}
+
+function expandImportCard(cardId) {
+  setImportCardCollapsed(cardId, false);
+}
+
+function renderImportDiffState(diffState) {
+  const summaryNode = document.getElementById('importDiffSummary');
+  const wrap = document.getElementById('importDiffWrap');
+  if (!summaryNode || !wrap) return;
+
+  if (!diffState || !Array.isArray(diffState.rows)) {
+    summaryNode.innerHTML = '';
+    wrap.innerHTML = '<p class="info-text">업데이트 모드에서 Diff 계산 후 변경사항이 표시됩니다.</p>';
+    return;
+  }
+
+  const summary = diffState.summary || {};
+  summaryNode.innerHTML = `
+    <span class="import-chip pass">ADD ${Number(summary.addCount || 0)}</span>
+    <span class="import-chip warn">UPDATE ${Number(summary.updateFieldCount || 0)}</span>
+    <span class="import-chip fail">DELETE_CANDIDATE ${Number(summary.deleteCandidateCount || 0)}</span>
+    <span class="import-chip">PROTECTED_SKIP ${Number(summary.protectedSkipCount || 0)}</span>
+  `;
+
+  if (diffState.rows.length === 0) {
+    wrap.innerHTML = '<p class="info-text">반영할 변경사항이 없습니다. (동일 데이터)</p>';
+    return;
+  }
+
+  const rows = diffState.rows.map(item => {
+    const type = String(item.type || '').toUpperCase();
+    const rowClass = type === 'ADD'
+      ? 'add'
+      : (type === 'DELETE_CANDIDATE' ? 'delete' : 'update');
+    const targetRow = item.targetRow === null || item.targetRow === undefined ? '-' : item.targetRow;
+    return `
+      <tr class="diff-row ${rowClass}">
+        <td>${escapeHtml(type)}</td>
+        <td>${escapeHtml(item.phone || '-')}</td>
+        <td>${escapeHtml(item.fieldLabel || item.field || '-')}</td>
+        <td>${escapeHtml(item.before || '-')}</td>
+        <td>${escapeHtml(item.after || '-')}</td>
+        <td>${escapeHtml(targetRow)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  wrap.innerHTML = `
+    <table class="management-table import-preview-table import-diff-table">
+      <thead>
+        <tr>
+          <th>유형</th>
+          <th>Phone</th>
+          <th>필드</th>
+          <th>이전 값</th>
+          <th>이후 값</th>
+          <th>대상 행</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 function renderSheetSchemaAudit(response) {
@@ -1989,12 +2215,19 @@ async function initializeDashboard() {
   resetScheduleForm();
   syncImportSeasonInputByCurrentSelection();
   resetImportFlow(false);
+  initializeImportCollapsibleCards();
 
   const importSeasonNoInput = document.getElementById('importSeasonNoInput');
   if (importSeasonNoInput) {
     importSeasonNoInput.addEventListener('input', () => {
       importManualConfirmed = false;
       if (importInference) {
+        rebuildImportPreview();
+      }
+    });
+    importSeasonNoInput.addEventListener('blur', () => {
+      const parsed = normalizeSeasonInputFieldValue();
+      if (parsed && importInference) {
         rebuildImportPreview();
       }
     });
@@ -2007,6 +2240,14 @@ async function initializeDashboard() {
       if (importInference) {
         rebuildImportPreview();
       }
+    });
+  }
+
+  const importDiffConfirmedInput = document.getElementById('importDiffConfirmed');
+  if (importDiffConfirmedInput) {
+    importDiffConfirmedInput.addEventListener('change', () => {
+      importDiffConfirmed = !!importDiffConfirmedInput.checked;
+      refreshImportExecuteButtonState();
     });
   }
 }
@@ -2504,6 +2745,7 @@ function openTab(tabName, evt) {
 
   if (tabName === 'seasonImport') {
     syncImportSeasonInputByCurrentSelection();
+    initializeImportCollapsibleCards();
     refreshSheetSchemaAudit();
   }
 }

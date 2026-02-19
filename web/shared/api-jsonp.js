@@ -49,7 +49,7 @@
   function sanitizeUrl(url) {
     try {
       var parsed = new URL(url, global.location && global.location.href ? global.location.href : undefined);
-      ['adminKey', 'adminToken', 'phone', 'comment', 'sessionKey', 'confirmSessionKey', 'itemsJson', 'rowsJson', 'schemaSummaryJson'].forEach(function (key) {
+      ['adminKey', 'adminToken', 'phone', 'comment', 'sessionKey', 'confirmSessionKey', 'itemsJson', 'rowsJson', 'schemaSummaryJson', 'diffToken'].forEach(function (key) {
         if (parsed.searchParams.has(key)) {
           parsed.searchParams.set(key, 'REDACTED');
         }
