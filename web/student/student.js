@@ -1,6 +1,141 @@
 let countdownInterval;
 let isAttendanceActive = false;
 let currentSeason = '';
+const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
+
+function normalizeSeasonAlias(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+
+  const seasonMatch = raw.match(/^season[_-]?(\d{1,2})$/);
+  if (seasonMatch) {
+    return `season_${seasonMatch[1].padStart(2, '0')}`;
+  }
+
+  const numberMatch = raw.match(/^(\d{1,2})$/);
+  if (numberMatch) {
+    return `season_${numberMatch[1].padStart(2, '0')}`;
+  }
+  return '';
+}
+
+function parseSeasonNo(alias) {
+  const match = String(alias || '').trim().toLowerCase().match(/^season_(\d{1,2})$/);
+  if (!match) return NaN;
+  return parseInt(match[1], 10);
+}
+
+function pickLatestSeasonAliasFromSheets(sheets) {
+  const list = Array.isArray(sheets) ? sheets : [];
+  let bestAlias = '';
+  let bestNo = -1;
+
+  list.forEach(item => {
+    const alias = normalizeSeasonAlias(item && item.alias);
+    const seasonNo = parseSeasonNo(alias);
+    if (!isNaN(seasonNo) && seasonNo > bestNo) {
+      bestNo = seasonNo;
+      bestAlias = alias;
+    }
+  });
+
+  if (bestAlias) return bestAlias;
+
+  const active = list.find(item => item && item.isActive && normalizeSeasonAlias(item.alias));
+  return active ? normalizeSeasonAlias(active.alias) : '';
+}
+
+function readCachedLatestSeasonAlias() {
+  try {
+    return normalizeSeasonAlias(localStorage.getItem(LATEST_SEASON_STORAGE_KEY));
+  } catch (error) {
+    return '';
+  }
+}
+
+function writeCachedLatestSeasonAlias(alias) {
+  const normalized = normalizeSeasonAlias(alias);
+  if (!normalized) return;
+
+  try {
+    localStorage.setItem(LATEST_SEASON_STORAGE_KEY, normalized);
+  } catch (error) {
+    // Ignore storage failures in restricted browser mode.
+  }
+}
+
+function updateSeasonInfoBadge() {
+  const seasonInfo = document.getElementById('seasonInfo');
+  if (!seasonInfo) return;
+
+  if (!currentSeason) {
+    seasonInfo.style.display = 'none';
+    seasonInfo.innerHTML = '';
+    return;
+  }
+
+  seasonInfo.style.display = 'inline-flex';
+  seasonInfo.innerHTML = `<i class="fas fa-calendar-alt"></i> ${currentSeason}`;
+}
+
+function updateUrlSeasonParam(alias) {
+  const normalized = normalizeSeasonAlias(alias);
+  if (!normalized) return;
+
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('season', normalized);
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  } catch (error) {
+    // If URL parsing fails, keep current URL.
+  }
+}
+
+async function resolveLatestSeasonAlias() {
+  if (!window.CloudClubApi || typeof window.CloudClubApi.call !== 'function') {
+    throw new Error('CloudClubApi를 사용할 수 없습니다.');
+  }
+
+  const sheets = await window.CloudClubApi.call('sheets');
+  const latest = pickLatestSeasonAliasFromSheets(sheets);
+  if (!latest) {
+    throw new Error('최신 시즌을 찾을 수 없습니다.');
+  }
+  return latest;
+}
+
+async function ensureInitialSeasonAlias() {
+  const query = new URLSearchParams(window.location.search);
+  const querySeason = normalizeSeasonAlias(query.get('season'));
+  if (querySeason) {
+    currentSeason = querySeason;
+    writeCachedLatestSeasonAlias(querySeason);
+    return { resolved: true, source: 'query' };
+  }
+
+  const cached = readCachedLatestSeasonAlias();
+  if (cached) {
+    currentSeason = cached;
+    updateUrlSeasonParam(cached);
+  }
+
+  try {
+    const latest = await resolveLatestSeasonAlias();
+    currentSeason = latest;
+    writeCachedLatestSeasonAlias(latest);
+    updateUrlSeasonParam(latest);
+    return { resolved: true, source: 'api' };
+  } catch (error) {
+    console.warn('학생 페이지 최신 시즌 조회 실패:', error);
+  }
+
+  if (currentSeason) {
+    return { resolved: true, source: 'cache' };
+  }
+
+  return { resolved: false, source: 'none' };
+}
 
 function getDisplayErrorMessage(error, fallbackMessage) {
   if (error && error.code === 'NETWORK_ERROR') {
@@ -524,11 +659,11 @@ function handleStatusError(error) {
   statusResult.style.display = 'block';
 }
 
-function showSeasonWarning() {
+function showSeasonWarning(message) {
   const warning = document.createElement('div');
   warning.className = 'error';
   warning.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 16px 24px; border-radius: 12px; z-index: 1000; max-width: 420px; text-align: center;';
-  warning.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 시즌 정보가 없습니다. 관리자에게 전달받은 URL로 접속해주세요.';
+  warning.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message || '최신 시즌을 확인하지 못했습니다. 잠시 후 다시 시도해주세요.'}`;
   document.body.appendChild(warning);
 
   setTimeout(() => {
@@ -537,15 +672,10 @@ function showSeasonWarning() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const query = new URLSearchParams(window.location.search);
-  currentSeason = (query.get('season') || '').trim();
-  const seasonInfo = document.getElementById('seasonInfo');
-
-  if (!currentSeason) {
-    showSeasonWarning();
-  } else if (seasonInfo) {
-    seasonInfo.style.display = 'inline-flex';
-    seasonInfo.innerHTML = `<i class="fas fa-calendar-alt"></i> ${currentSeason}`;
+  const seasonResult = await ensureInitialSeasonAlias();
+  updateSeasonInfoBadge();
+  if (!seasonResult.resolved) {
+    showSeasonWarning('시즌 정보를 불러오지 못해 기본 시즌 기준으로 동작합니다.');
   }
 
   const savedPhone = localStorage.getItem('lastUsedPhone');
