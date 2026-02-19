@@ -80,6 +80,18 @@ const ATTENDANCE_DASHBOARD_STATUS_LABELS = {
   excused: '유고',
   future: '예정'
 };
+const MANUAL_APPROVE_BATCH_CHUNK_SIZE = 100;
+const MANUAL_MEMBER_STATUS_LABELS = {
+  none: '미기록',
+  on_time: '출석',
+  late: '지각',
+  excused: '유고',
+  absent: '미기록(결석)',
+  future: '미기록(예정)',
+  recorded: '기록됨'
+};
+
+let manualApproveState = createManualApproveInitialState();
 
 const IMPORT_FIELD_ORDER = [
   'name',
@@ -2609,13 +2621,9 @@ async function initializeDashboard() {
 
   const savedPhone = localStorage.getItem('lastUsedPhone');
   if (savedPhone) {
-    const phoneInput = document.getElementById('phoneInput');
     const statusPhoneInput = document.getElementById('statusPhoneInput');
-    const manualPhoneInput = document.getElementById('manualPhoneInput');
 
-    if (phoneInput) phoneInput.value = savedPhone;
     if (statusPhoneInput) statusPhoneInput.value = savedPhone;
-    if (manualPhoneInput) manualPhoneInput.value = savedPhone;
   }
 
   const scheduleSelect = document.getElementById('scheduleSessionSelect');
@@ -2638,14 +2646,15 @@ async function initializeDashboard() {
     });
   }
 
-  document.getElementById('phoneInput').addEventListener('click', function () {
-    this.focus();
-  });
-  document.getElementById('statusPhoneInput').addEventListener('click', function () {
-    this.focus();
-  });
+  const statusPhoneInput = document.getElementById('statusPhoneInput');
+  if (statusPhoneInput) {
+    statusPhoneInput.addEventListener('click', function () {
+      this.focus();
+    });
+  }
 
   initializeAttendanceDashboardUi();
+  initializeManualApproveUi();
 
   if (!calendarSelectedDateKey) {
     calendarSelectedDateKey = getDateKeyFromDate(new Date());
@@ -4925,6 +4934,7 @@ function renderCountdown(session) {
 
   const disableAttend = (label) => {
     isAttendanceActive = false;
+    if (!attendBtn) return;
     attendBtn.disabled = true;
     attendBtn.innerHTML = label;
   };
@@ -4965,7 +4975,9 @@ function renderCountdown(session) {
   }
 
   isAttendanceActive = true;
-  attendBtn.disabled = false;
+  if (attendBtn) {
+    attendBtn.disabled = false;
+  }
 
   const onTimeDeadline = Number(session.onTimeDeadline || session.endTime || 0);
   const lateDeadline = Number(session.lateDeadline || session.endTime || 0);
@@ -5303,14 +5315,115 @@ function handleStatusError(error) {
   statusResult.style.display = 'block';
 }
 
+function createManualApproveInitialState() {
+  return {
+    seasonAlias: '',
+    sessionKey: '',
+    keyword: '',
+    absentOnly: false,
+    selectedOnly: false,
+    defaultComment: '',
+    forceOverride: false,
+    members: [],
+    statusByPhone: {},
+    selectedPhones: {},
+    memberComments: {},
+    openCommentPhones: {},
+    filteredMembers: [],
+    statusLoadedSeasonAlias: '',
+    statusLoadedSessionKey: ''
+  };
+}
+
+function normalizeManualMemberStatus(rawStatus) {
+  const value = String(rawStatus || '').trim();
+  if (!value) return 'none';
+  if (value === 'on_time' || value === 'late' || value === 'excused' || value === 'absent' || value === 'future') {
+    return value;
+  }
+  return 'recorded';
+}
+
+function isManualMemberValueRecorded(status) {
+  return status === 'on_time' || status === 'late' || status === 'excused' || status === 'recorded';
+}
+
+function getManualMemberStatusInfo(phone) {
+  const key = String(phone || '').trim();
+  const mapped = key && manualApproveState.statusByPhone ? manualApproveState.statusByPhone[key] : null;
+  if (mapped) return mapped;
+  return {
+    status: 'none',
+    label: MANUAL_MEMBER_STATUS_LABELS.none,
+    hasValue: false,
+    note: '',
+    attendTime: ''
+  };
+}
+
+function buildManualStatusByPhoneFromReport(report, sessionKey) {
+  const map = {};
+  const members = report && Array.isArray(report.members) ? report.members : [];
+  const targetKey = String(sessionKey || '').trim();
+
+  members.forEach(member => {
+    const phone = String(member && member.phone || '').trim();
+    if (!phone) return;
+
+    const details = Array.isArray(member.details) ? member.details : [];
+    const detail = details.find(item => String(item && item.sessionKey || '').trim() === targetKey);
+
+    if (!detail) {
+      map[phone] = {
+        status: 'none',
+        label: MANUAL_MEMBER_STATUS_LABELS.none,
+        hasValue: false,
+        note: '',
+        attendTime: ''
+      };
+      return;
+    }
+
+    const normalizedStatus = normalizeManualMemberStatus(detail.status);
+    map[phone] = {
+      status: normalizedStatus,
+      label: MANUAL_MEMBER_STATUS_LABELS[normalizedStatus] || MANUAL_MEMBER_STATUS_LABELS.recorded,
+      hasValue: isManualMemberValueRecorded(normalizedStatus),
+      note: String(detail.note || '').trim(),
+      attendTime: String(detail.attendTime || '').trim()
+    };
+  });
+
+  return map;
+}
+
+function initializeManualApproveUi() {
+  const defaultCommentInput = document.getElementById('manualDefaultCommentInput');
+  if (defaultCommentInput) {
+    defaultCommentInput.value = manualApproveState.defaultComment || '';
+  }
+
+  const forceOverrideInput = document.getElementById('manualForceOverride');
+  if (forceOverrideInput) {
+    forceOverrideInput.checked = !!manualApproveState.forceOverride;
+  }
+
+  renderManualMemberList();
+}
+
 function populateManualSessionSelect(items) {
   const select = document.getElementById('manualSessionSelect');
   if (!select) return;
 
+  const previousValue = manualApproveState.sessionKey || String(select.value || '').trim();
   select.innerHTML = '';
 
   if (!items || items.length === 0) {
     select.innerHTML = '<option value="">회차가 없습니다</option>';
+    manualApproveState.sessionKey = '';
+    manualApproveState.statusByPhone = {};
+    syncManualApproveSubmitState();
+    renderManualMemberList();
     return;
   }
 
@@ -5320,22 +5433,422 @@ function populateManualSessionSelect(items) {
     opt.textContent = `${item.sessionKey} (${item.startLabel} ~ ${item.endLabel})`;
     select.appendChild(opt);
   });
+
+  const hasPrevious = items.some(item => item.sessionKey === previousValue);
+  select.value = hasPrevious ? previousValue : items[0].sessionKey;
+  manualApproveState.sessionKey = String(select.value || '').trim();
+  syncManualApproveSubmitState();
 }
 
-async function manualApprove(event) {
-  event.preventDefault();
+function onManualSessionChanged(value) {
+  manualApproveState.sessionKey = String(value || '').trim();
+  manualApproveState.selectedPhones = {};
+  manualApproveState.memberComments = {};
+  manualApproveState.openCommentPhones = {};
+  manualApproveState.statusLoadedSessionKey = '';
+  manualApproveState.statusLoadedSeasonAlias = '';
+  renderManualMemberList();
+  refreshManualApproveData({ forceMembers: false, forceStatuses: true }).catch(error => {
+    if (handleUnauthorizedError(error)) return;
+    showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 회차 상태 조회 중 오류'))}`, false);
+  });
+}
 
-  const season = getSelectedSeasonAlias();
-  const phone = document.getElementById('manualPhoneInput').value.trim();
-  const sessionKey = document.getElementById('manualSessionSelect').value;
+function onManualMemberSearchInput(value) {
+  manualApproveState.keyword = String(value || '').trim().toLowerCase();
+  renderManualMemberList();
+}
 
-  if (!season) {
-    alert('시즌이 선택되지 않았습니다.');
+function onManualDefaultCommentInput(value) {
+  manualApproveState.defaultComment = String(value || '');
+}
+
+function setManualAbsentOnly(value) {
+  manualApproveState.absentOnly = !!value;
+  renderManualMemberList();
+}
+
+function setManualSelectedOnly(value) {
+  manualApproveState.selectedOnly = !!value;
+  renderManualMemberList();
+}
+
+function setManualForceOverride(value) {
+  manualApproveState.forceOverride = !!value;
+}
+
+function toggleManualSelectFiltered(selectFiltered) {
+  const shouldSelect = !!selectFiltered;
+  const filtered = Array.isArray(manualApproveState.filteredMembers)
+    ? manualApproveState.filteredMembers
+    : getManualMemberFilteredList();
+
+  filtered.forEach(member => {
+    const phone = String(member.phone || '').trim();
+    if (!phone) return;
+    if (shouldSelect) {
+      manualApproveState.selectedPhones[phone] = true;
+    } else {
+      delete manualApproveState.selectedPhones[phone];
+    }
+  });
+
+  renderManualMemberList();
+}
+
+function toggleManualMemberSelection(encodedPhone, checked) {
+  const phone = decodeURIComponent(String(encodedPhone || ''));
+  if (!phone) return;
+
+  if (checked) {
+    manualApproveState.selectedPhones[phone] = true;
+  } else {
+    delete manualApproveState.selectedPhones[phone];
+  }
+
+  renderManualMemberList();
+}
+
+function toggleManualMemberComment(encodedPhone) {
+  const phone = decodeURIComponent(String(encodedPhone || ''));
+  if (!phone) return;
+
+  const opened = !!manualApproveState.openCommentPhones[phone];
+  if (opened) {
+    delete manualApproveState.openCommentPhones[phone];
+  } else {
+    manualApproveState.openCommentPhones[phone] = true;
+  }
+  renderManualMemberList();
+}
+
+function onManualMemberCommentInput(encodedPhone, value) {
+  const phone = decodeURIComponent(String(encodedPhone || ''));
+  if (!phone) return;
+
+  const rawValue = String(value || '');
+  if (rawValue.trim()) {
+    manualApproveState.memberComments[phone] = rawValue;
+  } else {
+    delete manualApproveState.memberComments[phone];
+  }
+}
+
+function getManualMemberFilteredList() {
+  const keyword = manualApproveState.keyword || '';
+  const members = Array.isArray(manualApproveState.members) ? manualApproveState.members : [];
+
+  return members.filter(member => {
+    const phone = String(member.phone || '').trim();
+    if (!phone) return false;
+
+    const statusInfo = getManualMemberStatusInfo(phone);
+    if (manualApproveState.absentOnly && statusInfo.hasValue) {
+      return false;
+    }
+
+    if (manualApproveState.selectedOnly && !manualApproveState.selectedPhones[phone]) {
+      return false;
+    }
+
+    if (!keyword) return true;
+
+    const haystack = [
+      String(member.name || '').toLowerCase(),
+      String(member.seasonLabel || member.grade || '').toLowerCase(),
+      phone
+    ].join(' ');
+    return haystack.includes(keyword);
+  });
+}
+
+function getManualSelectedCount() {
+  const members = Array.isArray(manualApproveState.members) ? manualApproveState.members : [];
+  const memberPhoneSet = {};
+  members.forEach(member => {
+    const phone = String(member.phone || '').trim();
+    if (phone) memberPhoneSet[phone] = true;
+  });
+
+  return Object.keys(manualApproveState.selectedPhones || {}).reduce((count, phone) => {
+    return memberPhoneSet[phone] ? count + 1 : count;
+  }, 0);
+}
+
+function updateManualMemberMeta(filteredMembers) {
+  const meta = document.getElementById('manualMemberMeta');
+  if (!meta) return;
+
+  const visibleCount = Array.isArray(filteredMembers) ? filteredMembers.length : 0;
+  const totalCount = Array.isArray(manualApproveState.members) ? manualApproveState.members.length : 0;
+  const selectedCount = getManualSelectedCount();
+  meta.textContent = `표시 ${visibleCount}명 / 전체 ${totalCount}명 / 선택 ${selectedCount}명`;
+}
+
+function syncManualApproveSubmitState() {
+  const btn = document.getElementById('manualApproveBtn');
+  const summary = document.getElementById('manualApproveSelectionSummary');
+  const selectedCount = getManualSelectedCount();
+  const sessionKey = String(manualApproveState.sessionKey || '').trim();
+
+  if (btn) {
+    btn.disabled = selectedCount === 0 || !sessionKey;
+    btn.innerHTML = `<i class="fas fa-user-check"></i> <span>${selectedCount}명 수동 승인 실행</span>`;
+  }
+
+  if (summary) {
+    summary.textContent = `선택 ${selectedCount}명`;
+  }
+}
+
+function renderManualMemberList() {
+  const wrap = document.getElementById('manualMemberListWrap');
+  if (!wrap) return;
+
+  const sessionKey = String(manualApproveState.sessionKey || '').trim();
+  const members = Array.isArray(manualApproveState.members) ? manualApproveState.members : [];
+  const filtered = getManualMemberFilteredList();
+  manualApproveState.filteredMembers = filtered;
+
+  updateManualMemberMeta(filtered);
+  syncManualApproveSubmitState();
+
+  if (!sessionKey) {
+    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">승인할 회차를 먼저 선택해주세요.</p>';
     return;
   }
 
-  if (!/^010[0-9]{8}$/.test(phone)) {
-    alert('전화번호 형식이 올바르지 않습니다. (예: 01012345678)');
+  if (members.length === 0) {
+    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">회원 목록이 없습니다.</p>';
+    return;
+  }
+
+  if (filtered.length === 0) {
+    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">조건에 맞는 회원이 없습니다.</p>';
+    return;
+  }
+
+  const rows = filtered.map(member => {
+    const phone = String(member.phone || '').trim();
+    const encodedPhone = encodeURIComponent(phone);
+    const statusInfo = getManualMemberStatusInfo(phone);
+    const isSelected = !!manualApproveState.selectedPhones[phone];
+    const comment = String(manualApproveState.memberComments[phone] || '');
+    const commentOpened = !!manualApproveState.openCommentPhones[phone];
+    const rowClass = [
+      'manual-member-row',
+      isSelected ? 'is-selected' : ''
+    ].filter(Boolean).join(' ');
+    const statusClass = escapeHtml(statusInfo.status || 'none');
+    const statusLabel = escapeHtml(statusInfo.label || MANUAL_MEMBER_STATUS_LABELS.none);
+    const noteLine = statusInfo.note
+      ? `<span class="manual-member-sub" title="${escapeHtml(statusInfo.note)}">기존 메모: ${escapeHtml(statusInfo.note)}</span>`
+      : '';
+    const timeLine = statusInfo.attendTime
+      ? `<span class="manual-member-sub">기존 기록 시각: ${escapeHtml(statusInfo.attendTime)}</span>`
+      : '';
+    const commentToggleLabel = commentOpened ? '개별 멘트 닫기' : (comment ? '개별 멘트 수정' : '개별 멘트');
+
+    return `
+      <div class="${rowClass}" role="listitem">
+        <label class="manual-member-check">
+          <input type="checkbox"
+                 ${isSelected ? 'checked' : ''}
+                 onchange="toggleManualMemberSelection('${encodedPhone}', this.checked)"
+                 aria-label="${escapeHtml(member.name)} 선택">
+        </label>
+        <div class="manual-member-main">
+          <div class="manual-member-name-line">
+            <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>
+            <span>${escapeHtml(member.name || '-')}</span>
+            <span class="manual-status-badge ${statusClass}">${statusLabel}</span>
+          </div>
+          <span class="manual-member-sub">${escapeHtml(phone)}</span>
+          ${timeLine}
+          ${noteLine}
+          <div class="manual-member-comment ${commentOpened ? 'is-open' : ''}">
+            <input type="text"
+                   class="form-input"
+                   value="${escapeHtml(comment)}"
+                   placeholder="이 회원에게만 남길 개별 멘트"
+                   oninput="onManualMemberCommentInput('${encodedPhone}', this.value)">
+          </div>
+        </div>
+        <div class="manual-member-actions">
+          <button type="button"
+                  class="manual-member-comment-toggle"
+                  onclick="toggleManualMemberComment('${encodedPhone}')"
+                  aria-label="${escapeHtml(member.name)} 개별 멘트 입력 토글">
+            ${commentToggleLabel}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  wrap.innerHTML = rows;
+}
+
+function renderManualApproveDetailTable(results, summary) {
+  const wrap = document.getElementById('manualApproveDetailWrap');
+  if (!wrap) return;
+
+  if (!Array.isArray(results) || results.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  const statusLabelMap = {
+    approved: '승인',
+    skipped: '건너뜀',
+    failed: '실패'
+  };
+
+  const rows = results.map(row => {
+    const previousText = [
+      row.previousStatusLabel || '',
+      row.previousValue || '',
+      row.previousNote ? `note: ${row.previousNote}` : ''
+    ].filter(Boolean).join(' / ');
+
+    return `
+      <tr>
+        <td>${escapeHtml(row.name || '-')}</td>
+        <td>${escapeHtml(row.phone || '-')}</td>
+        <td>${escapeHtml(statusLabelMap[row.status] || row.status || '-')}</td>
+        <td>${escapeHtml(row.message || '-')}</td>
+        <td>${escapeHtml(previousText || '-')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  wrap.innerHTML = `
+    <p class="info-text" style="margin-top: 10px;">
+      처리 요약: 요청 ${Number(summary.requested || 0)}건 / 승인 ${Number(summary.approved || 0)}건 / 건너뜀 ${Number(summary.skipped || 0)}건 / 실패 ${Number(summary.failed || 0)}건
+    </p>
+    <table class="manual-detail-table">
+      <thead>
+        <tr>
+          <th>이름</th>
+          <th>전화번호</th>
+          <th>결과</th>
+          <th>메시지</th>
+          <th>기존 기록</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadManualApproveStatuses(options) {
+  const season = getSelectedSeasonAlias();
+  const sessionKey = String(manualApproveState.sessionKey || '').trim();
+  const opts = options || {};
+  const forceStatuses = !!opts.forceStatuses;
+
+  if (!season || !sessionKey) {
+    manualApproveState.statusByPhone = {};
+    manualApproveState.statusLoadedSeasonAlias = season || '';
+    manualApproveState.statusLoadedSessionKey = sessionKey;
+    return;
+  }
+
+  const canReuse = !forceStatuses
+    && manualApproveState.statusLoadedSeasonAlias === season
+    && manualApproveState.statusLoadedSessionKey === sessionKey
+    && Object.keys(manualApproveState.statusByPhone || {}).length > 0;
+
+  if (canReuse) {
+    return;
+  }
+
+  const response = await CloudClubApi.call('graduationReport', {
+    season,
+    adminToken
+  });
+
+  if (!response.success) {
+    throw new Error(response.message || '수동 승인 대상 상태 조회 실패');
+  }
+
+  manualApproveState.statusByPhone = buildManualStatusByPhoneFromReport(response, sessionKey);
+  manualApproveState.statusLoadedSeasonAlias = season;
+  manualApproveState.statusLoadedSessionKey = sessionKey;
+}
+
+async function refreshManualApproveData(options) {
+  const season = getSelectedSeasonAlias();
+  if (!season) return;
+
+  const opts = options || {};
+  const seasonChanged = manualApproveState.seasonAlias !== season;
+  const forceMembers = !!opts.forceMembers;
+  const forceStatuses = !!opts.forceStatuses;
+
+  if (seasonChanged) {
+    const prevDefaultComment = manualApproveState.defaultComment || '';
+    const prevForceOverride = !!manualApproveState.forceOverride;
+    manualApproveState = createManualApproveInitialState();
+    manualApproveState.seasonAlias = season;
+    manualApproveState.defaultComment = prevDefaultComment;
+    manualApproveState.forceOverride = prevForceOverride;
+  }
+
+  if (forceMembers || seasonChanged || membersCache.length === 0) {
+    await loadMembers({ force: true, seasonAlias: season });
+  }
+
+  manualApproveState.members = Array.isArray(membersCache) ? membersCache.slice() : [];
+  if (!manualApproveState.sessionKey) {
+    const select = document.getElementById('manualSessionSelect');
+    manualApproveState.sessionKey = select ? String(select.value || '').trim() : '';
+  }
+
+  await loadManualApproveStatuses({
+    forceStatuses: forceStatuses || seasonChanged
+  });
+
+  const searchInput = document.getElementById('manualMemberSearchInput');
+  if (searchInput) {
+    searchInput.value = manualApproveState.keyword || '';
+  }
+
+  const defaultCommentInput = document.getElementById('manualDefaultCommentInput');
+  if (defaultCommentInput && defaultCommentInput.value !== manualApproveState.defaultComment) {
+    defaultCommentInput.value = manualApproveState.defaultComment || '';
+  }
+
+  const forceOverrideInput = document.getElementById('manualForceOverride');
+  if (forceOverrideInput && forceOverrideInput.checked !== !!manualApproveState.forceOverride) {
+    forceOverrideInput.checked = !!manualApproveState.forceOverride;
+  }
+
+  const absentOnlyInput = document.getElementById('manualAbsentOnly');
+  if (absentOnlyInput && absentOnlyInput.checked !== !!manualApproveState.absentOnly) {
+    absentOnlyInput.checked = !!manualApproveState.absentOnly;
+  }
+
+  const selectedOnlyInput = document.getElementById('manualSelectedOnly');
+  if (selectedOnlyInput && selectedOnlyInput.checked !== !!manualApproveState.selectedOnly) {
+    selectedOnlyInput.checked = !!manualApproveState.selectedOnly;
+  }
+
+  renderManualMemberList();
+}
+
+async function submitManualApproveBatch(event) {
+  if (event) event.preventDefault();
+
+  const season = getSelectedSeasonAlias();
+  const sessionKey = String(manualApproveState.sessionKey || '').trim();
+  const btn = document.getElementById('manualApproveBtn');
+  const detailWrap = document.getElementById('manualApproveDetailWrap');
+
+  if (!season) {
+    alert('시즌이 선택되지 않았습니다.');
     return;
   }
 
@@ -5344,39 +5857,108 @@ async function manualApprove(event) {
     return;
   }
 
-  const btn = document.getElementById('manualApproveBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loader"></span> <span>처리 중...</span>';
+  const selectedItems = (manualApproveState.members || [])
+    .map(member => {
+      const phone = String(member.phone || '').trim();
+      if (!phone || !manualApproveState.selectedPhones[phone]) return null;
+      return {
+        phone: phone,
+        comment: String(manualApproveState.memberComments[phone] || '').trim()
+      };
+    })
+    .filter(Boolean);
+
+  if (selectedItems.length === 0) {
+    alert('수동 승인할 회원을 선택해주세요.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loader"></span> <span>배치 처리 중...</span>';
+  }
+
+  if (detailWrap) {
+    detailWrap.innerHTML = '<div class="loader" style="margin: 18px auto;"></div>';
+  }
+
+  const mergedSummary = {
+    requested: 0,
+    approved: 0,
+    skipped: 0,
+    overridden: 0,
+    failed: 0
+  };
+  const mergedResults = [];
 
   try {
-    const response = await CloudClubApi.call('manualApprove', {
-      season,
-      phone,
-      sessionKey,
-      adminToken
-    });
+    for (let i = 0; i < selectedItems.length; i += MANUAL_APPROVE_BATCH_CHUNK_SIZE) {
+      const chunk = selectedItems.slice(i, i + MANUAL_APPROVE_BATCH_CHUNK_SIZE);
+      const response = await CloudClubApi.call('manualApproveBatch', {
+        season,
+        sessionKey,
+        defaultComment: String(manualApproveState.defaultComment || '').trim(),
+        forceOverride: manualApproveState.forceOverride ? 'true' : 'false',
+        itemsJson: JSON.stringify(chunk),
+        adminToken
+      });
 
-    if (!response.success) {
-      showBoxMessage('manualApproveResult', `❌ ${escapeHtml(response.message || '수동 승인 실패')}`, false);
-      return;
+      if (!response.success) {
+        throw new Error(response.message || '수동 승인 배치 처리 실패');
+      }
+
+      const summary = response.summary || {};
+      mergedSummary.requested += Number(summary.requested || chunk.length);
+      mergedSummary.approved += Number(summary.approved || 0);
+      mergedSummary.skipped += Number(summary.skipped || 0);
+      mergedSummary.overridden += Number(summary.overridden || 0);
+      mergedSummary.failed += Number(summary.failed || 0);
+
+      if (Array.isArray(response.results)) {
+        mergedResults.push(...response.results);
+      }
     }
 
-    localStorage.setItem('lastUsedPhone', phone);
-    showBoxMessage('manualApproveResult', `✅ ${escapeHtml(response.name)}님 ${escapeHtml(response.sessionKey)} 수동 승인 완료 (${escapeHtml(response.time)})`, true);
-    showToast('<i class="fas fa-check-circle"></i> 수동 승인 완료', true);
+    const ok = mergedSummary.failed === 0;
+    const message = `${ok ? '✅' : '⚠️'} 요청 ${mergedSummary.requested}건 중 승인 ${mergedSummary.approved}건 / 건너뜀 ${mergedSummary.skipped}건 / 실패 ${mergedSummary.failed}건`;
+    showBoxMessage('manualApproveResult', message, ok);
+    renderManualApproveDetailTable(mergedResults, mergedSummary);
+    showToast(`<i class="fas fa-check-circle"></i> 수동 승인 배치 완료 (${mergedSummary.approved}건)`, ok);
+
+    const retrySelection = {};
+    mergedResults.forEach(item => {
+      if (item && item.status && item.status !== 'approved') {
+        const phone = normalizeImportPhoneLocal(item.phone || '');
+        if (phone) retrySelection[phone] = true;
+      }
+    });
+    manualApproveState.selectedPhones = retrySelection;
+    if (Object.keys(retrySelection).length === 0) {
+      manualApproveState.memberComments = {};
+      manualApproveState.openCommentPhones = {};
+    }
+    manualApproveState.statusLoadedSessionKey = '';
+    manualApproveState.statusLoadedSeasonAlias = '';
 
     await Promise.all([
       refreshSessionAndRanking(),
       loadGraduationReport()
     ]);
     await refreshStatusDashboardIfVisible();
+    await refreshManualApproveData({ forceMembers: false, forceStatuses: true });
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
-    showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 중 오류'))}`, false);
+    showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 배치 처리 중 오류'))}`, false);
+    if (detailWrap) {
+      detailWrap.innerHTML = '';
+    }
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-user-check"></i> <span>수동 승인 실행</span>';
+    syncManualApproveSubmitState();
   }
+}
+
+async function manualApprove(event) {
+  await submitManualApproveBatch(event);
 }
 
 function updateScheduleSaveButtonLabel() {
@@ -5567,6 +6149,18 @@ async function loadScheduleList() {
     } else {
       updateSchedulePreview();
       updateScheduleSaveButtonLabel();
+    }
+
+    if (getActiveTabName() === 'attend') {
+      try {
+        await refreshManualApproveData({
+          forceMembers: false,
+          forceStatuses: true
+        });
+      } catch (error) {
+        if (handleUnauthorizedError(error)) return;
+        showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 대상 정보 조회 중 오류'))}`, false);
+      }
     }
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
@@ -6648,9 +7242,19 @@ async function resetVariablesTemplate(mode) {
   }
 }
 
-async function loadMembers() {
-  const season = getSelectedSeasonAlias();
-  if (!season) return;
+async function loadMembers(options) {
+  const opts = options || {};
+  const season = String(opts.seasonAlias || getSelectedSeasonAlias() || '').trim();
+  const force = !!opts.force;
+  if (!season) return [];
+
+  const canReuse = !force
+    && manualApproveState.seasonAlias === season
+    && Array.isArray(membersCache)
+    && membersCache.length > 0;
+  if (canReuse) {
+    return membersCache;
+  }
 
   try {
     const response = await CloudClubApi.call('members', {
@@ -6660,13 +7264,17 @@ async function loadMembers() {
 
     if (!response.success) {
       membersCache = [];
-      return;
+      return [];
     }
 
     membersCache = response.members || [];
+    manualApproveState.seasonAlias = season;
+    return membersCache;
   } catch (error) {
-    if (handleUnauthorizedError(error)) return;
+    if (handleUnauthorizedError(error)) return [];
     console.error('회원 목록 로딩 실패:', error);
+    membersCache = [];
+    return [];
   }
 }
 

@@ -99,6 +99,7 @@ const SUPPORTED_API_ACTIONS = [
   'scheduleDelete',
   'members',
   'manualApprove',
+  'manualApproveBatch',
   'excusedSet',
   'graduationReport',
   'sheetSchemaAudit',
@@ -564,6 +565,14 @@ function handleApiRequest(params) {
         break;
       }
 
+      case 'manualApproveBatch': {
+        if (!verifyAdminToken((params.adminToken || '').trim())) {
+          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
+        }
+        data = manualApproveBatchAttendance(params);
+        break;
+      }
+
       case 'excusedSet': {
         if (!verifyAdminToken((params.adminToken || '').trim())) {
           return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
@@ -652,7 +661,7 @@ function parseItemsJson(raw) {
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
-      throw new Error('variablesUpdate itemsJson 파싱 실패');
+      throw new Error('itemsJson 파싱 실패');
     }
   }
 
@@ -6044,6 +6053,7 @@ function manualApproveAttendance(params) {
   const seasonName = String(params.season || '').trim();
   const phone = String(params.phone || '').trim();
   const sessionKey = String(params.sessionKey || '').trim();
+  const defaultComment = String(params.comment || params.defaultComment || '').trim();
 
   if (!seasonName || !phone || !sessionKey) {
     return { success: false, message: 'season, phone, sessionKey 파라미터가 필요합니다.' };
@@ -6081,17 +6091,26 @@ function manualApproveAttendance(params) {
     const member = readMemberFromRow(values[rowIndex], memberSchema);
 
     const targetRange = sheet.getRange(rowIndex + 1, session.colIndex + 1);
-    const existing = targetRange.getValue();
-    if (String(existing || '').trim() !== '') {
+    const existingValue = targetRange.getValue();
+    const existingRecord = buildManualApproveExistingRecordInfo(existingValue, targetRange.getNote(), session);
+    if (existingRecord.hasValue) {
       return { success: false, message: '이미 값이 있는 회차입니다. 수동 승인 불가.' };
     }
 
+    const processedAt = new Date();
     const writeTime = new Date(session.lateDeadline.getTime());
     const formattedTime = formatDateTime(writeTime);
+    const noteText = buildManualApproveNoteText({
+      processedAt: processedAt,
+      defaultComment: defaultComment,
+      memberComment: '',
+      overwritten: false,
+      existingRecord: existingRecord
+    });
 
     targetRange.setValue(formattedTime);
     targetRange.setBackground(LATE_COLOR);
-    targetRange.setNote('수동 승인');
+    targetRange.setNote(noteText);
 
     return {
       success: true,
@@ -6104,7 +6123,256 @@ function manualApproveAttendance(params) {
       grade: member.seasonLabel || formatSeasonLabel(member.season),
       season: member.season,
       seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
-      phone: cleanedPhone
+      phone: cleanedPhone,
+      processedAt: formatDateTime(processedAt),
+      note: noteText
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getAttendanceStatusLabelKo(status) {
+  switch (String(status || '')) {
+    case 'on_time': return '출석';
+    case 'late': return '지각';
+    case 'excused': return '유고';
+    case 'absent': return '결석';
+    case 'future': return '예정';
+    case 'recorded': return '기록';
+    case 'empty': return '없음';
+    default: return '기록';
+  }
+}
+
+function buildManualApproveExistingRecordInfo(existingValue, existingNote, session) {
+  const rawText = existingValue === undefined || existingValue === null ? '' : String(existingValue).trim();
+  const noteText = String(existingNote || '').trim();
+  const isExcused = isExcusedValue(existingValue);
+  const parsedTime = parseAttendanceTime(existingValue);
+  const hasParsedTime = !!(parsedTime && !isNaN(parsedTime.getTime()));
+  const hasValue = rawText !== '';
+
+  let status = hasValue ? 'recorded' : 'empty';
+  if (isExcused) {
+    status = 'excused';
+  } else if (hasParsedTime) {
+    const computed = getAttendanceType(parsedTime, session);
+    if (computed === 'on_time' || computed === 'late' || computed === 'absent') {
+      status = computed;
+    } else {
+      status = 'recorded';
+    }
+  }
+
+  return {
+    hasValue: hasValue,
+    status: status,
+    existingTimeText: hasParsedTime ? formatDateTime(parsedTime) : rawText,
+    existingNote: noteText
+  };
+}
+
+function buildManualApproveNoteText(options) {
+  const processedAt = options && options.processedAt instanceof Date ? options.processedAt : new Date();
+  const defaultComment = String(options && options.defaultComment || '').trim();
+  const memberComment = String(options && options.memberComment || '').trim();
+  const overwritten = !!(options && options.overwritten);
+  const existingRecord = options && options.existingRecord ? options.existingRecord : {
+    hasValue: false,
+    status: 'empty',
+    existingTimeText: '',
+    existingNote: ''
+  };
+
+  const lines = [
+    `[수동출석] 처리일시: ${formatDateTime(processedAt)}`,
+    '기록정책: lateDeadline 고정'
+  ];
+
+  if (defaultComment) {
+    lines.push(`관리자 공통멘트: ${defaultComment}`);
+  }
+
+  if (memberComment) {
+    lines.push(`개별멘트: ${memberComment}`);
+  }
+
+  lines.push(`처리결과: ${overwritten ? '덮어쓰기' : '신규기록'}`);
+
+  if (overwritten && existingRecord.hasValue) {
+    const statusText = getAttendanceStatusLabelKo(existingRecord.status);
+    const valueText = existingRecord.existingTimeText ? ` (${existingRecord.existingTimeText})` : '';
+    lines.push(`기존기록: ${statusText}${valueText}`);
+    if (existingRecord.existingNote) {
+      lines.push(`기존메모: ${existingRecord.existingNote}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function manualApproveBatchAttendance(params) {
+  const seasonName = String(params.season || '').trim();
+  const sessionKey = String(params.sessionKey || '').trim();
+  const defaultComment = String(params.defaultComment || '').trim();
+  const forceOverride = parseBooleanParam(params.forceOverride);
+  const rawItems = parseItemsJson(params.itemsJson || params.items || '[]');
+
+  if (!seasonName || !sessionKey) {
+    return { success: false, message: 'season, sessionKey 파라미터가 필요합니다.' };
+  }
+
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    return { success: false, message: '승인할 대상(itemsJson)이 없습니다.' };
+  }
+
+  const normalizedItems = [];
+  const seenPhoneMap = {};
+  rawItems.forEach(item => {
+    const obj = item && typeof item === 'object' ? item : {};
+    const rawPhone = String(obj.phone || '').trim();
+    const cleanedPhone = normalizePhone(rawPhone);
+    if (!cleanedPhone) return;
+    if (seenPhoneMap[cleanedPhone]) return;
+    seenPhoneMap[cleanedPhone] = true;
+    normalizedItems.push({
+      phone: cleanedPhone,
+      comment: String(obj.comment || '').trim()
+    });
+  });
+
+  if (normalizedItems.length === 0) {
+    return { success: false, message: '유효한 전화번호 대상이 없습니다.' };
+  }
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(5000);
+
+  try {
+    const info = resolveSeasonSheetInfo(seasonName);
+    const sheet = info.sheet;
+    const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true, memberSchema: memberSchema });
+    const session = sessions.find(s => s.sessionKey === sessionKey);
+
+    if (!session) {
+      return { success: false, message: '회차를 찾을 수 없습니다.' };
+    }
+
+    const processedAt = new Date();
+    const writeTime = new Date(session.lateDeadline.getTime());
+    const formattedTime = formatDateTime(writeTime);
+    const results = [];
+    const summary = {
+      requested: normalizedItems.length,
+      approved: 0,
+      skipped: 0,
+      overridden: 0,
+      failed: 0
+    };
+
+    normalizedItems.forEach(item => {
+      const rowResult = {
+        phone: item.phone,
+        status: 'failed',
+        reasonCode: '',
+        message: ''
+      };
+
+      try {
+        if (!isValidPhoneNumber(item.phone)) {
+          summary.failed++;
+          rowResult.reasonCode = 'INVALID_PHONE';
+          rowResult.message = '전화번호 형식이 올바르지 않습니다.';
+          results.push(rowResult);
+          return;
+        }
+
+        const lookup = findMemberRowIndexByPhone(values, memberSchema, item.phone);
+        if (lookup.duplicateRowIndexes.length > 0) {
+          summary.failed++;
+          rowResult.reasonCode = 'DUPLICATE_PHONE';
+          rowResult.message = '동일 전화번호 중복 행이 있어 처리할 수 없습니다.';
+          results.push(rowResult);
+          return;
+        }
+
+        const rowIndex = lookup.rowIndex;
+        if (rowIndex < 0) {
+          summary.failed++;
+          rowResult.reasonCode = 'MEMBER_NOT_FOUND';
+          rowResult.message = '해당 전화번호의 회원을 찾을 수 없습니다.';
+          results.push(rowResult);
+          return;
+        }
+
+        const member = readMemberFromRow(values[rowIndex], memberSchema);
+        rowResult.name = member.name;
+        rowResult.seasonLabel = member.seasonLabel || formatSeasonLabel(member.season);
+
+        const targetRange = sheet.getRange(rowIndex + 1, session.colIndex + 1);
+        const existingRecord = buildManualApproveExistingRecordInfo(targetRange.getValue(), targetRange.getNote(), session);
+
+        if (existingRecord.hasValue && !forceOverride) {
+          summary.skipped++;
+          rowResult.status = 'skipped';
+          rowResult.reasonCode = 'EXISTING_VALUE';
+          rowResult.message = '이미 값이 있어 건너뜀 (덮어쓰기 비활성)';
+          rowResult.previousStatus = existingRecord.status;
+          rowResult.previousStatusLabel = getAttendanceStatusLabelKo(existingRecord.status);
+          rowResult.previousValue = existingRecord.existingTimeText;
+          rowResult.previousNote = existingRecord.existingNote;
+          results.push(rowResult);
+          return;
+        }
+
+        const noteText = buildManualApproveNoteText({
+          processedAt: processedAt,
+          defaultComment: defaultComment,
+          memberComment: item.comment,
+          overwritten: existingRecord.hasValue,
+          existingRecord: existingRecord
+        });
+
+        targetRange.setValue(formattedTime);
+        targetRange.setBackground(LATE_COLOR);
+        targetRange.setNote(noteText);
+
+        summary.approved++;
+        if (existingRecord.hasValue) {
+          summary.overridden++;
+        }
+
+        rowResult.status = 'approved';
+        rowResult.reasonCode = existingRecord.hasValue ? 'OVERRIDDEN' : 'CREATED';
+        rowResult.message = existingRecord.hasValue ? '기존 값을 덮어써 수동 승인 완료' : '수동 승인 완료';
+        rowResult.overridden = !!existingRecord.hasValue;
+        rowResult.time = formattedTime;
+        results.push(rowResult);
+      } catch (itemError) {
+        summary.failed++;
+        rowResult.reasonCode = 'INTERNAL_ITEM_ERROR';
+        rowResult.message = itemError && itemError.message
+          ? itemError.message
+          : '처리 중 알 수 없는 오류가 발생했습니다.';
+        results.push(rowResult);
+      }
+    });
+
+    return {
+      success: true,
+      message: '관리자 수동 출석 배치 처리가 완료되었습니다.',
+      seasonAlias: info.seasonAlias,
+      sessionKey: session.sessionKey,
+      attendanceType: 'late',
+      timePolicy: 'lateDeadline',
+      time: formattedTime,
+      processedAt: formatDateTime(processedAt),
+      forceOverride: forceOverride,
+      summary: summary,
+      results: results
     };
   } finally {
     lock.releaseLock();
