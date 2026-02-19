@@ -3608,11 +3608,7 @@ function parseImportTargetMode(value) {
 }
 
 function resolveEffectiveImportScope(targetMode, importMode) {
-  const resolvedTargetMode = parseImportTargetMode(targetMode);
   const resolvedImportMode = parseImportMode(importMode);
-  if (resolvedTargetMode === IMPORT_TARGET_MODE_UPDATE) {
-    return IMPORT_EFFECTIVE_SCOPE_TARGET_ONLY;
-  }
   return resolvedImportMode === 'yb' ? IMPORT_EFFECTIVE_SCOPE_TARGET_ONLY : IMPORT_EFFECTIVE_SCOPE_ALL;
 }
 
@@ -4044,12 +4040,21 @@ function classifyImportRow(rawRow, options) {
     };
   }
 
-  if (enforceTargetSeasonOnly && seasonValue !== seasonNo) {
+  if (enforceTargetSeasonOnly) {
+    if (seasonValue !== seasonNo) {
+      return {
+        action: 'non_target',
+        sourceRow: sourceRow,
+        reasonCode: 'NON_TARGET_COHORT',
+        reason: `YB 모드에서는 대상 시즌(${seasonNo}기)만 반영할 수 있습니다. 현재 행: ${seasonValue}기`
+      };
+    }
+  } else if (seasonValue > seasonNo) {
     return {
       action: 'non_target',
       sourceRow: sourceRow,
-      reasonCode: 'NON_TARGET_COHORT',
-      reason: `대상 시즌(${seasonNo}기)과 다른 기수(${seasonValue}기)입니다.`
+      reasonCode: 'SKIP_FUTURE_COHORT',
+      reason: `대상 시즌(${seasonNo}기)보다 미래 기수(${seasonValue}기)는 반영하지 않습니다.`
     };
   }
 

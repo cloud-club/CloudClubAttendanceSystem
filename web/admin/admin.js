@@ -903,7 +903,7 @@ function refreshImportModeUi() {
     banner.classList.remove('create', 'update');
     if (mode === 'update') {
       banner.classList.add('update');
-      banner.textContent = '기존 시즌 감지: 업데이트 모드입니다. 대상 시즌 행(A~L)만 반영하며 M+ 출석 컬럼은 보호됩니다.';
+      banner.textContent = '기존 시즌 감지: 업데이트 모드입니다. all 모드에서 OB+YB를 함께 반영할 수 있으며, M+ 출석 컬럼은 보호됩니다.';
     } else {
       banner.classList.add('create');
       banner.textContent = '신규 시즌 생성 모드입니다. 업로드 결과로 시즌 시트를 생성합니다.';
@@ -912,7 +912,7 @@ function refreshImportModeUi() {
 
   if (checkboxText) {
     checkboxText.textContent = mode === 'update'
-      ? '셀 단위 변경사항을 확인했고, A~L 업데이트 반영에 동의합니다. (M+ 출석 컬럼 보호)'
+      ? '셀 단위 변경사항(OB/YB 포함 가능)을 확인했고, A~L 업데이트 반영에 동의합니다. (M+ 출석 컬럼 보호)'
       : '미리보기 결과를 확인했고, 시즌 생성/업로드를 진행합니다.';
   }
 
@@ -941,10 +941,8 @@ function findFallbackValueInRow(row, predicate) {
 function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo, importMode, options) {
   const opts = options || {};
   const modeHint = opts.modeHint === 'update' ? 'update' : 'create';
-  const effectiveImportMode = modeHint === 'update' ? 'yb' : importMode;
-  const effectiveScope = modeHint === 'update'
-    ? 'targetSeasonOnly'
-    : (importMode === 'yb' ? 'targetSeasonOnly' : 'all');
+  const effectiveImportMode = importMode === 'yb' ? 'yb' : 'all';
+  const effectiveScope = effectiveImportMode === 'yb' ? 'targetSeasonOnly' : 'all';
   const rows = rawMatrix || [];
   const columnPack = profileImportColumns(rows, inference.headerInfo);
   const built = buildFieldMapFromManual(columnPack, manualMapping || {});
@@ -956,7 +954,8 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
     valid_insert: 0,
     skip_duplicate: 0,
     drop_invalid: 0,
-    skip_non_target: 0
+    skip_non_target: 0,
+    skip_future: 0
   };
 
   built.duplicateAssignments.forEach(item => {
@@ -1082,6 +1081,7 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
     let status = 'VALID_INSERT';
     let reasonCode = '';
     let reason = '';
+    let groupTag = '';
 
     if (!name) {
       status = 'DROP_INVALID';
@@ -1102,11 +1102,23 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
     } else if (effectiveImportMode === 'yb' && seasonNo !== seasonInfo.seasonNo) {
       status = 'SKIP_NON_TARGET_COHORT';
       reasonCode = `ROW_${rowNumber}_NON_TARGET_COHORT`;
-      reason = `대상 시즌(${seasonInfo.seasonNo}기)과 다른 기수(${seasonNo}기)`;
+      reason = `YB 모드에서는 대상 시즌(${seasonInfo.seasonNo}기)만 반영합니다. 현재 행: ${seasonNo}기`;
+    } else if (effectiveImportMode === 'all' && seasonNo > seasonInfo.seasonNo) {
+      status = 'SKIP_FUTURE_COHORT';
+      reasonCode = `ROW_${rowNumber}_SKIP_FUTURE_COHORT`;
+      reason = `대상 시즌(${seasonInfo.seasonNo}기)보다 미래 기수(${seasonNo}기)는 반영하지 않습니다.`;
     } else if (seenPhones[phoneDigits]) {
       status = 'SKIP_DUPLICATE';
       reasonCode = `ROW_${rowNumber}_DUPLICATE_PHONE`;
       reason = '전화번호 기준 중복';
+    }
+
+    if (!isNaN(seasonNo)) {
+      if (seasonNo === seasonInfo.seasonNo) {
+        groupTag = 'YB';
+      } else if (seasonNo < seasonInfo.seasonNo) {
+        groupTag = 'OB';
+      }
     }
 
     if (status === 'VALID_INSERT') {
@@ -1135,6 +1147,9 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
       stats.skip_duplicate++;
     } else if (status === 'SKIP_NON_TARGET_COHORT') {
       stats.skip_non_target++;
+    } else if (status === 'SKIP_FUTURE_COHORT') {
+      stats.skip_non_target++;
+      stats.skip_future++;
     } else {
       stats.drop_invalid++;
     }
@@ -1152,6 +1167,7 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
       status: status,
       reasonCode: reasonCode,
       reason: reason,
+      groupTag: groupTag,
       name: name,
       season: seasonNo,
       seasonLabel: !isNaN(seasonNo) ? `${seasonNo}기` : '',
@@ -1369,6 +1385,7 @@ function renderImportPreview(previewState) {
     `<span class="import-chip pass">INSERT ${stats.valid_insert || 0}</span>`,
     `<span class="import-chip warn">SKIP_DUPLICATE ${stats.skip_duplicate || 0}</span>`,
     `<span class="import-chip warn">SKIP_NON_TARGET ${stats.skip_non_target || 0}</span>`,
+    `<span class="import-chip warn">SKIP_FUTURE ${stats.skip_future || 0}</span>`,
     `<span class="import-chip fail">DROP_INVALID ${stats.drop_invalid || 0}</span>`
   ];
   if (diffSummary) {
@@ -1408,6 +1425,9 @@ function renderImportPreview(previewState) {
     } else if (item.status === 'SKIP_NON_TARGET_COHORT') {
       statusLabel = 'SKIP_COHORT';
       chipClass = 'skip';
+    } else if (item.status === 'SKIP_FUTURE_COHORT') {
+      statusLabel = 'SKIP_FUTURE';
+      chipClass = 'skip';
     } else if (item.status === 'DROP_INVALID') {
       statusLabel = 'DROP';
       chipClass = 'drop';
@@ -1426,6 +1446,19 @@ function renderImportPreview(previewState) {
     }
 
     const before = diffRow && diffRow.before ? diffRow.before : {};
+    const remarkParts = [];
+    if (item.groupTag === 'OB') {
+      remarkParts.push('OB 포함');
+    } else if (item.groupTag === 'YB') {
+      remarkParts.push('YB');
+    }
+    if (item.reason) {
+      remarkParts.push(item.reason);
+    } else if (item.reasonCode) {
+      remarkParts.push(item.reasonCode);
+    }
+    const remarkText = remarkParts.length > 0 ? remarkParts.join(' | ') : '-';
+
     rowHtml.push(`
       <tr>
         <td>${item.rowNumber}</td>
@@ -1442,7 +1475,7 @@ function renderImportPreview(previewState) {
         ${renderDataCell(item, phoneKey, 'feeChecked', '', before.feeChecked)}
         ${renderDataCell(item, phoneKey, 'completed', '', before.completed)}
         ${renderDataCell(item, phoneKey, 'isStaff', '', before.isStaff)}
-        <td>${escapeHtml(item.reasonCode || '-')}</td>
+        <td>${escapeHtml(remarkText)}</td>
       </tr>
     `);
   });
@@ -1890,7 +1923,7 @@ async function executeSeasonImport() {
         setImportExecuteButtonLabel(false);
         setProgress(
           `⚠️ 업데이트 모드 감지: ${escapeHtml(diffResponse.targetSheetName || seasonInfo.seasonAlias)}<br>` +
-          `미리보기의 셀 단위 변경사항을 확인한 뒤, 같은 체크 상태로 다시 버튼을 눌러 최종 반영하세요.`,
+          `미리보기의 셀 단위 변경사항(OB/YB 포함 가능)을 확인한 뒤, 같은 체크 상태로 다시 버튼을 눌러 최종 반영하세요.`,
           true
         );
         refreshImportExecuteButtonState();
@@ -1928,7 +1961,11 @@ async function executeSeasonImport() {
 
     const finalized = await CloudClubApi.call('seasonImportFinalize', finalizePayload);
     if (!finalized.success) {
-      throw new Error(finalized.message || '업로드 완료 처리 실패');
+      const finalizeError = new Error(finalized.message || '업로드 완료 처리 실패');
+      finalizeError.code = finalized.errorCode || 'IMPORT_FINALIZE_FAILED';
+      finalizeError.latestDiffToken = finalized.latestDiffToken || '';
+      finalizeError.latestSummary = finalized.latestSummary || null;
+      throw finalizeError;
     }
 
     if (importServerMode === 'update') {
