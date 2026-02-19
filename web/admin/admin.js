@@ -52,6 +52,7 @@ let attendanceDashboardEventStatusChart = null;
 let attendanceDashboardMemberTrendChart = null;
 let attendanceDashboardStatusDonutChart = null;
 let attendanceDashboardCohortDonutChart = null;
+let attendanceDashboardCountDonutChart = null;
 let attendanceDashboardLastEventRows = [];
 let attendanceDashboardDateRangeUserEdited = false;
 let attendanceDashboardAutoDateHydratedOnce = false;
@@ -3462,6 +3463,10 @@ function destroyAttendanceDashboardCharts() {
     attendanceDashboardCohortDonutChart.destroy();
     attendanceDashboardCohortDonutChart = null;
   }
+  if (attendanceDashboardCountDonutChart) {
+    attendanceDashboardCountDonutChart.destroy();
+    attendanceDashboardCountDonutChart = null;
+  }
 }
 
 function getDashboardColor(index) {
@@ -3480,6 +3485,7 @@ function ensureChartLibraryAvailable() {
 function getDashboardDonutChartRef(refName) {
   if (refName === 'status') return attendanceDashboardStatusDonutChart;
   if (refName === 'cohort') return attendanceDashboardCohortDonutChart;
+  if (refName === 'count') return attendanceDashboardCountDonutChart;
   return null;
 }
 
@@ -3490,6 +3496,10 @@ function setDashboardDonutChartRef(refName, chart) {
   }
   if (refName === 'cohort') {
     attendanceDashboardCohortDonutChart = chart || null;
+    return;
+  }
+  if (refName === 'count') {
+    attendanceDashboardCountDonutChart = chart || null;
   }
 }
 
@@ -3628,6 +3638,87 @@ function renderAttendanceDashboardCohortDonutChart(payload) {
       'dashboardCohortDonutChart',
       'dashboardCohortDonutEmpty',
       '필터 조건에 맞는 인원 데이터가 없습니다.'
+    );
+  }
+}
+
+function buildAttendanceCountDistributionBuckets(payload) {
+  const options = payload && payload.meta && Array.isArray(payload.meta.memberOptions)
+    ? payload.meta.memberOptions
+    : [];
+  if (options.length === 0) {
+    return { labels: [], values: [], colors: [] };
+  }
+
+  const countMap = {};
+  options.forEach(item => {
+    const raw = Number(item && item.attendedCount || 0);
+    const count = isNaN(raw) ? 0 : Math.max(0, Math.floor(raw));
+    countMap[count] = Number(countMap[count] || 0) + 1;
+  });
+
+  const entries = Object.keys(countMap).map(key => ({
+    count: Number(key),
+    members: Number(countMap[key] || 0)
+  })).filter(item => item.members > 0);
+
+  if (entries.length === 0) {
+    return { labels: [], values: [], colors: [] };
+  }
+
+  const MAX_SLICES = 8;
+  const TOP_EXACT_SLICES = MAX_SLICES - 1;
+  let displayEntries = [];
+
+  if (entries.length > MAX_SLICES) {
+    const topEntries = entries.slice().sort((a, b) => {
+      if (b.members !== a.members) return b.members - a.members;
+      return a.count - b.count;
+    }).slice(0, TOP_EXACT_SLICES);
+    const topSet = {};
+    topEntries.forEach(item => { topSet[item.count] = true; });
+    const othersCount = entries
+      .filter(item => !topSet[item.count])
+      .reduce((sum, item) => sum + Number(item.members || 0), 0);
+
+    displayEntries = topEntries
+      .sort((a, b) => a.count - b.count)
+      .map(item => ({ label: `${item.count}회`, members: item.members, isOther: false }));
+    if (othersCount > 0) {
+      displayEntries.push({ label: '기타', members: othersCount, isOther: true });
+    }
+  } else {
+    displayEntries = entries
+      .sort((a, b) => a.count - b.count)
+      .map(item => ({ label: `${item.count}회`, members: item.members, isOther: false }));
+  }
+
+  return {
+    labels: displayEntries.map(item => item.label),
+    values: displayEntries.map(item => item.members),
+    colors: displayEntries.map((item, index) => item.isOther ? '#64748b' : getDashboardColor(index))
+  };
+}
+
+function renderAttendanceDashboardAttendanceCountDonutChart(payload) {
+  if (!ensureChartLibraryAvailable()) return;
+
+  const distribution = buildAttendanceCountDistributionBuckets(payload);
+  const hasValue = renderDashboardDonutChart(
+    'count',
+    'dashboardAttendanceCountDonutChart',
+    'dashboardAttendanceCountDonutEmpty',
+    distribution.labels,
+    distribution.values,
+    distribution.colors
+  );
+
+  if (!hasValue) {
+    setDashboardDonutEmptyState(
+      'count',
+      'dashboardAttendanceCountDonutChart',
+      'dashboardAttendanceCountDonutEmpty',
+      '필터 조건에 맞는 출석 횟수 분포 데이터가 없습니다.'
     );
   }
 }
@@ -4109,6 +4200,7 @@ function renderAttendanceDashboard(payload) {
   renderAttendanceDashboardEventStatusChart(payload);
   renderAttendanceDashboardStatusDonutChart(payload);
   renderAttendanceDashboardCohortDonutChart(payload);
+  renderAttendanceDashboardAttendanceCountDonutChart(payload);
 
   attendanceDashboardLastEventRows = payload && payload.table && Array.isArray(payload.table.eventTopRows)
     ? payload.table.eventTopRows.slice()

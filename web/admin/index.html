@@ -1888,7 +1888,7 @@
 
     .dashboard-chart-grid-secondary {
       display: grid;
-      grid-template-columns: repeat(2, minmax(240px, 1fr));
+      grid-template-columns: repeat(3, minmax(220px, 1fr));
       gap: 12px;
       margin-bottom: 14px;
     }
@@ -2302,6 +2302,12 @@
     }
     
     /* Responsive */
+    @media (max-width: 1200px) {
+      .dashboard-chart-grid-secondary {
+        grid-template-columns: repeat(2, minmax(220px, 1fr));
+      }
+    }
+
     @media (max-width: 768px) {
       .container {
         padding: 15px;
@@ -2948,6 +2954,14 @@
               <canvas id="dashboardCohortDonutChart"></canvas>
             </div>
             <p class="dashboard-chart-empty" id="dashboardCohortDonutEmpty" hidden>데이터가 없습니다.</p>
+          </div>
+          <div class="dashboard-chart-card dashboard-chart-card-donut">
+            <div class="dashboard-chart-title">출석 횟수 분포</div>
+            <div class="dashboard-chart-subtitle">현재 필터 기준 인원 분포 (정확 횟수별 + 기타)</div>
+            <div class="dashboard-canvas-wrap-square">
+              <canvas id="dashboardAttendanceCountDonutChart"></canvas>
+            </div>
+            <p class="dashboard-chart-empty" id="dashboardAttendanceCountDonutEmpty" hidden>데이터가 없습니다.</p>
           </div>
         </div>
 
