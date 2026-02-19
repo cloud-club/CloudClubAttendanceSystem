@@ -2697,6 +2697,11 @@ async function initializeDashboard() {
     });
   }
 
+  // Keep first-load data hydration aligned with the default active tab.
+  if (getActiveTabName() === 'attend') {
+    await loadScheduleList();
+  }
+
 }
 
 async function refreshSeasonData() {
@@ -2734,7 +2739,7 @@ async function refreshSeasonData() {
 
 function getActiveTabName() {
   const activeTab = document.querySelector('.tab-content.active');
-  return activeTab ? activeTab.id : 'generate';
+  return activeTab ? activeTab.id : 'attend';
 }
 
 async function loadAdminQrCode() {
@@ -6769,13 +6774,14 @@ function openScheduleDeleteForceModal(state) {
 }
 
 const variableUsageTabOrder = [
-  'QR코드 관리',
   '출석하기',
   '출석현황',
   '일정 관리',
-  '변수명 관리',
   '유고 처리',
-  '수료 판정'
+  'QR코드 관리',
+  '변수명 관리',
+  '수료 판정',
+  '시즌 생성/업로드'
 ];
 
 const variableTabMapByKey = {

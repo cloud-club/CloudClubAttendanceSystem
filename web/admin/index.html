@@ -42,7 +42,7 @@
     
     /* Container */
     .container {
-      max-width: 1200px;
+      max-width: 1440px;
       margin: 0 auto;
       padding: 20px;
       position: relative;
@@ -194,7 +194,7 @@
       margin-bottom: 48px;
       background: rgba(255, 255, 255, 0.05);
       border-radius: 20px;
-      padding: 8px;
+      padding: 6px;
       backdrop-filter: blur(10px);
       border: 1px solid rgba(255, 255, 255, 0.1);
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
@@ -204,16 +204,16 @@
     .tab-button {
       background: transparent;
       border: none;
-      padding: 14px 28px;
+      padding: 12px 18px;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
       color: #94a3b8;
-      border-radius: 16px;
+      border-radius: 14px;
       transition: all 0.3s ease;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       position: relative;
     }
     
@@ -2606,6 +2606,16 @@
       }
     }
 
+    @media (min-width: 1600px) {
+      .tab-nav {
+        flex-wrap: nowrap;
+      }
+
+      .tab-button {
+        white-space: nowrap;
+      }
+    }
+
     @media (max-width: 768px) {
       .container {
         padding: 15px;
@@ -2929,11 +2939,7 @@
     </div>
     
     <nav class="tab-nav">
-      <button class="tab-button active" onclick="openTab('generate', event)">
-        <i class="fas fa-qrcode"></i>
-        <span>QR코드 관리</span>
-      </button>
-      <button class="tab-button" onclick="openTab('attend', event)">
+      <button class="tab-button active" onclick="openTab('attend', event)">
         <i class="fas fa-check-circle"></i>
         <span>출석하기</span>
       </button>
@@ -2945,26 +2951,30 @@
         <i class="fas fa-calendar-alt"></i>
         <span>일정 관리</span>
       </button>
-      <button class="tab-button" onclick="openTab('seasonImport', event)">
-        <i class="fas fa-file-import"></i>
-        <span>시즌 생성/업로드</span>
+      <button class="tab-button" onclick="openTab('excused', event)">
+        <i class="fas fa-notes-medical"></i>
+        <span>유고 처리</span>
+      </button>
+      <button class="tab-button" onclick="openTab('generate', event)">
+        <i class="fas fa-qrcode"></i>
+        <span>QR코드 관리</span>
       </button>
       <button class="tab-button" onclick="openTab('variables', event)">
         <i class="fas fa-sliders-h"></i>
         <span>변수명 관리</span>
       </button>
-      <button class="tab-button" onclick="openTab('excused', event)">
-        <i class="fas fa-notes-medical"></i>
-        <span>유고 처리</span>
-      </button>
       <button class="tab-button" onclick="openTab('graduation', event)">
         <i class="fas fa-user-check"></i>
         <span>수료 판정</span>
       </button>
+      <button class="tab-button" onclick="openTab('seasonImport', event)">
+        <i class="fas fa-file-import"></i>
+        <span>시즌 생성/업로드</span>
+      </button>
     </nav>
 
     <!-- QR코드 관리 탭 -->
-    <div id="generate" class="tab-content active">
+    <div id="generate" class="tab-content">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-qrcode card-icon"></i>
@@ -3015,7 +3025,7 @@
     </div>
     
     <!-- 출석하기 탭 -->
-    <div id="attend" class="tab-content">
+    <div id="attend" class="tab-content active">
       <div class="countdown-card">
         <h2 id="countdown-title" class="card-title">출석 가능 시간 확인 중...</h2>
         <div id="countdown"><span class="loader"></span></div>
