@@ -3026,7 +3026,7 @@
           <i class="fas fa-user-shield card-icon"></i>
           <h2 class="card-title">관리자 수동 출석 승인</h2>
         </div>
-        <p class="info-text">선택한 회원들을 일괄 수동 출석 처리합니다. 기록 시각은 회차 <code>lateDeadline</code>으로 고정되고, 원본 셀 Note에 처리일시/멘트/덮어쓰기 이력이 남습니다.</p>
+        <p class="info-text">선택한 회원들을 일괄 수동 출석 처리합니다. 기록 시각은 실제 승인 시각을 사용하며, 회차 경계를 벗어나면 오픈/마감 시각으로 자동 보정됩니다. 원본 셀 Note에 처리일시/멘트/덮어쓰기 이력이 남습니다.</p>
 
         <form onsubmit="submitManualApproveBatch(event)" class="manual-approve-form" aria-label="관리자 수동 출석 승인 일괄 처리">
           <div class="manual-approve-top-grid">

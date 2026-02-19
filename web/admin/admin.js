@@ -5710,12 +5710,19 @@ function renderManualApproveDetailTable(results, summary) {
       row.previousValue || '',
       row.previousNote ? `note: ${row.previousNote}` : ''
     ].filter(Boolean).join(' / ');
+    const boundaryReasonText = row.boundaryAdjustReason === 'before_open'
+      ? '오픈시각 보정'
+      : (row.boundaryAdjustReason === 'after_close' ? '마감시각 보정' : '');
+    const writtenAtText = row.writtenAt
+      ? `${row.writtenAt}${row.boundaryAdjusted && boundaryReasonText ? ` (${boundaryReasonText})` : ''}`
+      : '-';
 
     return `
       <tr>
         <td>${escapeHtml(row.name || '-')}</td>
         <td>${escapeHtml(row.phone || '-')}</td>
         <td>${escapeHtml(statusLabelMap[row.status] || row.status || '-')}</td>
+        <td>${escapeHtml(writtenAtText)}</td>
         <td>${escapeHtml(row.message || '-')}</td>
         <td>${escapeHtml(previousText || '-')}</td>
       </tr>
@@ -5732,6 +5739,7 @@ function renderManualApproveDetailTable(results, summary) {
           <th>이름</th>
           <th>전화번호</th>
           <th>결과</th>
+          <th>기록시각</th>
           <th>메시지</th>
           <th>기존 기록</th>
         </tr>

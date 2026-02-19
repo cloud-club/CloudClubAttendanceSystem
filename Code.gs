@@ -6098,10 +6098,15 @@ function manualApproveAttendance(params) {
     }
 
     const processedAt = new Date();
-    const writeTime = new Date(session.lateDeadline.getTime());
+    const writeMeta = computeManualApprovalWriteTime(processedAt, session);
+    const writeTime = writeMeta.writeTime;
+    const approvedAt = writeMeta.approvedAt;
     const formattedTime = formatDateTime(writeTime);
     const noteText = buildManualApproveNoteText({
       processedAt: processedAt,
+      writtenAt: writeTime,
+      boundaryAdjusted: writeMeta.boundaryAdjusted,
+      boundaryAdjustReason: writeMeta.boundaryAdjustReason,
       defaultComment: defaultComment,
       memberComment: '',
       overwritten: false,
@@ -6117,8 +6122,13 @@ function manualApproveAttendance(params) {
       message: '수동 출석 승인 완료',
       seasonAlias: info.seasonAlias,
       sessionKey: session.sessionKey,
-      attendanceType: 'late',
+      attendanceType: getAttendanceType(writeTime, session),
       time: formattedTime,
+      writtenAt: formattedTime,
+      actualApprovedAt: formatDateTime(approvedAt),
+      boundaryAdjusted: writeMeta.boundaryAdjusted,
+      boundaryAdjustReason: writeMeta.boundaryAdjustReason,
+      timePolicy: 'actual_click_with_clamp',
       name: member.name,
       grade: member.seasonLabel || formatSeasonLabel(member.season),
       season: member.season,
@@ -6175,6 +6185,9 @@ function buildManualApproveExistingRecordInfo(existingValue, existingNote, sessi
 
 function buildManualApproveNoteText(options) {
   const processedAt = options && options.processedAt instanceof Date ? options.processedAt : new Date();
+  const writtenAt = options && options.writtenAt instanceof Date ? options.writtenAt : processedAt;
+  const boundaryAdjusted = !!(options && options.boundaryAdjusted);
+  const boundaryAdjustReason = String(options && options.boundaryAdjustReason || 'none').trim();
   const defaultComment = String(options && options.defaultComment || '').trim();
   const memberComment = String(options && options.memberComment || '').trim();
   const overwritten = !!(options && options.overwritten);
@@ -6187,8 +6200,19 @@ function buildManualApproveNoteText(options) {
 
   const lines = [
     `[수동출석] 처리일시: ${formatDateTime(processedAt)}`,
-    '기록정책: lateDeadline 고정'
+    `기록시각: ${formatDateTime(writtenAt)}`,
+    '기록정책: 실제 승인시각(경계보정 적용)'
   ];
+
+  if (boundaryAdjusted) {
+    if (boundaryAdjustReason === 'before_open') {
+      lines.push('경계보정: 회차 오픈 시각으로 보정');
+    } else if (boundaryAdjustReason === 'after_close') {
+      lines.push('경계보정: 회차 마감 시각으로 보정');
+    } else {
+      lines.push('경계보정: 회차 경계 시각으로 보정');
+    }
+  }
 
   if (defaultComment) {
     lines.push(`관리자 공통멘트: ${defaultComment}`);
@@ -6210,6 +6234,35 @@ function buildManualApproveNoteText(options) {
   }
 
   return lines.join('\n');
+}
+
+function computeManualApprovalWriteTime(processedAt, session) {
+  const approvedAt = processedAt instanceof Date && !isNaN(processedAt.getTime())
+    ? processedAt
+    : new Date();
+  const openTime = session && session.openTime instanceof Date ? session.openTime : null;
+  const lateDeadline = session && session.lateDeadline instanceof Date ? session.lateDeadline : null;
+
+  let writeTime = new Date(approvedAt.getTime());
+  let boundaryAdjusted = false;
+  let boundaryAdjustReason = 'none';
+
+  if (openTime && approvedAt.getTime() < openTime.getTime()) {
+    writeTime = new Date(openTime.getTime());
+    boundaryAdjusted = true;
+    boundaryAdjustReason = 'before_open';
+  } else if (lateDeadline && approvedAt.getTime() > lateDeadline.getTime()) {
+    writeTime = new Date(lateDeadline.getTime());
+    boundaryAdjusted = true;
+    boundaryAdjustReason = 'after_close';
+  }
+
+  return {
+    approvedAt: approvedAt,
+    writeTime: writeTime,
+    boundaryAdjusted: boundaryAdjusted,
+    boundaryAdjustReason: boundaryAdjustReason
+  };
 }
 
 function manualApproveBatchAttendance(params) {
@@ -6262,7 +6315,9 @@ function manualApproveBatchAttendance(params) {
     }
 
     const processedAt = new Date();
-    const writeTime = new Date(session.lateDeadline.getTime());
+    const writeMeta = computeManualApprovalWriteTime(processedAt, session);
+    const writeTime = writeMeta.writeTime;
+    const approvedAt = writeMeta.approvedAt;
     const formattedTime = formatDateTime(writeTime);
     const results = [];
     const summary = {
@@ -6330,6 +6385,9 @@ function manualApproveBatchAttendance(params) {
 
         const noteText = buildManualApproveNoteText({
           processedAt: processedAt,
+          writtenAt: writeTime,
+          boundaryAdjusted: writeMeta.boundaryAdjusted,
+          boundaryAdjustReason: writeMeta.boundaryAdjustReason,
           defaultComment: defaultComment,
           memberComment: item.comment,
           overwritten: existingRecord.hasValue,
@@ -6350,6 +6408,11 @@ function manualApproveBatchAttendance(params) {
         rowResult.message = existingRecord.hasValue ? '기존 값을 덮어써 수동 승인 완료' : '수동 승인 완료';
         rowResult.overridden = !!existingRecord.hasValue;
         rowResult.time = formattedTime;
+        rowResult.writtenAt = formattedTime;
+        rowResult.actualApprovedAt = formatDateTime(approvedAt);
+        rowResult.boundaryAdjusted = writeMeta.boundaryAdjusted;
+        rowResult.boundaryAdjustReason = writeMeta.boundaryAdjustReason;
+        rowResult.attendanceType = getAttendanceType(writeTime, session);
         results.push(rowResult);
       } catch (itemError) {
         summary.failed++;
@@ -6366,9 +6429,13 @@ function manualApproveBatchAttendance(params) {
       message: '관리자 수동 출석 배치 처리가 완료되었습니다.',
       seasonAlias: info.seasonAlias,
       sessionKey: session.sessionKey,
-      attendanceType: 'late',
-      timePolicy: 'lateDeadline',
+      attendanceType: getAttendanceType(writeTime, session),
+      timePolicy: 'actual_click_with_clamp',
       time: formattedTime,
+      writtenAt: formattedTime,
+      actualApprovedAt: formatDateTime(approvedAt),
+      boundaryAdjusted: writeMeta.boundaryAdjusted,
+      boundaryAdjustReason: writeMeta.boundaryAdjustReason,
       processedAt: formatDateTime(processedAt),
       forceOverride: forceOverride,
       summary: summary,
