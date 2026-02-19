@@ -42,6 +42,8 @@ const IMPORT_STATUS_FINALIZED = 'finalized';
 const IMPORT_STATUS_ABORTED = 'aborted';
 const IMPORT_TARGET_MODE_CREATE = 'create';
 const IMPORT_TARGET_MODE_UPDATE = 'update';
+const IMPORT_EFFECTIVE_SCOPE_ALL = 'all';
+const IMPORT_EFFECTIVE_SCOPE_TARGET_ONLY = 'targetSeasonOnly';
 const MEMBER_V2_SHEET_HEADERS = [
   'Name',
   'Season',
@@ -3605,6 +3607,15 @@ function parseImportTargetMode(value) {
   return raw === IMPORT_TARGET_MODE_UPDATE ? IMPORT_TARGET_MODE_UPDATE : IMPORT_TARGET_MODE_CREATE;
 }
 
+function resolveEffectiveImportScope(targetMode, importMode) {
+  const resolvedTargetMode = parseImportTargetMode(targetMode);
+  const resolvedImportMode = parseImportMode(importMode);
+  if (resolvedTargetMode === IMPORT_TARGET_MODE_UPDATE) {
+    return IMPORT_EFFECTIVE_SCOPE_TARGET_ONLY;
+  }
+  return resolvedImportMode === 'yb' ? IMPORT_EFFECTIVE_SCOPE_TARGET_ONLY : IMPORT_EFFECTIVE_SCOPE_ALL;
+}
+
 function parseSeasonNumberFromAlias(alias) {
   const m = String(alias || '').trim().match(SEASON_NAME_REGEX);
   if (!m) return NaN;
@@ -3891,6 +3902,7 @@ function beginSeasonImport(params) {
     const targetSheet = findSeasonSheetByAlias(alias);
     const targetMode = targetSheet ? IMPORT_TARGET_MODE_UPDATE : IMPORT_TARGET_MODE_CREATE;
     const targetSheetName = targetSheet ? targetSheet.getName() : '';
+    const effectiveScope = resolveEffectiveImportScope(targetMode, importMode);
 
     // 스테이징 시트는 항상 문서 최우측에 생성
     const stagingSheet = ss.insertSheet(makeImportStagingSheetName(alias), ss.getNumSheets() + 1);
@@ -3925,6 +3937,7 @@ function beginSeasonImport(params) {
       importMode: importMode,
       targetMode: targetMode,
       targetSheetName: targetSheetName,
+      effectiveScope: effectiveScope,
       createdAt: nowText
     };
   } catch (error) {
@@ -3961,6 +3974,9 @@ function classifyImportRow(rawRow, options) {
   const sourceRow = Math.max(1, parseInt(rawRow.sourceRow || rawRow.rowNumber || 0, 10) || 0);
   const seasonNo = Number(opts.seasonNo || 0);
   const importMode = parseImportMode(opts.importMode || 'all');
+  const targetMode = parseImportTargetMode(opts.targetMode || IMPORT_TARGET_MODE_CREATE);
+  const effectiveScope = resolveEffectiveImportScope(targetMode, importMode);
+  const enforceTargetSeasonOnly = effectiveScope === IMPORT_EFFECTIVE_SCOPE_TARGET_ONLY;
   const seenPhones = opts.seenPhones || {};
 
   const name = String(rawRow.name !== undefined ? rawRow.name : (rawRow.Name || '')).trim();
@@ -4028,7 +4044,7 @@ function classifyImportRow(rawRow, options) {
     };
   }
 
-  if (importMode === 'yb' && seasonValue !== seasonNo) {
+  if (enforceTargetSeasonOnly && seasonValue !== seasonNo) {
     return {
       action: 'non_target',
       sourceRow: sourceRow,
@@ -4115,9 +4131,9 @@ function normalizeImportDiffValue(field, value) {
     return normalizePhone(value);
   }
   if (field === 'feeChecked' || field === 'completed' || field === 'isStaff') {
-    if (value === true) return 'true';
-    if (value === false) return 'false';
-    return '';
+    const parsed = parseBooleanLikeValue(value);
+    if (!parsed.valid) return 'false';
+    return parsed.value === true ? 'true' : 'false';
   }
   if (field === 'email' || field === 'githubEmail' || field === 'notionEmail' || field === 'slackEmail') {
     return normalizeImportEmail(value || '');
@@ -4272,14 +4288,6 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
   const existingPack = getExistingMemberPackForUpdate(targetSheet);
   if (existingPack.error) return existingPack.error;
 
-  const rows = [];
-  const summary = {
-    addCount: 0,
-    updateFieldCount: 0,
-    deleteCandidateCount: 0,
-    protectedSkipCount: 0
-  };
-
   const comparedFields = [
     'name',
     'season',
@@ -4293,12 +4301,70 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
     'completed',
     'isStaff'
   ];
+  const rowFieldOrder = [
+    'name',
+    'season',
+    'phone',
+    'email',
+    'githubId',
+    'githubEmail',
+    'notionEmail',
+    'discordId',
+    'slackEmail',
+    'feeChecked',
+    'completed',
+    'isStaff'
+  ];
+  const diffTypeOrder = {
+    ADD: 0,
+    UPDATE: 1,
+    DELETE_CANDIDATE: 2
+  };
+  const canonicalVersion = 2;
+
+  const rows = [];
+  const rowDiffByPhone = {};
+  const cellDiffByPhone = {};
+  const canonicalEntries = [];
+  const summary = {
+    addCount: 0,
+    updateFieldCount: 0,
+    deleteCandidateCount: 0,
+    protectedSkipCount: 0
+  };
+
+  function toRowSnapshot(member) {
+    const seasonNo = normalizeSeasonNumber(member.season);
+    return {
+      name: String(member.name || '').trim(),
+      season: isNaN(seasonNo) ? null : seasonNo,
+      seasonLabel: isNaN(seasonNo) ? '' : `${seasonNo}기`,
+      phone: formatPhoneWithHyphen(member.phone || ''),
+      phoneKey: normalizePhone(member.phone || ''),
+      email: normalizeImportEmail(member.email || ''),
+      githubId: String(member.githubId || '').trim(),
+      githubEmail: normalizeImportEmail(member.githubEmail || ''),
+      notionEmail: normalizeImportEmail(member.notionEmail || ''),
+      discordId: String(member.discordId || '').trim(),
+      slackEmail: normalizeImportEmail(member.slackEmail || ''),
+      feeChecked: normalizeImportDiffValue('feeChecked', member.feeChecked) === 'true',
+      completed: normalizeImportDiffValue('completed', member.completed) === 'true',
+      isStaff: normalizeImportDiffValue('isStaff', member.isStaff) === 'true'
+    };
+  }
 
   const stagedPhoneMap = {};
   stagingPack.members.forEach(staged => {
     stagedPhoneMap[staged.phone] = true;
     const existing = existingPack.byPhone[staged.phone];
+
     if (!existing) {
+      const afterRow = toRowSnapshot(staged);
+      const cellMap = {};
+      rowFieldOrder.forEach(field => {
+        cellMap[field] = 'add';
+      });
+
       summary.addCount++;
       rows.push({
         type: 'ADD',
@@ -4311,6 +4377,23 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
         targetRow: null,
         sourceRow: staged.sourceRow
       });
+
+      rowDiffByPhone[staged.phone] = {
+        rowType: 'ADD',
+        targetRow: null,
+        sourceRow: staged.sourceRow,
+        before: null,
+        after: afterRow,
+        changedFields: rowFieldOrder.slice()
+      };
+      cellDiffByPhone[staged.phone] = cellMap;
+      canonicalEntries.push({
+        type: 'ADD',
+        phoneKey: staged.phone,
+        field: 'ROW',
+        before: '',
+        after: 'row_add'
+      });
       return;
     }
 
@@ -4318,12 +4401,22 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
       summary.protectedSkipCount++;
     }
 
+    const beforeRow = toRowSnapshot(existing);
+    const afterRow = toRowSnapshot(staged);
+    const changedFields = [];
+    const cellMap = {};
+    rowFieldOrder.forEach(field => {
+      cellMap[field] = 'same';
+    });
+
     comparedFields.forEach(field => {
       const beforeNorm = normalizeImportDiffValue(field, existing[field]);
       const afterNorm = normalizeImportDiffValue(field, staged[field]);
       if (beforeNorm === afterNorm) return;
 
       summary.updateFieldCount++;
+      changedFields.push(field);
+      cellMap[field] = 'update';
       rows.push({
         type: 'UPDATE',
         phone: staged.phoneDisplay,
@@ -4335,12 +4428,35 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
         targetRow: existing.rowIndex,
         sourceRow: staged.sourceRow
       });
+      canonicalEntries.push({
+        type: 'UPDATE',
+        phoneKey: staged.phone,
+        field: field,
+        before: beforeNorm,
+        after: afterNorm
+      });
     });
+
+    rowDiffByPhone[staged.phone] = {
+      rowType: changedFields.length > 0 ? 'UPDATE' : 'SAME',
+      targetRow: existing.rowIndex,
+      sourceRow: staged.sourceRow,
+      before: beforeRow,
+      after: afterRow,
+      changedFields: changedFields
+    };
+    cellDiffByPhone[staged.phone] = cellMap;
   });
 
   Object.keys(existingPack.byPhone).forEach(phoneKey => {
     if (stagedPhoneMap[phoneKey]) return;
     const existing = existingPack.byPhone[phoneKey];
+    const beforeRow = toRowSnapshot(existing);
+    const cellMap = {};
+    rowFieldOrder.forEach(field => {
+      cellMap[field] = 'delete';
+    });
+
     summary.deleteCandidateCount++;
     rows.push({
       type: 'DELETE_CANDIDATE',
@@ -4353,31 +4469,61 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
       targetRow: existing.rowIndex,
       sourceRow: null
     });
+
+    rowDiffByPhone[phoneKey] = {
+      rowType: 'DELETE_CANDIDATE',
+      targetRow: existing.rowIndex,
+      sourceRow: null,
+      before: beforeRow,
+      after: null,
+      changedFields: []
+    };
+    cellDiffByPhone[phoneKey] = cellMap;
+    canonicalEntries.push({
+      type: 'DELETE_CANDIDATE',
+      phoneKey: phoneKey,
+      field: 'ROW',
+      before: 'row_exists',
+      after: ''
+    });
+  });
+
+  rows.sort((a, b) => {
+    const typeA = diffTypeOrder[a.type] !== undefined ? diffTypeOrder[a.type] : 99;
+    const typeB = diffTypeOrder[b.type] !== undefined ? diffTypeOrder[b.type] : 99;
+    if (typeA !== typeB) return typeA - typeB;
+    if (a.phoneKey !== b.phoneKey) return String(a.phoneKey || '').localeCompare(String(b.phoneKey || ''));
+    if (a.field !== b.field) return String(a.field || '').localeCompare(String(b.field || ''));
+    return Number(a.targetRow || 0) - Number(b.targetRow || 0);
+  });
+
+  canonicalEntries.sort((a, b) => {
+    if (a.phoneKey !== b.phoneKey) return String(a.phoneKey || '').localeCompare(String(b.phoneKey || ''));
+    if (a.type !== b.type) return String(a.type || '').localeCompare(String(b.type || ''));
+    if (a.field !== b.field) return String(a.field || '').localeCompare(String(b.field || ''));
+    return String(a.before || '').localeCompare(String(b.before || ''));
   });
 
   const tokenPayload = JSON.stringify({
     seasonAlias: record.seasonAlias,
     targetSheetName: targetSheet.getName(),
-    summary: summary,
-    rows: rows.map(item => ({
-      type: item.type,
-      phoneKey: item.phoneKey,
-      field: item.field,
-      before: item.before,
-      after: item.after,
-      targetRow: item.targetRow
-    }))
+    canonicalVersion: canonicalVersion,
+    entries: canonicalEntries
   });
   const diffToken = computeSha256Hex(tokenPayload);
 
   return {
     targetMode: IMPORT_TARGET_MODE_UPDATE,
     targetSheetName: targetSheet.getName(),
+    effectiveScope: resolveEffectiveImportScope(IMPORT_TARGET_MODE_UPDATE, record.importMode),
+    canonicalVersion: canonicalVersion,
     attendanceProtectedStartCol: existingPack.sessionStartColIndex,
     summary: summary,
     rows: rows,
     totalCount: rows.length,
     diffToken: diffToken,
+    rowDiffByPhone: rowDiffByPhone,
+    cellDiffByPhone: cellDiffByPhone,
     stagingPack: stagingPack,
     existingPack: existingPack
   };
@@ -4415,6 +4561,8 @@ function getSeasonImportDiff(params) {
         success: true,
         importId: importId,
         targetMode: IMPORT_TARGET_MODE_CREATE,
+        effectiveScope: resolveEffectiveImportScope(IMPORT_TARGET_MODE_CREATE, record.importMode),
+        canonicalVersion: 2,
         targetSheetName: '',
         attendanceProtectedStartCol: MEMBER_V2_SHEET_HEADERS.length,
         summary: {
@@ -4424,6 +4572,8 @@ function getSeasonImportDiff(params) {
           protectedSkipCount: 0
         },
         rows: [],
+        rowDiffByPhone: {},
+        cellDiffByPhone: {},
         totalCount: 0,
         offset: offset,
         limit: limit,
@@ -4449,10 +4599,14 @@ function getSeasonImportDiff(params) {
       success: true,
       importId: importId,
       targetMode: IMPORT_TARGET_MODE_UPDATE,
+      effectiveScope: snapshot.effectiveScope,
+      canonicalVersion: snapshot.canonicalVersion,
       targetSheetName: snapshot.targetSheetName,
       attendanceProtectedStartCol: snapshot.attendanceProtectedStartCol,
       summary: snapshot.summary,
       rows: snapshot.rows.slice(offset, offset + limit),
+      rowDiffByPhone: snapshot.rowDiffByPhone,
+      cellDiffByPhone: snapshot.cellDiffByPhone,
       totalCount: snapshot.totalCount,
       offset: offset,
       limit: limit,
@@ -4659,6 +4813,7 @@ function importSeasonChunk(params) {
       const result = classifyImportRow(item || {}, {
         seasonNo: seasonNo,
         importMode: record.importMode,
+        targetMode: record.targetMode,
         seenPhones: seen.phones
       });
 
@@ -4794,6 +4949,7 @@ function finalizeSeasonImport(params) {
         seasonAlias: record.seasonAlias,
         sheetName: record.seasonAlias,
         targetMode: IMPORT_TARGET_MODE_CREATE,
+        effectiveScope: resolveEffectiveImportScope(IMPORT_TARGET_MODE_CREATE, record.importMode),
         inserted_count: record.insertedCount,
         skipped_duplicate_count: record.skippedDuplicateCount,
         dropped_invalid_count: record.droppedInvalidCount,
@@ -4829,7 +4985,9 @@ function finalizeSeasonImport(params) {
       return {
         success: false,
         errorCode: 'DIFF_TOKEN_MISMATCH',
-        message: '변경사항 토큰이 일치하지 않습니다. Diff를 다시 조회 후 재시도해주세요.'
+        message: '변경사항 토큰이 일치하지 않습니다. 최신 Diff로 갱신 후 다시 반영해주세요.',
+        latestDiffToken: snapshot.diffToken,
+        latestSummary: snapshot.summary
       };
     }
 
@@ -4850,6 +5008,7 @@ function finalizeSeasonImport(params) {
       seasonAlias: record.seasonAlias,
       sheetName: targetSheet.getName(),
       targetMode: IMPORT_TARGET_MODE_UPDATE,
+      effectiveScope: resolveEffectiveImportScope(IMPORT_TARGET_MODE_UPDATE, record.importMode),
       added_count: applyResult.addedCount,
       updated_row_count: applyResult.updatedRowCount,
       delete_candidate_count: snapshot.summary.deleteCandidateCount,

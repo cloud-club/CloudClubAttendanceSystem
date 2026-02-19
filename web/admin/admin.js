@@ -36,10 +36,10 @@ let importManualConfirmed = false;
 let importPreviewState = null;
 let importDebugReport = null;
 let importServerMode = 'create';
+let importServerModeHint = 'create';
 let importPendingImportId = '';
 let importDiffState = null;
 let importDiffToken = '';
-let importDiffConfirmed = false;
 
 const IMPORT_FIELD_ORDER = [
   'name',
@@ -872,6 +872,61 @@ function normalizeSeasonInputFieldValue() {
   return parsed;
 }
 
+function hasSeasonAliasInLoadedSheets(alias) {
+  const targetAlias = normalizeSeasonAlias(alias);
+  if (!targetAlias) return false;
+  const sheetSelect = document.getElementById('sheetSelect');
+  if (!sheetSelect) return false;
+  return Array.from(sheetSelect.options || []).some(option => normalizeSeasonAlias(option.dataset ? option.dataset.alias : '') === targetAlias);
+}
+
+function getImportUiMode() {
+  if (importPendingImportId) {
+    return importServerMode === 'update' ? 'update' : 'create';
+  }
+  return importServerModeHint === 'update' ? 'update' : 'create';
+}
+
+function updateImportModeHintFromInput() {
+  const input = document.getElementById('importSeasonNoInput');
+  const parsed = parseSeasonFromInput(input ? input.value : '');
+  importServerModeHint = (parsed.valid && hasSeasonAliasInLoadedSheets(parsed.seasonAlias)) ? 'update' : 'create';
+  refreshImportModeUi();
+}
+
+function refreshImportModeUi() {
+  const mode = getImportUiMode();
+  const banner = document.getElementById('importModeHint');
+  const checkboxText = document.getElementById('importPreviewConfirmText');
+
+  if (banner) {
+    banner.classList.remove('create', 'update');
+    if (mode === 'update') {
+      banner.classList.add('update');
+      banner.textContent = '기존 시즌 감지: 업데이트 모드입니다. 대상 시즌 행(A~L)만 반영하며 M+ 출석 컬럼은 보호됩니다.';
+    } else {
+      banner.classList.add('create');
+      banner.textContent = '신규 시즌 생성 모드입니다. 업로드 결과로 시즌 시트를 생성합니다.';
+    }
+  }
+
+  if (checkboxText) {
+    checkboxText.textContent = mode === 'update'
+      ? '셀 단위 변경사항을 확인했고, A~L 업데이트 반영에 동의합니다. (M+ 출석 컬럼 보호)'
+      : '미리보기 결과를 확인했고, 시즌 생성/업로드를 진행합니다.';
+  }
+
+  setImportExecuteButtonLabel(false);
+}
+
+function invalidatePendingImportPreparation() {
+  if (!importPendingImportId && !importDiffState && !importDiffToken) return;
+  importPendingImportId = '';
+  importServerMode = 'create';
+  importDiffState = null;
+  importDiffToken = '';
+}
+
 function findFallbackValueInRow(row, predicate) {
   for (let i = 0; i < row.length; i++) {
     const value = normalizeImportCell(row[i]);
@@ -883,7 +938,13 @@ function findFallbackValueInRow(row, predicate) {
   return null;
 }
 
-function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo, importMode) {
+function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo, importMode, options) {
+  const opts = options || {};
+  const modeHint = opts.modeHint === 'update' ? 'update' : 'create';
+  const effectiveImportMode = modeHint === 'update' ? 'yb' : importMode;
+  const effectiveScope = modeHint === 'update'
+    ? 'targetSeasonOnly'
+    : (importMode === 'yb' ? 'targetSeasonOnly' : 'all');
   const rows = rawMatrix || [];
   const columnPack = profileImportColumns(rows, inference.headerInfo);
   const built = buildFieldMapFromManual(columnPack, manualMapping || {});
@@ -1038,7 +1099,7 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
       status = 'DROP_INVALID';
       reasonCode = `ROW_${rowNumber}_INVALID_SEASON`;
       reason = '필수 Season 값이 없거나 형식이 올바르지 않습니다.';
-    } else if (importMode === 'yb' && seasonNo !== seasonInfo.seasonNo) {
+    } else if (effectiveImportMode === 'yb' && seasonNo !== seasonInfo.seasonNo) {
       status = 'SKIP_NON_TARGET_COHORT';
       reasonCode = `ROW_${rowNumber}_NON_TARGET_COHORT`;
       reason = `대상 시즌(${seasonInfo.seasonNo}기)과 다른 기수(${seasonNo}기)`;
@@ -1062,13 +1123,13 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
         debugItems.push({ level: 'WARNING', code: `ROW_${rowNumber}_INVALID_SLACK_EMAIL`, message: 'Slack Email 형식 오류로 빈 값 처리' });
       }
       if (!feeCheckedParsed.valid) {
-        debugItems.push({ level: 'WARNING', code: `ROW_${rowNumber}_INVALID_FEE_CHECKED`, message: '회비 체크 값이 불명확해 빈 값 처리' });
+        debugItems.push({ level: 'WARNING', code: `ROW_${rowNumber}_INVALID_FEE_CHECKED`, message: '회비 체크 값이 불명확해 FALSE 기본값으로 보정' });
       }
       if (!completedParsed.valid) {
-        debugItems.push({ level: 'WARNING', code: `ROW_${rowNumber}_INVALID_COMPLETED`, message: '수료 여부 값이 불명확해 빈 값 처리' });
+        debugItems.push({ level: 'WARNING', code: `ROW_${rowNumber}_INVALID_COMPLETED`, message: '수료 여부 값이 불명확해 FALSE 기본값으로 보정' });
       }
       if (!isStaffParsed.valid) {
-        debugItems.push({ level: 'WARNING', code: `ROW_${rowNumber}_INVALID_IS_STAFF`, message: '운영진 여부 값이 불명확해 빈 값 처리' });
+        debugItems.push({ level: 'WARNING', code: `ROW_${rowNumber}_INVALID_IS_STAFF`, message: '운영진 여부 값이 불명확해 FALSE 기본값으로 보정' });
       }
     } else if (status === 'SKIP_DUPLICATE') {
       stats.skip_duplicate++;
@@ -1137,7 +1198,10 @@ function buildImportPreviewState(rawMatrix, inference, manualMapping, seasonInfo
     blockers: blockers,
     stats: stats,
     seasonInfo: seasonInfo,
-    importMode: importMode
+    importMode: importMode,
+    effectiveImportMode: effectiveImportMode,
+    effectiveScope: effectiveScope,
+    modeHint: modeHint
   };
 }
 
@@ -1259,6 +1323,27 @@ function renderImportDebug(debugItems) {
   }).join('');
 }
 
+function formatImportPreviewFieldValue(field, value, fallback) {
+  if (field === 'season') {
+    if (!isNaN(parseImportSeasonNo(value))) return `${parseImportSeasonNo(value)}기`;
+    if (!isNaN(parseImportSeasonNo(fallback))) return `${parseImportSeasonNo(fallback)}기`;
+    const text = String(value || fallback || '').trim();
+    return text || '-';
+  }
+  if (field === 'feeChecked' || field === 'completed' || field === 'isStaff') {
+    return value ? 'TRUE' : 'FALSE';
+  }
+  const text = String(value === undefined || value === null ? (fallback || '') : value).trim();
+  return text || '-';
+}
+
+function getImportCellDiffClass(kind) {
+  if (kind === 'add') return 'cell-diff-add';
+  if (kind === 'update') return 'cell-diff-update';
+  if (kind === 'delete') return 'cell-diff-delete';
+  return '';
+}
+
 function renderImportPreview(previewState) {
   const summaryNode = document.getElementById('importPreviewSummary');
   const wrap = document.getElementById('importPreviewWrap');
@@ -1270,17 +1355,53 @@ function renderImportPreview(previewState) {
     return;
   }
 
+  const mode = getImportUiMode();
+  const diffActive = mode === 'update' && importDiffState && importDiffState.success;
+  const rowDiffByPhone = diffActive && importDiffState.rowDiffByPhone ? importDiffState.rowDiffByPhone : {};
+  const cellDiffByPhone = diffActive && importDiffState.cellDiffByPhone ? importDiffState.cellDiffByPhone : {};
   const stats = previewState.stats || {};
-  summaryNode.innerHTML = `
-    <span class="import-chip pass">INSERT ${stats.valid_insert || 0}</span>
-    <span class="import-chip warn">SKIP_DUPLICATE ${stats.skip_duplicate || 0}</span>
-    <span class="import-chip warn">SKIP_NON_TARGET ${stats.skip_non_target || 0}</span>
-    <span class="import-chip fail">DROP_INVALID ${stats.drop_invalid || 0}</span>
-  `;
+  const diffSummary = (diffActive && importDiffState.summary) ? importDiffState.summary : null;
+  const sameCount = diffActive
+    ? Object.values(rowDiffByPhone).filter(item => item && item.rowType === 'SAME').length
+    : 0;
 
-  const rows = (previewState.previewRows || []).map(item => {
+  const summaryParts = [
+    `<span class="import-chip pass">INSERT ${stats.valid_insert || 0}</span>`,
+    `<span class="import-chip warn">SKIP_DUPLICATE ${stats.skip_duplicate || 0}</span>`,
+    `<span class="import-chip warn">SKIP_NON_TARGET ${stats.skip_non_target || 0}</span>`,
+    `<span class="import-chip fail">DROP_INVALID ${stats.drop_invalid || 0}</span>`
+  ];
+  if (diffSummary) {
+    summaryParts.push(`<span class="import-chip pass">ADD ${Number(diffSummary.addCount || 0)}</span>`);
+    summaryParts.push(`<span class="import-chip warn">UPDATE ${Number(diffSummary.updateFieldCount || 0)}</span>`);
+    summaryParts.push(`<span class="import-chip">SAME ${sameCount}</span>`);
+    summaryParts.push(`<span class="import-chip fail">DELETE_CANDIDATE ${Number(diffSummary.deleteCandidateCount || 0)}</span>`);
+  }
+  summaryNode.innerHTML = summaryParts.join('');
+
+  const rowHtml = [];
+  const phoneSeenInPreview = {};
+
+  function renderDataCell(item, phoneKey, field, fallbackValue, beforeValueFromDiff) {
+    const valueText = formatImportPreviewFieldValue(field, item[field], fallbackValue);
+    const diffKind = (diffActive && phoneKey && cellDiffByPhone[phoneKey]) ? cellDiffByPhone[phoneKey][field] : '';
+    const cellClass = getImportCellDiffClass(diffKind);
+    let titleText = '';
+    if (diffKind === 'update' && beforeValueFromDiff !== undefined) {
+      const beforeText = formatImportPreviewFieldValue(field, beforeValueFromDiff, '');
+      titleText = ` title="이전 값: ${escapeHtml(beforeText)}"`;
+    }
+    return `<td class="${cellClass}"${titleText}>${escapeHtml(valueText)}</td>`;
+  }
+
+  (previewState.previewRows || []).forEach(item => {
+    const phoneKey = normalizeImportPhoneLocal(item.phone || '');
+    if (phoneKey) phoneSeenInPreview[phoneKey] = true;
+
     let statusLabel = 'INSERT';
     let chipClass = 'insert';
+    let diffRow = null;
+
     if (item.status === 'SKIP_DUPLICATE') {
       statusLabel = 'SKIP_DUP';
       chipClass = 'skip';
@@ -1290,28 +1411,85 @@ function renderImportPreview(previewState) {
     } else if (item.status === 'DROP_INVALID') {
       statusLabel = 'DROP';
       chipClass = 'drop';
+    } else if (diffActive && phoneKey && rowDiffByPhone[phoneKey]) {
+      diffRow = rowDiffByPhone[phoneKey];
+      if (diffRow.rowType === 'ADD') {
+        statusLabel = 'ADD';
+        chipClass = 'insert';
+      } else if (diffRow.rowType === 'UPDATE') {
+        statusLabel = 'UPDATE';
+        chipClass = 'possible';
+      } else if (diffRow.rowType === 'SAME') {
+        statusLabel = 'SAME';
+        chipClass = 'pass';
+      }
     }
 
-    return `
+    const before = diffRow && diffRow.before ? diffRow.before : {};
+    rowHtml.push(`
       <tr>
         <td>${item.rowNumber}</td>
         <td class="status-cell"><span class="status-chip ${chipClass}">${statusLabel}</span></td>
-        <td>${escapeHtml(item.name || '-')}</td>
-        <td>${escapeHtml(item.seasonLabel || '-')}</td>
-        <td>${escapeHtml(item.phone || '-')}</td>
-        <td>${escapeHtml(item.email || '-')}</td>
-        <td>${escapeHtml(item.githubId || '-')}</td>
-        <td>${escapeHtml(item.githubEmail || '-')}</td>
-        <td>${escapeHtml(item.notionEmail || '-')}</td>
-        <td>${escapeHtml(item.discordId || '-')}</td>
-        <td>${escapeHtml(item.slackEmail || '-')}</td>
-        <td>${item.feeChecked ? 'TRUE' : 'FALSE'}</td>
-        <td>${item.completed ? 'TRUE' : 'FALSE'}</td>
-        <td>${item.isStaff ? 'TRUE' : 'FALSE'}</td>
+        ${renderDataCell(item, phoneKey, 'name', '', before.name)}
+        ${renderDataCell(item, phoneKey, 'season', item.seasonLabel || '', before.season)}
+        ${renderDataCell(item, phoneKey, 'phone', '', before.phone)}
+        ${renderDataCell(item, phoneKey, 'email', '', before.email)}
+        ${renderDataCell(item, phoneKey, 'githubId', '', before.githubId)}
+        ${renderDataCell(item, phoneKey, 'githubEmail', '', before.githubEmail)}
+        ${renderDataCell(item, phoneKey, 'notionEmail', '', before.notionEmail)}
+        ${renderDataCell(item, phoneKey, 'discordId', '', before.discordId)}
+        ${renderDataCell(item, phoneKey, 'slackEmail', '', before.slackEmail)}
+        ${renderDataCell(item, phoneKey, 'feeChecked', '', before.feeChecked)}
+        ${renderDataCell(item, phoneKey, 'completed', '', before.completed)}
+        ${renderDataCell(item, phoneKey, 'isStaff', '', before.isStaff)}
         <td>${escapeHtml(item.reasonCode || '-')}</td>
       </tr>
-    `;
-  }).join('');
+    `);
+  });
+
+  if (diffActive) {
+    Object.keys(rowDiffByPhone || {}).forEach(phoneKey => {
+      if (phoneSeenInPreview[phoneKey]) return;
+      const diffRow = rowDiffByPhone[phoneKey];
+      if (!diffRow || diffRow.rowType !== 'DELETE_CANDIDATE' || !diffRow.before) return;
+      const before = diffRow.before;
+      const rowItem = {
+        rowNumber: '-',
+        reasonCode: 'DELETE_CANDIDATE',
+        name: before.name,
+        seasonLabel: before.seasonLabel,
+        phone: before.phone,
+        email: before.email,
+        githubId: before.githubId,
+        githubEmail: before.githubEmail,
+        notionEmail: before.notionEmail,
+        discordId: before.discordId,
+        slackEmail: before.slackEmail,
+        feeChecked: !!before.feeChecked,
+        completed: !!before.completed,
+        isStaff: !!before.isStaff
+      };
+      rowHtml.push(`
+        <tr>
+          <td>${rowItem.rowNumber}</td>
+          <td class="status-cell"><span class="status-chip drop">DELETE_CANDIDATE</span></td>
+          ${renderDataCell(rowItem, phoneKey, 'name', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'season', rowItem.seasonLabel || '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'phone', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'email', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'githubId', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'githubEmail', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'notionEmail', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'discordId', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'slackEmail', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'feeChecked', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'completed', '', undefined)}
+          ${renderDataCell(rowItem, phoneKey, 'isStaff', '', undefined)}
+          <td>삭제 후보 (자동 반영 안 함)</td>
+        </tr>
+      `);
+    });
+  }
 
   wrap.innerHTML = `
     <table class="management-table import-preview-table">
@@ -1334,7 +1512,7 @@ function renderImportPreview(previewState) {
           <th>비고</th>
         </tr>
       </thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rowHtml.join('')}</tbody>
     </table>
   `;
 }
@@ -1344,7 +1522,6 @@ function refreshImportExecuteButtonState() {
   if (!btn) return;
 
   const previewConfirmed = !!(document.getElementById('importPreviewConfirmed') && document.getElementById('importPreviewConfirmed').checked);
-  const diffConfirmed = !!(document.getElementById('importDiffConfirmed') && document.getElementById('importDiffConfirmed').checked);
   const hasBlocker = !!(importPreviewState && Array.isArray(importPreviewState.blockers) && importPreviewState.blockers.length > 0);
   const baseReady = !!importPreviewState && !hasBlocker && previewConfirmed;
   if (!baseReady) {
@@ -1353,7 +1530,7 @@ function refreshImportExecuteButtonState() {
   }
 
   if (importPendingImportId && importServerMode === 'update') {
-    btn.disabled = !importDiffState || !importDiffToken || !diffConfirmed;
+    btn.disabled = !importDiffState || !importDiffToken;
     return;
   }
 
@@ -1365,6 +1542,7 @@ function rebuildImportPreview() {
 
   const seasonInfo = parseSeasonFromInput(document.getElementById('importSeasonNoInput') ? document.getElementById('importSeasonNoInput').value : '');
   if (!seasonInfo.valid) {
+    importServerModeHint = 'create';
     importPreviewState = null;
     importDebugReport = {
       generatedAt: Date.now(),
@@ -1377,17 +1555,25 @@ function rebuildImportPreview() {
     };
     renderImportDebug(importDebugReport.items);
     renderImportPreview(null);
+    refreshImportModeUi();
     refreshImportExecuteButtonState();
     return;
   }
 
+  importServerModeHint = hasSeasonAliasInLoadedSheets(seasonInfo.seasonAlias) ? 'update' : 'create';
+  refreshImportModeUi();
+
   const importMode = String(document.getElementById('importModeSelect') ? document.getElementById('importModeSelect').value : 'all');
-  importPreviewState = buildImportPreviewState(importRawMatrix, importInference, importManualMapping, seasonInfo, importMode);
+  importPreviewState = buildImportPreviewState(importRawMatrix, importInference, importManualMapping, seasonInfo, importMode, {
+    modeHint: getImportUiMode()
+  });
   importDebugReport = {
     generatedAt: Date.now(),
     fileMeta: importFileMeta,
     seasonAlias: seasonInfo.seasonAlias,
     importMode: importMode,
+    effectiveImportMode: importPreviewState.effectiveImportMode,
+    effectiveScope: importPreviewState.effectiveScope,
     blockers: importPreviewState.blockers,
     stats: importPreviewState.stats,
     items: importPreviewState.debugItems
@@ -1451,13 +1637,9 @@ async function analyzeImportFile() {
     importPendingImportId = '';
     importDiffState = null;
     importDiffToken = '';
-    importDiffConfirmed = false;
     const previewConfirm = document.getElementById('importPreviewConfirmed');
     if (previewConfirm) previewConfirm.checked = false;
-    const diffConfirm = document.getElementById('importDiffConfirmed');
-    if (diffConfirm) diffConfirm.checked = false;
-    setImportExecuteButtonLabel(false);
-    renderImportDiffState(null);
+    refreshImportModeUi();
 
     rebuildImportPreview();
     showBoxMessage('importAnalyzeResult', `✅ 분석 완료: ${escapeHtml(file.name)} (${columnPack.rowCount}행)`, true);
@@ -1467,6 +1649,7 @@ async function analyzeImportFile() {
 }
 
 function onImportMappingChanged(colIndex, fieldValue) {
+  invalidatePendingImportPreparation();
   importManualMapping[String(colIndex)] = String(fieldValue || 'ignore');
   importManualConfirmed = false;
   rebuildImportPreview();
@@ -1491,10 +1674,10 @@ function resetImportFlow(resetFileInput) {
   importPreviewState = null;
   importDebugReport = null;
   importServerMode = 'create';
+  importServerModeHint = 'create';
   importPendingImportId = '';
   importDiffState = null;
   importDiffToken = '';
-  importDiffConfirmed = false;
 
   if (resetFileInput !== false) {
     const fileInput = document.getElementById('importFileInput');
@@ -1503,15 +1686,12 @@ function resetImportFlow(resetFileInput) {
 
   const previewConfirm = document.getElementById('importPreviewConfirmed');
   if (previewConfirm) previewConfirm.checked = false;
-  const diffConfirm = document.getElementById('importDiffConfirmed');
-  if (diffConfirm) diffConfirm.checked = false;
 
   renderImportSchemaInference(null, null);
   renderImportManualMapping(null);
   renderImportDebug([]);
   renderImportPreview(null);
-  renderImportDiffState(null);
-  setImportExecuteButtonLabel(false);
+  updateImportModeHintFromInput();
   refreshImportExecuteButtonState();
 }
 
@@ -1598,16 +1778,9 @@ async function executeSeasonImport() {
     return;
   }
 
-  const diffConfirm = document.getElementById('importDiffConfirmed');
-  if (importPendingImportId && importServerMode === 'update') {
-    if (!importDiffState || !importDiffToken) {
-      alert('변경사항 Diff를 먼저 조회해주세요.');
-      return;
-    }
-    if (!diffConfirm || !diffConfirm.checked) {
-      alert('변경사항 반영 동의를 먼저 체크해주세요.');
-      return;
-    }
+  if (importPendingImportId && importServerMode === 'update' && (!importDiffState || !importDiffToken)) {
+    alert('업데이트 Diff 상태를 다시 준비해주세요.');
+    return;
   }
 
   const normalizedSeason = normalizeSeasonInputFieldValue();
@@ -1666,8 +1839,10 @@ async function executeSeasonImport() {
       importId = begin.importId;
       importPendingImportId = importId;
       importServerMode = String(begin.targetMode || 'create');
+      importServerModeHint = importServerMode;
 
       setProgress('업로드 세션 생성 완료. 데이터 전송 중...', true);
+      refreshImportModeUi();
 
       const chunks = buildImportPayloadChunks(candidates, 4200);
       let cumulative = {
@@ -1711,19 +1886,34 @@ async function executeSeasonImport() {
 
         importDiffState = diffResponse;
         importDiffToken = String(diffResponse.diffToken || '');
-        importDiffConfirmed = false;
-        if (diffConfirm) diffConfirm.checked = false;
-        renderImportDiffState(diffResponse);
-        expandImportCard('importDiffCard');
-        setImportExecuteButtonLabel(true);
+        renderImportPreview(importPreviewState);
+        setImportExecuteButtonLabel(false);
         setProgress(
           `⚠️ 업데이트 모드 감지: ${escapeHtml(diffResponse.targetSheetName || seasonInfo.seasonAlias)}<br>` +
-          `Diff를 확인하고 동의 체크 후 다시 버튼을 눌러 최종 반영하세요.`,
+          `미리보기의 셀 단위 변경사항을 확인한 뒤, 같은 체크 상태로 다시 버튼을 눌러 최종 반영하세요.`,
           true
         );
         refreshImportExecuteButtonState();
         return;
       }
+    }
+
+    if (importServerMode === 'update' && (!importDiffState || !importDiffToken)) {
+      const diffResponse = await CloudClubApi.call('seasonImportDiff', {
+        importId: importId,
+        limit: 500,
+        offset: 0,
+        adminToken: adminToken
+      });
+      if (!diffResponse.success) {
+        throw new Error(diffResponse.message || '변경사항 Diff 계산 실패');
+      }
+      importDiffState = diffResponse;
+      importDiffToken = String(diffResponse.diffToken || '');
+      renderImportPreview(importPreviewState);
+      setProgress('변경사항을 최신 상태로 다시 계산했습니다. 내용을 확인 후 다시 반영 버튼을 눌러주세요.', true);
+      refreshImportExecuteButtonState();
+      return;
     }
 
     const finalizePayload = {
@@ -1763,13 +1953,38 @@ async function executeSeasonImport() {
     importServerMode = 'create';
     importDiffState = null;
     importDiffToken = '';
-    importDiffConfirmed = false;
-    if (diffConfirm) diffConfirm.checked = false;
+    importServerModeHint = hasSeasonAliasInLoadedSheets(seasonInfo.seasonAlias) ? 'update' : 'create';
+    if (previewConfirm) previewConfirm.checked = false;
     setImportExecuteButtonLabel(false);
-    renderImportDiffState(null);
+    refreshImportModeUi();
     await loadSheets();
     await refreshSeasonData();
   } catch (error) {
+    if (error && error.code === 'DIFF_TOKEN_MISMATCH' && importId && importServerMode === 'update') {
+      try {
+        const latestDiff = await CloudClubApi.call('seasonImportDiff', {
+          importId: importId,
+          limit: 500,
+          offset: 0,
+          adminToken: adminToken
+        });
+        if (latestDiff && latestDiff.success) {
+          importDiffState = latestDiff;
+          importDiffToken = String(latestDiff.diffToken || '');
+          if (previewConfirm) previewConfirm.checked = false;
+          renderImportPreview(importPreviewState);
+          setProgress(
+            '⚠️ 변경사항이 갱신되어 토큰이 바뀌었습니다. 셀 단위 변경을 다시 확인하고 체크 후 재반영해주세요.',
+            false
+          );
+          refreshImportExecuteButtonState();
+          return;
+        }
+      } catch (refreshError) {
+        console.error('diff refresh after token mismatch failed:', refreshError);
+      }
+    }
+
     if (importId && !importDiffState) {
       try {
         await CloudClubApi.call('seasonImportAbort', {
@@ -1783,6 +1998,7 @@ async function executeSeasonImport() {
     const message = getDisplayErrorMessage(error, '시즌 업로드 중 오류가 발생했습니다.');
     setProgress(`❌ ${escapeHtml(message)}`, false);
   } finally {
+    refreshImportModeUi();
     refreshImportExecuteButtonState();
   }
 }
@@ -1799,7 +2015,13 @@ function syncImportSeasonInputByCurrentSelection() {
 function setImportExecuteButtonLabel(waitingDiff) {
   const label = document.getElementById('importExecuteBtnLabel');
   if (!label) return;
-  label.textContent = waitingDiff ? '변경사항 최종 반영' : '시즌 생성 + 업로드 반영';
+  if (waitingDiff) {
+    label.textContent = '변경사항 최종 반영';
+    return;
+  }
+  label.textContent = getImportUiMode() === 'update'
+    ? '시즌 업데이트 반영'
+    : '시즌 생성 + 업로드 반영';
 }
 
 function setImportCardCollapsed(cardId, collapsed) {
@@ -1837,65 +2059,6 @@ function handleImportCardHeaderKey(event, cardId) {
 
 function expandImportCard(cardId) {
   setImportCardCollapsed(cardId, false);
-}
-
-function renderImportDiffState(diffState) {
-  const summaryNode = document.getElementById('importDiffSummary');
-  const wrap = document.getElementById('importDiffWrap');
-  if (!summaryNode || !wrap) return;
-
-  if (!diffState || !Array.isArray(diffState.rows)) {
-    summaryNode.innerHTML = '';
-    wrap.innerHTML = '<p class="info-text">업데이트 모드에서 Diff 계산 후 변경사항이 표시됩니다.</p>';
-    return;
-  }
-
-  const summary = diffState.summary || {};
-  summaryNode.innerHTML = `
-    <span class="import-chip pass">ADD ${Number(summary.addCount || 0)}</span>
-    <span class="import-chip warn">UPDATE ${Number(summary.updateFieldCount || 0)}</span>
-    <span class="import-chip fail">DELETE_CANDIDATE ${Number(summary.deleteCandidateCount || 0)}</span>
-    <span class="import-chip">PROTECTED_SKIP ${Number(summary.protectedSkipCount || 0)}</span>
-  `;
-
-  if (diffState.rows.length === 0) {
-    wrap.innerHTML = '<p class="info-text">반영할 변경사항이 없습니다. (동일 데이터)</p>';
-    return;
-  }
-
-  const rows = diffState.rows.map(item => {
-    const type = String(item.type || '').toUpperCase();
-    const rowClass = type === 'ADD'
-      ? 'add'
-      : (type === 'DELETE_CANDIDATE' ? 'delete' : 'update');
-    const targetRow = item.targetRow === null || item.targetRow === undefined ? '-' : item.targetRow;
-    return `
-      <tr class="diff-row ${rowClass}">
-        <td>${escapeHtml(type)}</td>
-        <td>${escapeHtml(item.phone || '-')}</td>
-        <td>${escapeHtml(item.fieldLabel || item.field || '-')}</td>
-        <td>${escapeHtml(item.before || '-')}</td>
-        <td>${escapeHtml(item.after || '-')}</td>
-        <td>${escapeHtml(targetRow)}</td>
-      </tr>
-    `;
-  }).join('');
-
-  wrap.innerHTML = `
-    <table class="management-table import-preview-table import-diff-table">
-      <thead>
-        <tr>
-          <th>유형</th>
-          <th>Phone</th>
-          <th>필드</th>
-          <th>이전 값</th>
-          <th>이후 값</th>
-          <th>대상 행</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
 }
 
 function renderSheetSchemaAudit(response) {
@@ -2215,18 +2378,23 @@ async function initializeDashboard() {
   resetScheduleForm();
   syncImportSeasonInputByCurrentSelection();
   resetImportFlow(false);
+  updateImportModeHintFromInput();
   initializeImportCollapsibleCards();
 
   const importSeasonNoInput = document.getElementById('importSeasonNoInput');
   if (importSeasonNoInput) {
     importSeasonNoInput.addEventListener('input', () => {
+      invalidatePendingImportPreparation();
       importManualConfirmed = false;
+      updateImportModeHintFromInput();
       if (importInference) {
         rebuildImportPreview();
       }
     });
     importSeasonNoInput.addEventListener('blur', () => {
+      invalidatePendingImportPreparation();
       const parsed = normalizeSeasonInputFieldValue();
+      updateImportModeHintFromInput();
       if (parsed && importInference) {
         rebuildImportPreview();
       }
@@ -2236,6 +2404,7 @@ async function initializeDashboard() {
   const importModeSelect = document.getElementById('importModeSelect');
   if (importModeSelect) {
     importModeSelect.addEventListener('change', () => {
+      invalidatePendingImportPreparation();
       importManualConfirmed = false;
       if (importInference) {
         rebuildImportPreview();
@@ -2243,13 +2412,6 @@ async function initializeDashboard() {
     });
   }
 
-  const importDiffConfirmedInput = document.getElementById('importDiffConfirmed');
-  if (importDiffConfirmedInput) {
-    importDiffConfirmedInput.addEventListener('change', () => {
-      importDiffConfirmed = !!importDiffConfirmedInput.checked;
-      refreshImportExecuteButtonState();
-    });
-  }
 }
 
 async function refreshSeasonData() {
@@ -2540,6 +2702,7 @@ async function loadSheets() {
     currentSheetName = sheetSelect.value;
     currentSeasonAlias = getSelectedSeasonAlias();
     syncImportSeasonInputByCurrentSelection();
+    updateImportModeHintFromInput();
   } catch (error) {
     console.error('시트 목록 조회 실패:', error);
   }
@@ -2559,6 +2722,7 @@ async function changeSheet() {
       currentSheetName = getSelectedSheetName();
       currentSeasonAlias = getSelectedSeasonAlias();
       syncImportSeasonInputByCurrentSelection();
+      updateImportModeHintFromInput();
       showToast(`<i class="fas fa-check-circle"></i> ${escapeHtml(response.message)}`, true);
 
       await refreshSeasonData();
@@ -2745,6 +2909,7 @@ function openTab(tabName, evt) {
 
   if (tabName === 'seasonImport') {
     syncImportSeasonInputByCurrentSelection();
+    updateImportModeHintFromInput();
     initializeImportCollapsibleCards();
     refreshSheetSchemaAudit();
   }
