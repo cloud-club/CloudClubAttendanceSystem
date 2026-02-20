@@ -666,6 +666,9 @@ function handleApiRequest(params) {
     if (error && error.apiCode) {
       return jsonp(callback, apiError(error.apiCode, error.message || '요청 처리 중 오류가 발생했습니다.'));
     }
+    if (isUrlFetchPermissionError(error)) {
+      return jsonp(callback, apiError('AUTH_SERVER_SCOPE_MISSING', getAuthServerScopeMissingMessage()));
+    }
     Logger.log('API 오류: ' + error.toString());
     Logger.log(error.stack || '');
     return jsonp(callback, apiError('INTERNAL_ERROR', error.message || '내부 오류가 발생했습니다.'));
@@ -752,6 +755,30 @@ function createApiException(code, message) {
 
 function throwApiException(code, message) {
   throw createApiException(code, message);
+}
+
+function getErrorMessageText(error) {
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  if (error && error.message !== undefined && error.message !== null) {
+    return String(error.message);
+  }
+  return String(error);
+}
+
+function isUrlFetchPermissionError(error) {
+  const text = getErrorMessageText(error);
+  if (!text) return false;
+  return /script\.external_request/i.test(text)
+    || /UrlFetchApp\.fetch/i.test(text)
+    || /UrlFetchApp\.fetch을\(를\)\s*호출할\s*수\s*있는\s*권한이\s*없습니다/i.test(text);
+}
+
+function getAuthServerScopeMissingMessage() {
+  return [
+    'Apps Script Web App에 UrlFetchApp.fetch 권한(script.external_request)이 없습니다.',
+    'Deploy > Manage deployments > Edit > Deploy로 재배포 후 권한 승인 팝업을 완료하세요.'
+  ].join(' ');
 }
 
 function getGoogleOAuthClientId() {
@@ -1110,59 +1137,105 @@ function sanitizeAdminContext(input) {
 }
 
 function buildAdminContextByEmail(email) {
+  const resolved = resolveAdminAccessByEmail(email);
+  return resolved && resolved.context ? resolved.context : null;
+}
+
+function resolveAdminAccessByEmail(email) {
   const normalizedEmail = normalizeAdminEmail(email);
   if (!normalizedEmail || !isAllowedAdminEmail(normalizedEmail)) {
-    return null;
+    return {
+      ok: false,
+      context: null,
+      reasonCode: 'AUTH_EMAIL_DOMAIN_NOT_ALLOWED',
+      reasonMessage: '허용된 Gmail 계정으로만 로그인할 수 있습니다.'
+    };
   }
 
   if (normalizedEmail === ADMIN_SUPER_EMAIL) {
-    return sanitizeAdminContext({
-      email: normalizedEmail,
-      name: 'CloudClub Super Admin',
-      phone: '',
-      role: ADMIN_ROLE_SUPER,
-      season: null,
-      isActive: true,
-      isSuperFixed: true
-    });
+    return {
+      ok: true,
+      context: sanitizeAdminContext({
+        email: normalizedEmail,
+        name: 'CloudClub Super Admin',
+        phone: '',
+        role: ADMIN_ROLE_SUPER,
+        season: null,
+        isActive: true,
+        isSuperFixed: true
+      })
+    };
   }
 
   const records = getAdminRecords();
   const record = records.find(item => item.email === normalizedEmail);
-  if (!record || !record.isActive) return null;
-
-  if (record.role === ADMIN_ROLE_SEASON_ADMIN && record.season === null) {
-    return null;
+  if (!record) {
+    return {
+      ok: false,
+      context: null,
+      reasonCode: 'AUTH_ADMIN_NOT_REGISTERED',
+      reasonMessage: '관리자 권한이 등록되지 않은 계정입니다.'
+    };
   }
 
-  return sanitizeAdminContext(record);
+  if (!record.isActive) {
+    return {
+      ok: false,
+      context: null,
+      reasonCode: 'AUTH_ADMIN_INACTIVE',
+      reasonMessage: '비활성화된 관리자 계정입니다. 운영진에게 활성화 여부를 확인하세요.'
+    };
+  }
+
+  if (record.role === ADMIN_ROLE_SEASON_ADMIN && record.season === null) {
+    return {
+      ok: false,
+      context: null,
+      reasonCode: 'AUTH_ADMIN_CONFIG_INVALID',
+      reasonMessage: '관리자 계정의 시즌 설정이 올바르지 않습니다.'
+    };
+  }
+
+  return {
+    ok: true,
+    context: sanitizeAdminContext(record)
+  };
 }
 
 function validateGoogleIdToken(idToken) {
   const token = String(idToken || '').trim();
   if (!token) {
-    throwApiException('UNAUTHORIZED', 'Google ID token이 필요합니다.');
+    throwApiException('AUTH_ID_TOKEN_MISSING', 'Google ID token이 필요합니다.');
   }
 
   const clientId = getGoogleOAuthClientId();
   if (!clientId) {
-    throwApiException('INTERNAL_ERROR', 'GOOGLE_OAUTH_CLIENT_ID가 설정되지 않았습니다.');
+    throwApiException('AUTH_CLIENT_ID_NOT_CONFIGURED', 'GOOGLE_OAUTH_CLIENT_ID가 설정되지 않았습니다.');
   }
 
-  const response = UrlFetchApp.fetch(
-    GOOGLE_TOKENINFO_ENDPOINT + encodeURIComponent(token),
-    { method: 'get', muteHttpExceptions: true }
-  );
+  let response;
+  try {
+    response = UrlFetchApp.fetch(
+      GOOGLE_TOKENINFO_ENDPOINT + encodeURIComponent(token),
+      { method: 'get', muteHttpExceptions: true }
+    );
+  } catch (error) {
+    if (isUrlFetchPermissionError(error)) {
+      throwApiException('AUTH_SERVER_SCOPE_MISSING', getAuthServerScopeMissingMessage());
+    }
+    throw error;
+  }
+
   const statusCode = response.getResponseCode();
   if (statusCode !== 200) {
-    throwApiException('UNAUTHORIZED', 'Google ID token 검증에 실패했습니다.');
+    throwApiException('AUTH_ID_TOKEN_VERIFY_FAILED', 'Google ID token 검증에 실패했습니다.');
   }
 
   let payload;
   try {
     payload = JSON.parse(response.getContentText() || '{}');
   } catch (error) {
-    throwApiException('UNAUTHORIZED', 'Google ID token 응답이 올바르지 않습니다.');
+    throwApiException('AUTH_ID_TOKEN_PAYLOAD_INVALID', 'Google ID token 응답이 올바르지 않습니다.');
   }
 
   const aud = String(payload.aud || '').trim();
@@ -1172,19 +1245,23 @@ function validateGoogleIdToken(idToken) {
   const emailVerified = String(payload.email_verified || '').toLowerCase() === 'true';
 
   if (aud !== clientId) {
-    throwApiException('UNAUTHORIZED', 'Google OAuth clientId가 일치하지 않습니다.');
+    throwApiException('AUTH_CLIENT_ID_MISMATCH', 'Google OAuth clientId가 일치하지 않습니다.');
   }
 
   if (!(iss === 'https://accounts.google.com' || iss === 'accounts.google.com')) {
-    throwApiException('UNAUTHORIZED', 'Google 발급 토큰이 아닙니다.');
+    throwApiException('AUTH_ID_TOKEN_ISSUER_INVALID', 'Google 발급 토큰이 아닙니다.');
   }
 
   if (!exp || Date.now() >= exp * 1000) {
-    throwApiException('UNAUTHORIZED', '만료된 Google 토큰입니다.');
+    throwApiException('AUTH_ID_TOKEN_EXPIRED', '만료된 Google 토큰입니다.');
   }
 
-  if (!emailVerified || !isAllowedAdminEmail(email)) {
-    throwApiException('UNAUTHORIZED', '허용되지 않은 Google 계정입니다.');
+  if (!emailVerified) {
+    throwApiException('AUTH_EMAIL_NOT_VERIFIED', '이메일 인증이 완료된 Google 계정으로 로그인해야 합니다.');
+  }
+
+  if (!isAllowedAdminEmail(email)) {
+    throwApiException('AUTH_EMAIL_DOMAIN_NOT_ALLOWED', '허용된 Gmail 계정으로만 로그인할 수 있습니다.');
   }
 
   return {
@@ -1253,10 +1330,14 @@ function requireAdmin(params) {
     source: 'requireAdmin'
   });
 
-  const latestContext = buildAdminContextByEmail(sessionContext.email);
+  const resolved = resolveAdminAccessByEmail(sessionContext.email);
+  const latestContext = resolved && resolved.context ? resolved.context : null;
   if (!latestContext || !latestContext.isActive) {
     revokeAdminSession(token);
-    throwApiException('UNAUTHORIZED', '관리자 계정 권한이 없습니다.');
+    throwApiException(
+      (resolved && resolved.reasonCode) || 'UNAUTHORIZED',
+      (resolved && resolved.reasonMessage) || '관리자 계정 권한이 없습니다.'
+    );
   }
 
   // 최신 관리자 정보를 기준으로 세션 컨텍스트를 갱신한다.
@@ -1308,11 +1389,17 @@ function requireSeasonAccess(adminContext, seasonInput) {
 
 function getAuthGoogleConfig() {
   const clientId = getGoogleOAuthClientId();
+  const frontendAdminBaseUrl = getFrontendAdminUrl();
   return {
     success: !!clientId,
     loginMode: 'google_only',
     gmailOnly: true,
     googleClientId: clientId,
+    frontendAdminBaseUrl: frontendAdminBaseUrl,
+    checks: {
+      clientIdConfigured: !!clientId,
+      frontendAdminUrlConfigured: isFrontendUrlConfigured(frontendAdminBaseUrl)
+    },
     message: clientId ? '' : 'GOOGLE_OAUTH_CLIENT_ID가 설정되지 않았습니다.'
   };
 }
@@ -1325,9 +1412,13 @@ function authGoogleLogin(idToken) {
   });
 
   const tokenPayload = validateGoogleIdToken(idToken);
-  const context = buildAdminContextByEmail(tokenPayload.email);
+  const resolved = resolveAdminAccessByEmail(tokenPayload.email);
+  const context = resolved && resolved.context ? resolved.context : null;
   if (!context || !context.isActive) {
-    throwApiException('UNAUTHORIZED', '등록된 관리자 Gmail 계정만 로그인할 수 있습니다.');
+    throwApiException(
+      (resolved && resolved.reasonCode) || 'UNAUTHORIZED',
+      (resolved && resolved.reasonMessage) || '등록된 관리자 Gmail 계정만 로그인할 수 있습니다.'
+    );
   }
 
   const token = issueAdminSession(context);

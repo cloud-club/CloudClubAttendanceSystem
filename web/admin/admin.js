@@ -177,6 +177,42 @@ function getDisplayErrorMessage(error, fallbackMessage) {
     return 'API 서버 응답 스크립트를 불러오지 못했습니다. (리다이렉트/ORB 가능성) 잠시 후 다시 시도해주세요.';
   }
 
+  if (error && error.code === 'AUTH_SERVER_SCOPE_MISSING') {
+    return '관리자 인증 서버 권한이 누락되었습니다. Apps Script에서 Deploy > Manage deployments > Edit > Deploy로 재배포 후 권한 승인(UrlFetchApp)을 완료해주세요.';
+  }
+
+  if (error && error.code === 'AUTH_ADMIN_NOT_REGISTERED') {
+    return 'Google 로그인은 성공했지만 관리자 권한이 등록되지 않은 계정입니다.';
+  }
+
+  if (error && error.code === 'AUTH_ADMIN_INACTIVE') {
+    return 'Google 로그인은 성공했지만 비활성화된 관리자 계정입니다. 운영진에게 활성화 상태를 확인해주세요.';
+  }
+
+  if (error && error.code === 'AUTH_ADMIN_CONFIG_INVALID') {
+    return '관리자 계정 설정이 올바르지 않습니다. (_admins의 role/season 설정 확인 필요)';
+  }
+
+  if (error && error.code === 'AUTH_CLIENT_ID_NOT_CONFIGURED') {
+    return 'GOOGLE_OAUTH_CLIENT_ID가 설정되지 않았습니다. Apps Script Script Properties를 확인해주세요.';
+  }
+
+  if (error && error.code === 'AUTH_CLIENT_ID_MISMATCH') {
+    return 'Google OAuth Client ID가 서버 설정과 일치하지 않습니다. 운영 Client ID 구성을 확인해주세요.';
+  }
+
+  if (error && error.code === 'AUTH_EMAIL_DOMAIN_NOT_ALLOWED') {
+    return '허용된 Gmail 계정(@gmail.com / @googlemail.com)으로만 로그인할 수 있습니다.';
+  }
+
+  if (error && error.code === 'AUTH_EMAIL_NOT_VERIFIED') {
+    return '이메일 인증이 완료된 Google 계정으로 로그인해야 합니다.';
+  }
+
+  if (error && error.code === 'AUTH_ID_TOKEN_EXPIRED') {
+    return 'Google 로그인 토큰이 만료되었습니다. 다시 로그인해주세요.';
+  }
+
   return (error && error.message) ? error.message : fallbackMessage;
 }
 
@@ -2658,9 +2694,15 @@ function createConfetti() {
 }
 
 function handleUnauthorizedError(error) {
-  if (error && error.code === 'UNAUTHORIZED') {
+  const code = String((error && error.code) || '').trim();
+  const shouldResetAuth = code === 'UNAUTHORIZED'
+    || code === 'AUTH_ADMIN_NOT_REGISTERED'
+    || code === 'AUTH_ADMIN_INACTIVE'
+    || code === 'AUTH_ADMIN_CONFIG_INVALID';
+
+  if (shouldResetAuth) {
     resetAdminAuthState({
-      message: '관리자 인증이 만료되었습니다. 등록된 Gmail 계정으로 다시 로그인해주세요.',
+      message: getDisplayErrorMessage(error, '관리자 인증이 만료되었습니다. 등록된 Gmail 계정으로 다시 로그인해주세요.'),
       isError: true
     });
     renderGoogleLoginButton().catch((renderError) => {
@@ -2748,7 +2790,12 @@ async function handleGoogleCredentialResponse(googleResponse) {
     showAdminApp();
     await initializeDashboard();
   } catch (error) {
-    console.error('Google 로그인 실패:', error);
+    console.error('Google 로그인 실패:', {
+      code: error && error.code,
+      message: error && error.message,
+      debugUrl: error && error.debugUrl,
+      error: error
+    });
     resetAdminAuthState({
       message: getDisplayErrorMessage(error, '등록된 관리자 Gmail 계정만 로그인할 수 있습니다.'),
       isError: true

@@ -34,6 +34,22 @@
 
 배포 후 `.../exec` URL 복사해둡니다. (GitHub Secret에 넣을 값)
 
+### 1-3-1. UrlFetchApp 권한(scope) 확인 (필수)
+Google ID token 검증은 서버에서 `UrlFetchApp.fetch`를 사용하므로 아래 권한이 필요합니다.
+
+- 필요한 권한: `https://www.googleapis.com/auth/script.external_request`
+- 증상: 로그인 직후 `UrlFetchApp.fetch을(를) 호출할 수 있는 권한이 없습니다` 에러가 발생
+
+대응 순서:
+1. `Deploy > Manage deployments > Edit > Deploy`를 다시 실행
+2. 권한 승인 팝업이 뜨면 반드시 승인
+3. (clasp/manifest 운영 시) `appsscript.json`의 `oauthScopes`에 `https://www.googleapis.com/auth/script.external_request` 포함 확인
+
+서버 canary(로그인 UI 전에 먼저 확인):
+- `https://<exec-url>?api=authGoogleLogin&idToken=dummy&callback=cb&_={timestamp}`
+- 기대값: `AUTH_SERVER_SCOPE_MISSING`가 아니라 `AUTH_ID_TOKEN_VERIFY_FAILED` 또는 `AUTH_ID_TOKEN_PAYLOAD_INVALID`
+- canary가 통과하기 전에는 UI 계정별 테스트를 진행하지 않습니다.
+
 ### 1-4. Google OAuth Client 생성(필수)
 경로: [Google Cloud Console](https://console.cloud.google.com/)  
 `APIs & Services > Credentials > Create Credentials > OAuth client ID > Web application`
@@ -87,3 +103,4 @@
 3. OAuth consent가 Testing인데 계정이 Test users에 없음
 4. OAuth Client ID origin 설정이 GitHub Pages 도메인과 불일치
 5. 브라우저 팝업 차단
+6. Apps Script Web App이 `script.external_request` 권한 승인 없이 배포됨 (재배포+승인 필요)
