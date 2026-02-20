@@ -7,8 +7,14 @@ let requiresHistoricalAdminAuth = false;
 let studentAdminToken = '';
 let studentAuthFlowLocked = false;
 let studentPageInitialized = false;
+let studentRankingCache = {
+  season: '',
+  loadedAt: 0,
+  response: null
+};
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
 const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
+const STUDENT_RANKING_CACHE_TTL_MS = 10000;
 const STUDENT_ALLOWED_ACTIONS = {
   sheets: true,
   latestSeason: true,
@@ -608,8 +614,27 @@ async function checkAttendanceSession() {
 }
 
 async function loadRankings() {
+  const seasonAlias = normalizeSeasonAlias(currentSeason);
+  const now = Date.now();
+  if (
+    studentRankingCache
+    && studentRankingCache.response
+    && studentRankingCache.season === seasonAlias
+    && (now - Number(studentRankingCache.loadedAt || 0)) < STUDENT_RANKING_CACHE_TTL_MS
+  ) {
+    displayRankings(studentRankingCache.response);
+    return;
+  }
+
   try {
     const response = await callStudentApi('ranking', buildSeasonParams());
+    if (response && response.success) {
+      studentRankingCache = {
+        season: seasonAlias,
+        loadedAt: Date.now(),
+        response: response
+      };
+    }
     displayRankings(response);
   } catch (error) {
     if (handleHistoricalAccessError(error)) return;
@@ -776,6 +801,9 @@ function handleAttendanceResponse(response) {
   const attendBtn = document.getElementById('attendBtn');
 
   if (response.success) {
+    studentRankingCache.loadedAt = 0;
+    studentRankingCache.response = null;
+
     createConfetti();
 
     const typeBadge = response.attendanceType === 'late'

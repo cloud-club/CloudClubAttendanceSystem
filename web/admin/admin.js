@@ -64,6 +64,12 @@ let attendanceDashboardDateRangeUserEdited = false;
 let attendanceDashboardAutoDateHydratedOnce = false;
 let attendanceDashboardDateInputSyncing = false;
 let attendanceDashboardActivePopover = '';
+let attendanceDashboardLastFetchKey = '';
+let attendanceDashboardLastFetchedAt = 0;
+let attendanceDashboardSessionPickerRenderSignature = '';
+let attendanceDashboardMemberPickerRenderSignature = '';
+let attendanceDashboardSessionPickerLastOptionsRef = null;
+let attendanceDashboardMemberPickerLastOptionsRef = null;
 let attendanceDashboardState = {
   group: 'all',
   dateFrom: '',
@@ -87,6 +93,9 @@ const SUPER_ONLY_TABS = {
   adminUsers: true
 };
 const ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION = 5;
+const ATTENDANCE_DASHBOARD_SEARCH_DEBOUNCE_MS = 120;
+const ATTENDANCE_DASHBOARD_FRONT_CACHE_TTL_MS = 15000;
+const MANUAL_MEMBER_SEARCH_DEBOUNCE_MS = 120;
 const ATTENDANCE_DASHBOARD_STATUS_LABELS = {
   on_time: '출석',
   late: '지각',
@@ -112,6 +121,10 @@ const EXPECTED_AUTH_REJECTION_CODES = new Set([
 ]);
 
 let manualApproveState = createManualApproveInitialState();
+
+const scheduleManualMemberListRender = debounce(() => {
+  renderManualMemberList();
+}, MANUAL_MEMBER_SEARCH_DEBOUNCE_MS);
 
 const IMPORT_FIELD_ORDER = [
   'name',
@@ -159,6 +172,20 @@ function normalizeSeasonAlias(raw) {
   }
 
   return '';
+}
+
+function debounce(fn, waitMs) {
+  let timerId = null;
+  const delay = Math.max(0, Number(waitMs || 0));
+  return function debounced(...args) {
+    if (timerId) {
+      clearTimeout(timerId);
+    }
+    timerId = setTimeout(() => {
+      timerId = null;
+      fn.apply(this, args);
+    }, delay);
+  };
 }
 
 function getSelectedSheetName() {
@@ -3480,6 +3507,20 @@ function getAttendanceDashboardApiFilterParams() {
   };
 }
 
+function buildAttendanceDashboardFetchKey(season, filterParams) {
+  const params = filterParams || {};
+  return [
+    String(season || ''),
+    String(params.group || 'all'),
+    String(params.dateFrom || ''),
+    String(params.dateTo || ''),
+    String(params.sessionKeysCsv || ''),
+    String(params.topN || ''),
+    String(params.sortBy || ''),
+    String(params.chartType || '')
+  ].join('|');
+}
+
 function setAttendanceDashboardMetaText(text) {
   const node = document.getElementById('dashboardMetaText');
   if (!node) return;
@@ -3637,6 +3678,24 @@ function renderAttendanceDashboardSessionPicker() {
   const sessionMap = {};
   allSessions.forEach(item => { sessionMap[item.sessionKey] = item; });
 
+  const filteredSignature = filtered.map(item => `${item.sessionKey}:${item.isClosed ? 1 : 0}`).join('|');
+  const selectedSignature = selectedKeys.join('|');
+  const renderSignature = [
+    attendanceDashboardState.sessionSearch || '',
+    selectedSignature,
+    filteredSignature,
+    allSessions.length,
+    filtered.length
+  ].join('::');
+  if (
+    renderSignature === attendanceDashboardSessionPickerRenderSignature
+    && attendanceDashboardSessionPickerLastOptionsRef === allSessions
+  ) {
+    return;
+  }
+  attendanceDashboardSessionPickerRenderSignature = renderSignature;
+  attendanceDashboardSessionPickerLastOptionsRef = allSessions;
+
   if (filtered.length === 0) {
     optionList.innerHTML = '<div class="dashboard-option-empty">조건에 맞는 회차가 없습니다.</div>';
   } else {
@@ -3694,6 +3753,24 @@ function renderAttendanceDashboardMemberPicker() {
   const optionMap = {};
   allOptions.forEach(item => { optionMap[item.memberKey] = item; });
   const reachedLimit = selectedKeys.length >= ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION;
+
+  const filteredSignature = filtered.map(item => item.memberKey).join('|');
+  const selectedSignature = selectedKeys.join('|');
+  const renderSignature = [
+    attendanceDashboardState.memberSearch || '',
+    selectedSignature,
+    filteredSignature,
+    allOptions.length,
+    filtered.length
+  ].join('::');
+  if (
+    renderSignature === attendanceDashboardMemberPickerRenderSignature
+    && attendanceDashboardMemberPickerLastOptionsRef === allOptions
+  ) {
+    return;
+  }
+  attendanceDashboardMemberPickerRenderSignature = renderSignature;
+  attendanceDashboardMemberPickerLastOptionsRef = allOptions;
 
   if (filtered.length === 0) {
     optionList.innerHTML = '<div class="dashboard-option-empty">조건에 맞는 회원이 없습니다.</div>';
@@ -4746,6 +4823,14 @@ function initializeAttendanceDashboardUi() {
   const groupSelect = document.getElementById('dashboardGroupSelect');
   const dateFromInput = document.getElementById('dashboardDateFromInput');
   const dateToInput = document.getElementById('dashboardDateToInput');
+  const debouncedSessionSearchRender = debounce(() => {
+    renderAttendanceDashboardSessionPicker();
+    saveAttendanceDashboardStateToStorage();
+  }, ATTENDANCE_DASHBOARD_SEARCH_DEBOUNCE_MS);
+  const debouncedMemberSearchRender = debounce(() => {
+    renderAttendanceDashboardMemberPicker();
+    saveAttendanceDashboardStateToStorage();
+  }, ATTENDANCE_DASHBOARD_SEARCH_DEBOUNCE_MS);
 
   if (sessionSearchInput) {
     sessionSearchInput.addEventListener('focus', () => {
@@ -4755,8 +4840,7 @@ function initializeAttendanceDashboardUi() {
     sessionSearchInput.addEventListener('input', () => {
       attendanceDashboardState.sessionSearch = sessionSearchInput.value.trim();
       setAttendanceDashboardPopoverOpen('session', true);
-      renderAttendanceDashboardSessionPicker();
-      saveAttendanceDashboardStateToStorage();
+      debouncedSessionSearchRender();
     });
   }
 
@@ -4768,8 +4852,7 @@ function initializeAttendanceDashboardUi() {
     memberSearchInput.addEventListener('input', () => {
       attendanceDashboardState.memberSearch = memberSearchInput.value.trim();
       setAttendanceDashboardPopoverOpen('member', true);
-      renderAttendanceDashboardMemberPicker();
-      saveAttendanceDashboardStateToStorage();
+      debouncedMemberSearchRender();
     });
   }
 
@@ -5058,6 +5141,26 @@ async function loadAttendanceDashboard(options) {
   collectAttendanceDashboardStateFromControls();
   saveAttendanceDashboardStateToStorage();
 
+  const filterParams = getAttendanceDashboardApiFilterParams();
+  const fetchKey = buildAttendanceDashboardFetchKey(season, filterParams);
+  const now = Date.now();
+  if (
+    !opts.forceReload
+    && attendanceDashboardPayload
+    && attendanceDashboardLastFetchKey === fetchKey
+    && (now - attendanceDashboardLastFetchedAt) < ATTENDANCE_DASHBOARD_FRONT_CACHE_TTL_MS
+  ) {
+    renderAttendanceDashboard(attendanceDashboardPayload);
+    displayRankings({
+      success: true,
+      data: Array.isArray(attendanceDashboardPayload.ranking) ? attendanceDashboardPayload.ranking : []
+    });
+    setAttendanceDashboardMetaText(
+      `시즌 ${attendanceDashboardPayload.seasonAlias || season} / 선택 회차 ${attendanceDashboardPayload.meta && attendanceDashboardPayload.meta.selectedSessionCount ? attendanceDashboardPayload.meta.selectedSessionCount : 0} / 종료 회차 ${attendanceDashboardPayload.meta && attendanceDashboardPayload.meta.closedSessionCount ? attendanceDashboardPayload.meta.closedSessionCount : 0} (client-cache)`
+    );
+    return;
+  }
+
   attendanceDashboardLoading = true;
   setAttendanceDashboardMetaText('대시보드 데이터를 불러오는 중...');
 
@@ -5066,7 +5169,7 @@ async function loadAttendanceDashboard(options) {
       adminToken: adminToken,
       season: season,
       disableCache: opts.forceReload ? 'true' : 'false'
-    }, getAttendanceDashboardApiFilterParams());
+    }, filterParams);
     const response = await CloudClubApi.call('attendanceDashboardSummary', params);
 
     if (!response || !response.success) {
@@ -5084,6 +5187,8 @@ async function loadAttendanceDashboard(options) {
     attendanceDashboardPayload = response;
     attendanceDashboardDrilldownPayload = null;
     attendanceDashboardMemberSeriesCache = {};
+    attendanceDashboardLastFetchKey = fetchKey;
+    attendanceDashboardLastFetchedAt = Date.now();
     renderAttendanceDashboard(response);
     displayRankings({
       success: true,
@@ -6158,7 +6263,7 @@ function onManualSessionChanged(value) {
 
 function onManualMemberSearchInput(value) {
   manualApproveState.keyword = String(value || '').trim().toLowerCase();
-  renderManualMemberList();
+  scheduleManualMemberListRender();
 }
 
 function onManualDefaultCommentInput(value) {
@@ -6472,6 +6577,28 @@ async function loadManualApproveStatuses(options) {
     && Object.keys(manualApproveState.statusByPhone || {}).length > 0;
 
   if (canReuse) {
+    return;
+  }
+
+  const cachedReport = graduationReportCache;
+  const cachedSeasonAlias = normalizeSeasonAlias(
+    cachedReport && (
+      cachedReport.seasonAlias
+      || cachedReport.currentSheet
+      || cachedReport.sheetName
+      || cachedReport.season
+    )
+  );
+  if (
+    cachedReport
+    && cachedReport.success
+    && Array.isArray(cachedReport.members)
+    && cachedSeasonAlias
+    && cachedSeasonAlias === normalizeSeasonAlias(season)
+  ) {
+    manualApproveState.statusByPhone = buildManualStatusByPhoneFromReport(cachedReport, sessionKey);
+    manualApproveState.statusLoadedSeasonAlias = season;
+    manualApproveState.statusLoadedSessionKey = sessionKey;
     return;
   }
 

@@ -49,6 +49,9 @@ flowchart LR
 - 증상: 설정은 맞는데 웹 반영이 안 됨
 - 우선 조치: Secret 값과 Pages 재배포 이력, 런타임 `env.js` 값 대조
 
+## 시즌 소스 fallback 차단 정책
+관리자 화면에서 시즌 목록(`adminSeasonList`) 로드에 실패하면, `session`/`ranking` 조회를 `season` 없이 호출하지 않고 즉시 중단합니다. 이는 백엔드의 latest 시즌 fallback로 잘못된 시즌 데이터가 노출되는 것을 막기 위한 보호 정책입니다. 운영자는 이 상태에서 임의 재시도보다 새로고침/재로그인 후 시즌 목록 정상 로드를 먼저 확인해야 합니다.
+
 ## 운영 점검 우선순위
 모든 이슈를 같은 레벨로 처리하면 운영 리소스가 분산됩니다. 아래 우선순위로 대응하면 실제 영향도를 기준으로 의사결정할 수 있습니다.
 
@@ -70,7 +73,8 @@ flowchart LR
 ## 핵심 참조
 - 배포 워크플로우: [/.github/workflows/deploy-gh-pages.yml](../../.github/workflows/deploy-gh-pages.yml) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/.github/workflows/deploy-gh-pages.yml)
 - canary 스크립트: [scripts/auth_canary_snapshot.sh](../../scripts/auth_canary_snapshot.sh) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/scripts/auth_canary_snapshot.sh)
-- 백엔드: [Code.gs](../../Code.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Code.gs)
+- 백엔드 엔트리: [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
+- 백엔드 권한 상수: [Appsscript/01_constants_access.gs](../../Appsscript/01_constants_access.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/01_constants_access.gs)
 
 ## 관련 문서
 - 관리자 가이드: [02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)

@@ -6,7 +6,7 @@
 ```mermaid
 flowchart LR
   A["학생/운영진이 웹 진입"] --> B["GitHub Pages 정적 UI"]
-  B --> C["Apps Script API(Code.gs)"]
+  B --> C["Apps Script API(Appsscript/*)"]
   C --> D["Google Sheets 데이터 저장/조회"]
   D --> C
   C --> B
@@ -30,9 +30,30 @@ CloudClub 출석 시스템은 8기까지 Google Apps Script가 화면과 데이�
 특히 2026년 2월 17~18일 전후로 운영 이슈가 반복되면서, 화면 배포와 데이터/인증 로직을 분리해야 한다는 합의가 생겼습니다. 그 결과 현재는 **GitHub Pages(프런트) + Google OAuth 인증 + Apps Script/Google Sheets(API/DB)** 구조로 고도화되었고, 문서도 같은 시점부터 “교체 가능한 운영진”을 전제로 다시 설계되었습니다.
 
 ## 시스템 전체 흐름
-현재 구조의 핵심은 기능 추가보다 책임 경계를 명확히 한 데 있습니다. 학생/관리자 화면은 GitHub Pages로 독립 배포하고, 출석 판정·권한 검사·시트 반영은 `Code.gs`에서 일관되게 처리합니다. 그래서 장애가 나더라도 UI 문제인지 API/데이터 문제인지 빠르게 분리해서 대응할 수 있습니다.
+현재 구조의 핵심은 기능 추가보다 책임 경계를 명확히 한 데 있습니다. 학생/관리자 화면은 GitHub Pages로 독립 배포하고, 출석 판정·권한 검사·시트 반영은 `Appsscript/*`에서 일관되게 처리합니다. 그래서 장애가 나더라도 UI 문제인지 API/데이터 문제인지 빠르게 분리해서 대응할 수 있습니다.
 
 운영 관점에서 이 구조는 “누가 이어받아도 같은 기준으로 운영할 수 있는 시스템”을 만드는 데 목적이 있습니다. 문서에서 동일한 용어와 순서를 반복하는 이유도, 코드 지식이 없는 운영진까지 포함해 공통 의사결정 기준을 맞추기 위함입니다.
+
+## 운영 기준 (SSOT)
+- 이 백엔드 코드는 Google Sheets에 연결된 Google Apps Script 프로젝트에서 운영된다.
+- 레포는 운영 소스를 버전관리/문서화하기 위한 관리 저장소이며, 실제 반영은 Apps Script 배포가 기준이다.
+- 시스템 책임 경계:
+  - `web/*`: GitHub Pages 정적 UI
+  - `Appsscript/*`: API/권한/시트 로직
+- 운영 비밀값 관리:
+  - OAuth/운영 속성은 Script Properties 및 시트에서 관리한다.
+  - 비밀값은 레포에 커밋하지 않는다.
+- 배포 순서 SSOT:
+  - Apps Script 배포
+  - Secret 반영(`APPS_SCRIPT_WEB_APP_URL`)
+  - GitHub Pages 배포
+  - canary/health 검증
+- 무중단/롤백 원칙:
+  - `.../exec` URL을 기준점으로 운영한다.
+  - 이상 시 이전 Apps Script 배포 버전으로 즉시 롤백한다.
+- 코드 분할 원칙:
+  - Apps Script `.gs` 파일 간 `import/export`를 사용하지 않는다.
+  - 외부 API 계약(액션명/파라미터/응답 스키마)은 변경하지 않는다.
 
 ## 역할별 문서 진입 경로
 각 역할은 필요한 문서가 다르기 때문에, 아래 순서로 읽으면 가장 빠르게 맥락을 잡을 수 있습니다.
@@ -57,8 +78,10 @@ CloudClub 출석 시스템은 8기까지 Google Apps Script가 화면과 데이�
 - 랜딩: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/`
 
 ## 핵심 코드 경로
-- 백엔드 API: [Code.gs](./Code.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Code.gs)
+- 백엔드 엔트리: [Appsscript/00_entry_api.gs](./Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
+- 백엔드 권한/상수: [Appsscript/01_constants_access.gs](./Appsscript/01_constants_access.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/01_constants_access.gs)
+- Appsscript 운영 가이드: [Appsscript/README.md](./Appsscript/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/README.md)
 - 관리자 화면: [web/admin/index.html](./web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
-- 관리자 스크립트: [web/admin/admin.js](./web/admin/admin.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/admin.js)
+- 관리자 스크립트: [web/admin/scripts/](./web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - 학생 화면: [web/student/latest/index.html](./web/student/latest/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/latest/index.html)
 - 학생 스크립트: [web/student/student.js](./web/student/student.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/student.js)

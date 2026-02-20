@@ -19,7 +19,7 @@ flowchart LR
 ## 권한 판정이 필요한 이유
 같은 액션이라도 사용자 유형에 따라 허용 범위가 달라야 운영 사고를 막을 수 있습니다. 예를 들어 조회는 공개돼도, 관리자 계정 관리나 시즌 업로드는 Super만 수행해야 합니다.
 
-이 프로젝트는 권한 판정을 `Code.gs`의 `ACTION_ACCESS_LEVELS`를 단일 정본으로 삼아 처리합니다. 따라서 문서와 코드가 어긋나지 않도록, 정책 설명도 이 상수를 기준으로 유지합니다.
+이 프로젝트는 권한 판정을 `Appsscript/01_constants_access.gs`의 `ACTION_ACCESS_LEVELS`를 단일 정본으로 삼아 처리합니다. 따라서 문서와 코드가 어긋나지 않도록, 정책 설명도 이 상수를 기준으로 유지합니다.
 
 ## 시트 스키마 v2
 회원 데이터는 출석 판정과 수료 계산의 원천입니다. 헤더 규칙이 흔들리면 API는 정상이어도 결과가 왜곡될 수 있으므로, 스키마는 운영 정책의 일부로 취급합니다.
@@ -44,7 +44,7 @@ flowchart LR
 - `super`: 전체 시즌 + 계정/변수/업로드 관리 허용
 
 ## 액션 레벨 기준 (정본: ACTION_ACCESS_LEVELS)
-문서에 있는 권한 그룹은 설명용 요약이고, 최종 판정 기준은 항상 `Code.gs`의 `ACTION_ACCESS_LEVELS`입니다. 권한 이슈가 발생하면 문서보다 코드 상수를 우선 확인합니다.
+문서에 있는 권한 그룹은 설명용 요약이고, 최종 판정 기준은 항상 `Appsscript/01_constants_access.gs`의 `ACTION_ACCESS_LEVELS`입니다. 권한 이슈가 발생하면 문서보다 코드 상수를 우선 확인합니다.
 
 - Public: `session`, `attendance`, `status`, `ranking`, `latestSeason`, `authGoogleConfig`, `authGoogleLogin`
 - Admin: `attendanceDashboardSummary`, `schedule*`, `manualApprove*`, `excusedSet`, `graduationReport`, `sheetSchemaAudit`
@@ -66,8 +66,9 @@ flowchart LR
 - 필수 점검: `sheetSchemaAudit`, `seasonImport*` 게이트 통과
 
 ## 참조 파일
-- 백엔드: [Code.gs](../../Code.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Code.gs)
-- 관리자 프런트: [web/admin/admin.js](../../web/admin/admin.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/admin.js)
+- 백엔드 엔트리: [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
+- 권한 상수: [Appsscript/01_constants_access.gs](../../Appsscript/01_constants_access.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/01_constants_access.gs)
+- 관리자 프런트: [web/admin/scripts/](../../web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - 학생 프런트: [web/student/student.js](../../web/student/student.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/student.js)
 
 ## 관련 문서
