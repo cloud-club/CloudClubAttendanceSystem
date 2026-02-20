@@ -6,7 +6,7 @@
 ```mermaid
 flowchart LR
   A["관리자 Google 로그인"] --> B["권한/시즌 접근 검증"]
-  B --> C["9개 탭에서 운영 작업 수행"]
+  B --> C["10개 탭에서 운영 작업 수행"]
   C --> D["Appsscript API 액션 호출"]
   D --> E["Google Sheets 반영"]
   E --> F["대시보드/런북으로 검증"]
@@ -57,7 +57,7 @@ flowchart LR
 3. 데이터 반영 실패: 시트 헤더/키(`Phone`) 및 메타 시트 상태 확인
 4. 배포 의심 시: `APPS_SCRIPT_WEB_APP_URL`와 Pages 재배포 이력 확인
 
-## 관리자 탭 상세 (실제 UI 9개)
+## 관리자 탭 상세 (실제 UI 10개)
 
 ### 출석하기
 #### 이 탭이 필요한 이유
@@ -138,6 +138,35 @@ flowchart LR
 - [web/admin/scripts/](../../web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
 - [Appsscript/32_schedule.gs](../../Appsscript/32_schedule.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/32_schedule.gs)
+
+### 운세 관리
+#### 이 탭이 필요한 이유
+운세 문구는 운영 공지성 텍스트이지만 학생/관리자 화면에 직접 노출되므로, 코드 수정 없이도 안전하게 갱신하고 과거 버전을 복구할 수 있어야 합니다. 이 탭은 하드코딩 기반 운영을 버전형 데이터 운영으로 전환하기 위한 제어점입니다.
+
+#### 언제 사용하는가
+- 시즌 운영 중 운세 문구를 일괄 갱신할 때
+- 운영 피드백 반영으로 일부 문구를 수정할 때
+- 과거 버전으로 롤백하거나 재가공 후 재업로드할 때
+
+#### 동작 흐름 (UI → API → Sheet)
+1. `loadFortuneFromFile` 또는 직접 편집 입력 후 `analyzeFortuneInput` 검증 실행
+2. `refreshFortuneManagement`로 current/버전 목록 동기화
+3. `executeFortuneUpload`로 청크 업로드 수행
+4. `fortuneUploadBegin` → `fortuneUploadChunk` → `fortuneUploadFinalize` 반영
+5. `fortuneVersionList`, `fortuneVersionGet`으로 버전 조회/다운로드/재편집
+
+#### 운영 시 주의사항
+- 저장 전 미리보기/검증 오류 0건 상태를 확인하고 최종 체크박스를 활성화할 것
+- 입력은 `CSV`, `XLSX`, 직접 편집(1행 1운세 또는 CSV/TSV 붙여넣기) 모두 가능하나 최종 검증 규칙은 동일
+- 구버전 백엔드에서 `fortune*` 미지원이면 탭 내부에서만 차단되며, 다른 탭 동작은 유지돼야 함
+
+#### 수정 시 확인 파일
+- [web/admin/index.html](../../web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
+- [web/admin/scripts/28_fortune.js](../../web/admin/scripts/28_fortune.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/28_fortune.js)
+- [web/admin/scripts/10_auth.js](../../web/admin/scripts/10_auth.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/10_auth.js)
+- [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
+- [Appsscript/35_fortune_admin.gs](../../Appsscript/35_fortune_admin.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/35_fortune_admin.gs)
+- [Appsscript/91_fortune.gs](../../Appsscript/91_fortune.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/91_fortune.gs)
 
 ### 유고 처리
 #### 이 탭이 필요한 이유
@@ -305,6 +334,7 @@ flowchart LR
 - 출석하기
 - 출석현황
 - 일정 관리
+- 운세 관리
 - 유고 처리
 - QR코드 관리
 - 변수명 관리

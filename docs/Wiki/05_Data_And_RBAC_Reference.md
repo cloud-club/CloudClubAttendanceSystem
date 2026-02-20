@@ -35,6 +35,9 @@ flowchart LR
 - `_admins`: 관리자 계정/역할/활성 상태
 - `_session_meta`: 세션 임계값/마감 등 판정 보조 메타
 - `_import_meta`: 시즌 업로드 세션 상태 및 단계 관리
+- `/_fortune_versions`: 운세 버전 메타(current, 생성자, row 수)
+- `/_fortune_entries`: 버전별 운세 본문(row_no, fortune_text)
+- `/_fortune_upload_meta`: 운세 업로드 세션 상태/수신 건수 추적
 
 ## 권한 모델
 역할 모델은 간단하지만, 각 역할의 책임이 분명해야 운영이 안정됩니다. 아래 정의는 운영 안내, 코드 검증, 장애 분석에서 공통으로 사용하는 기준입니다.
@@ -47,7 +50,7 @@ flowchart LR
 문서에 있는 권한 그룹은 설명용 요약이고, 최종 판정 기준은 항상 `Appsscript/01_constants_access.gs`의 `ACTION_ACCESS_LEVELS`입니다. 권한 이슈가 발생하면 문서보다 코드 상수를 우선 확인합니다.
 
 - Public: `session`, `attendance`, `status`, `ranking`, `latestSeason`, `authGoogleConfig`, `authGoogleLogin`
-- Admin: `attendanceDashboardSummary`, `schedule*`, `manualApprove*`, `excusedSet`, `graduationReport`, `sheetSchemaAudit`
+- Admin: `attendanceDashboardSummary`, `schedule*`, `manualApprove*`, `excusedSet`, `graduationReport`, `sheetSchemaAudit`, `fortuneVersionList`, `fortuneVersionGet`, `fortuneUploadBegin`, `fortuneUploadChunk`, `fortuneUploadFinalize`, `fortuneUploadAbort`
 - Super: `adminUsers*`, `variables*`, `seasonImport*`, `setActiveSheet`
 
 ## 변경 영향도 (스키마/권한/업로드)
@@ -65,9 +68,28 @@ flowchart LR
 - 영향: 시즌 생성/업데이트, diff/finalize 안전장치
 - 필수 점검: `sheetSchemaAudit`, `seasonImport*` 게이트 통과
 
+## 운세 데이터 운영 정책
+운세는 운영 공지성 텍스트지만, 런타임 응답에 직접 포함되므로 데이터 무결성과 보안 검증을 함께 적용합니다.
+
+1. 저장 모델
+- 저장은 항상 전체 교체로 처리
+- 기존 데이터는 버전 스냅샷으로 보존(과거 버전 다운로드 가능)
+
+2. 런타임 선택
+- current 저장본이 있으면 우선 사용
+- 저장본이 없거나 로드 실패 시 builtin 운세로 fallback
+
+3. 업로드 검증 규칙
+- 빈값/공백 행 제거 후 최소 1건 이상 필요
+- 각 문구 길이 1~200자 제한
+- canonical(trim + zero-width 제거) 기준 중복 금지
+- 클라이언트 1차 검증 후 서버 finalize에서 동일 규칙 재검증
+
 ## 참조 파일
 - 백엔드 엔트리: [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
 - 권한 상수: [Appsscript/01_constants_access.gs](../../Appsscript/01_constants_access.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/01_constants_access.gs)
+- 운세 업로드/버전 API: [Appsscript/35_fortune_admin.gs](../../Appsscript/35_fortune_admin.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/35_fortune_admin.gs)
+- 운세 builtin/fallback: [Appsscript/91_fortune.gs](../../Appsscript/91_fortune.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/91_fortune.gs)
 - 관리자 프런트: [web/admin/scripts/](../../web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - 학생 프런트: [web/student/student.js](../../web/student/student.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/student.js)
 
