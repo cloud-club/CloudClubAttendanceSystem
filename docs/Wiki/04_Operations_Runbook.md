@@ -52,6 +52,28 @@ flowchart LR
 ## 시즌 소스 fallback 차단 정책
 관리자 화면에서 시즌 목록(`adminSeasonList`) 로드에 실패하면, `session`/`ranking` 조회를 `season` 없이 호출하지 않고 즉시 중단합니다. 이는 백엔드의 latest 시즌 fallback로 잘못된 시즌 데이터가 노출되는 것을 막기 위한 보호 정책입니다. 운영자는 이 상태에서 임의 재시도보다 새로고침/재로그인 후 시즌 목록 정상 로드를 먼저 확인해야 합니다.
 
+## 최신/과거 시즌 + adminToken 정책
+공개 액션(`session`, `attendance`, `status`, `ranking`)은 최신 시즌에서는 토큰 없이 호출할 수 있습니다. 하지만 요청 시즌이 최신 시즌이 아니면 백엔드가 관리자 인증(`adminToken`)을 강제합니다.
+
+- 최신 시즌(`latestSeason`) 요청: `adminToken` 없이 허용
+- 과거 시즌(`season_08` 등) 요청: `adminToken` 필수
+- 관리자 페이지는 로그인 후에도 시즌별 요청마다 `adminToken`을 항상 전달해야 함
+- 과거 시즌에서 `UNAUTHORIZED`가 발생하면 토큰 누락/만료를 먼저 점검
+
+## SERVER_INTEGRITY_MISSING 대응 절차
+`SERVER_INTEGRITY_MISSING`는 배포 런타임에 필수 함수(`collectSessionsFromSheet` 등)가 누락되었음을 의미합니다. 코드 버그보다 배포 정합성 이슈일 가능성이 높습니다.
+
+1. Apps Script Editor에서 필수 함수가 실제 프로젝트 파일에 존재하는지 확인
+2. `Deploy > Manage deployments > Edit > Deploy`로 **같은 deployment**를 재배포
+3. `apiInfo`의 `runtimeChecks`가 모두 `true`인지 확인
+4. `api=session`, `api=ranking` 재검증 후 관리자/학생 스모크 테스트 수행
+
+## 배포 URL/Secret 동기화 규칙
+기본 원칙은 기존 deployment를 수정(Edit)해 `.../exec` URL을 유지하는 것입니다.
+
+- 같은 deployment 재배포(Edit): `APPS_SCRIPT_WEB_APP_URL` Secret 변경 불필요
+- 새 deployment 생성(New deployment)으로 URL 변경: Secret 갱신 + Pages 재배포 필수
+
 ## 운영 점검 우선순위
 모든 이슈를 같은 레벨로 처리하면 운영 리소스가 분산됩니다. 아래 우선순위로 대응하면 실제 영향도를 기준으로 의사결정할 수 있습니다.
 

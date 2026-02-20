@@ -159,10 +159,12 @@ function handleApiRequest(params) {
         break;
 
       case 'session':
+        assertRuntimeIntegrity();
         data = getSeasonAttendanceSession(resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
         break;
 
       case 'attendance': {
+        assertRuntimeIntegrity();
         const phone = (params.phone || '').trim();
         if (!phone) {
           return jsonp(callback, apiError('INVALID_PHONE', '전화번호가 입력되지 않았습니다.'));
@@ -172,6 +174,7 @@ function handleApiRequest(params) {
       }
 
       case 'status': {
+        assertRuntimeIntegrity();
         const phone = (params.phone || '').trim();
         if (!phone) {
           return jsonp(callback, apiError('INVALID_PHONE', '전화번호가 입력되지 않았습니다.'));
@@ -181,6 +184,7 @@ function handleApiRequest(params) {
       }
 
       case 'ranking':
+        assertRuntimeIntegrity();
         data = getSeasonAttendanceRanking(resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
         break;
 
@@ -411,6 +415,31 @@ function apiError(code, message) {
   };
 }
 
+function getRuntimeIntegrityChecks() {
+  return {
+    collectSessionsFromSheet: typeof collectSessionsFromSheet === 'function',
+    resolveSeasonSheetInfo: typeof resolveSeasonSheetInfo === 'function',
+    getSeasonAttendanceSession: typeof getSeasonAttendanceSession === 'function',
+    getSeasonAttendanceRanking: typeof getSeasonAttendanceRanking === 'function'
+  };
+}
+
+function assertRuntimeIntegrity(requiredFunctionNames) {
+  const checks = getRuntimeIntegrityChecks();
+  const defaults = Object.keys(checks);
+  const required = Array.isArray(requiredFunctionNames) && requiredFunctionNames.length > 0
+    ? requiredFunctionNames
+    : defaults;
+  const missing = required.filter(name => checks[name] === false);
+
+  if (missing.length > 0) {
+    throwApiException(
+      'SERVER_INTEGRITY_MISSING',
+      `Apps Script 런타임 무결성 오류: ${missing.join(', ')} 함수를 찾을 수 없습니다. 동일 deployment를 다시 배포하세요.`
+    );
+  }
+}
+
 function getApiInfo() {
   const accessLevelByAction = {};
   SUPPORTED_API_ACTIONS.forEach(action => {
@@ -422,6 +451,7 @@ function getApiInfo() {
     apiVersion: API_VERSION,
     supportedActions: SUPPORTED_API_ACTIONS.slice(),
     accessLevelByAction: accessLevelByAction,
+    runtimeChecks: getRuntimeIntegrityChecks(),
     scriptTimeZone: Session.getScriptTimeZone(),
     serverTime: formatDateTime(new Date())
   };
@@ -468,4 +498,3 @@ function getAuthServerScopeMissingMessage() {
     '배포 소유자 계정으로 UrlFetchApp 권한을 승인한 뒤 Deploy > Manage deployments > Edit > Deploy로 동일 배포를 재배포하세요.'
   ].join(' ');
 }
-

@@ -48,6 +48,19 @@ function ensureSeasonSourceReady(options) {
   return false;
 }
 
+function buildSeasonScopedAdminParams(extraParams) {
+  const season = getSelectedSeasonAlias();
+  const params = Object.assign({}, extraParams || {});
+  if (season) {
+    params.season = season;
+  }
+  const token = String(adminToken || '').trim();
+  if (token) {
+    params.adminToken = token;
+  }
+  return params;
+}
+
 async function loadRankings(options) {
   const opts = options || {};
   if (Array.isArray(opts.data)) {
@@ -67,7 +80,7 @@ async function loadRankings(options) {
   }
 
   try {
-    const response = await CloudClubApi.call('ranking', { season });
+    const response = await CloudClubApi.call('ranking', buildSeasonScopedAdminParams());
     displayRankings(response);
   } catch (error) {
     handleRankingError(error);
@@ -152,6 +165,7 @@ function displayRankings(response) {
 }
 
 function handleRankingError(error) {
+  if (handleUnauthorizedError(error)) return;
   const rankingBoard = document.getElementById('rankingBoard');
   rankingBoard.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '순위를 불러오는 중 오류가 발생했습니다.'))}</div>`;
   console.error('Ranking error:', error);
@@ -374,9 +388,10 @@ async function checkAttendanceSession() {
   }
 
   try {
-    const session = await CloudClubApi.call('session', { season });
+    const session = await CloudClubApi.call('session', buildSeasonScopedAdminParams());
     renderCountdown(session);
   } catch (error) {
+    if (handleUnauthorizedError(error)) return;
     renderCountdown({ active: false, message: getDisplayErrorMessage(error, '세션 정보를 불러올 수 없습니다.') });
   }
 }
@@ -480,7 +495,7 @@ async function doAttendance(event) {
   localStorage.setItem('lastUsedPhone', phoneNumber);
 
   try {
-    const response = await CloudClubApi.call('attendance', { season, phone: phoneNumber });
+    const response = await CloudClubApi.call('attendance', buildSeasonScopedAdminParams({ phone: phoneNumber }));
     handleAttendanceResponse(response);
   } catch (error) {
     handleAttendanceError(error);
@@ -562,6 +577,7 @@ function handleAttendanceResponse(response) {
 }
 
 function handleAttendanceError(error) {
+  if (handleUnauthorizedError(error)) return;
   const resultDiv = document.getElementById('result');
   const attendBtn = document.getElementById('attendBtn');
 
@@ -606,7 +622,7 @@ async function checkAttendanceStatus(event) {
   statusResult.style.display = 'block';
 
   try {
-    const response = await CloudClubApi.call('status', { season, phone: phoneNumber });
+    const response = await CloudClubApi.call('status', buildSeasonScopedAdminParams({ phone: phoneNumber }));
     handleStatusResponse(response);
   } catch (error) {
     handleStatusError(error);
@@ -692,6 +708,7 @@ function handleStatusResponse(response) {
 }
 
 function handleStatusError(error) {
+  if (handleUnauthorizedError(error)) return;
   const statusResult = document.getElementById('statusResult');
   statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${escapeHtml(getDisplayErrorMessage(error, '알 수 없는 오류'))}</div>`;
   statusResult.style.display = 'block';
