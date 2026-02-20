@@ -1,29 +1,23 @@
-# TECH_DOCS 안내
+# TECH_DOCS
 
-이 파일은 기존 기술 문서의 고정 진입점 역할을 유지하기 위한 포인터입니다. 문서 체계가 Prefix 기반(`docs/00N_*.md`)으로 재편되면서, 상세 본문은 아래 문서로 이동했습니다.
+> 문서 링크: [TECH_DOCS.md](./TECH_DOCS.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/TECH_DOCS.md)
 
-기술 구조를 바로 확인하려면 [`docs/002_시스템_기술_레퍼런스.md`](docs/002_시스템_기술_레퍼런스.md)를 읽어 주세요. 운영 전환 배경과 단계별 마이그레이션 흐름은 [`docs/003_구글시트에서_깃허브페이지스_마이그레이션_기록.md`](docs/003_구글시트에서_깃허브페이지스_마이그레이션_기록.md)에서 확인할 수 있고, 이관 후 발생한 세션/리다이렉트 장애 분석은 [`docs/004_세션_리다이렉트_ORB_이슈_해결_기록.md`](docs/004_세션_리다이렉트_ORB_이슈_해결_기록.md)에 정리되어 있습니다.
+## 빠른 흐름도
+```mermaid
+flowchart LR
+  A["기술 이슈 발생"] --> B["Wiki 기술 문서 확인"]
+  B --> C["코드/액션 레벨 확인"]
+  C --> D["History 원문 추적"]
+  D --> E["운영 런북 적용"]
+```
 
-`004` 이후 관리자 기능 확장 세트는 아래를 참고하세요.
+기술 문서 진입점은 `docs/Wiki`로 통합되었습니다.
 
-- 연대기: [`docs/005_관리자기능_확장_연대기_2026-02-18.md`](docs/005_관리자기능_확장_연대기_2026-02-18.md)
-- 시즌/참조시트: [`docs/006_시즌표준화_참조시트_및_관리자탭기반_운영.md`](docs/006_시즌표준화_참조시트_및_관리자탭기반_운영.md)
-- variable 정책: [`docs/007_variable_단일테이블정책_정규화_템플릿운영.md`](docs/007_variable_단일테이블정책_정규화_템플릿운영.md)
-- 유고/수료 정책: [`docs/008_유고처리_수동승인_수료판정_운영정책.md`](docs/008_유고처리_수동승인_수료판정_운영정책.md)
-- 일정 캘린더: [`docs/009_일정관리_GUI_캘린더_일자유일성정책.md`](docs/009_일정관리_GUI_캘린더_일자유일성정책.md)
-- 랭킹/카운트다운: [`docs/010_출석현황_랭킹규칙_카운트다운정책.md`](docs/010_출석현황_랭킹규칙_카운트다운정책.md)
-- 배포 런북(Secret/API URL): [`docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md`](docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md)
-- 통합 검증: [`docs/012_운영자_개발자_통합_검증체크리스트.md`](docs/012_운영자_개발자_통합_검증체크리스트.md)
-- 인증 전환 배경/인프라 구조: [`docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md`](docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md)
-- 권한관리체계(user/admin/super): [`docs/020_권한관리체계_user_admin_super_운영정책.md`](docs/020_권한관리체계_user_admin_super_운영정책.md)
-- Mission C Quick Guide: [`docs/mission-c-manual-setup.md`](docs/mission-c-manual-setup.md)
-- Google 인증 장애 SSOT 런북: [`docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md`](docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md)
+## 기술 기준 문서
+- Admin Guide: [docs/Wiki/02_Admin_Side_Guide.md](./docs/Wiki/02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)
+- Tab Change Map: [docs/Wiki/03_Admin_Tab_Change_Map.md](./docs/Wiki/03_Admin_Tab_Change_Map.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/03_Admin_Tab_Change_Map.md)
+- Operations Runbook: [docs/Wiki/04_Operations_Runbook.md](./docs/Wiki/04_Operations_Runbook.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/04_Operations_Runbook.md)
+- Data/RBAC Reference: [docs/Wiki/05_Data_And_RBAC_Reference.md](./docs/Wiki/05_Data_And_RBAC_Reference.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/05_Data_And_RBAC_Reference.md)
 
-빠른 이동:
-
-- variable 표준 템플릿: [`docs/variable_template_v3_5.csv`](docs/variable_template_v3_5.csv)
-- API/운영 검증 표: [`docs/012_운영자_개발자_통합_검증체크리스트.md`](docs/012_운영자_개발자_통합_검증체크리스트.md)
-- 인증 장애 대응 표준: [`docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md`](docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md)
-- 권한 정책 기준 문서: [`docs/020_권한관리체계_user_admin_super_운영정책.md`](docs/020_권한관리체계_user_admin_super_운영정책.md)
-
-실무에서는 `README -> 001 -> 002 -> 003 -> 004 -> 005~012 -> 018 -> 019 -> 020 -> mission-c` 순서로 읽으면 가장 빠르게 전체 맥락을 파악할 수 있습니다.
+## 원문 이력 추적
+- History 인덱스: [docs/History/README.md](./docs/History/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/README.md)

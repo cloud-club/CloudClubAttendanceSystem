@@ -1,47 +1,44 @@
-# CloudClub Attendance 문서 안내
+# CloudClub Attendance Documentation Hub
 
-CloudClub 출석 시스템은 단순한 웹 페이지가 아니라, 동아리 운영 과정에서 실제로 부딪힌 문제를 해결하며 구조를 바꿔 온 운영형 프로젝트입니다. 이 저장소의 문서는 기능 목록만 보여주기보다, 왜 이런 구조를 선택했는지와 어떤 순서로 시스템이 고도화되었는지를 함께 전달하는 것을 목표로 합니다.
+> 문서 링크: [README.md](./README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/README.md)
 
-현재 시스템은 **GitHub Pages가 사용자 화면을 담당**하고, **Google Apps Script가 Google Sheets 연동 API 게이트웨이 역할**을 담당합니다. 즉, 프런트엔드와 백엔드를 분리한 뒤에도 사용자는 기존과 동일한 출석 경험을 얻도록 설계되어 있습니다.
+## 빠른 흐름도
+```mermaid
+flowchart LR
+  A["Student/Admin UI"] --> B["GitHub Pages"]
+  B --> C["JSONP API (Code.gs)"]
+  C --> D["Google Sheets"]
+  D --> C
+  C --> B
+```
 
-문서는 아래 순서대로 읽으면 전체 맥락이 자연스럽게 연결됩니다.
+## 문서 네비게이션 흐름도
+```mermaid
+flowchart LR
+  A["처음 진입"] --> B["docs/Wiki/README"]
+  B --> C["User Guide"]
+  B --> D["Admin Guide"]
+  D --> E["Tab Change Map"]
+  E --> F["Operations Runbook"]
+  B --> G["History 원문"]
+```
 
-## 1. 프로젝트 개요와 운영 절차
-[`docs/001_프로젝트_개요_및_운영_가이드.md`](docs/001_프로젝트_개요_및_운영_가이드.md)에서는 시스템의 기본 구조, 일상 운영 방식, 배포 전후 점검 포인트를 운영자의 시점에서 설명합니다. 처음 세팅하는 사람이나, 운영 인수인계를 받는 사람이 가장 먼저 읽어야 하는 문서입니다.
+CloudClub 출석 시스템 문서는 다음 원칙으로 정리되어 있습니다.
+- `docs/Wiki`: 현재 운영 기준(정본)
+- `docs/History`: 과거 정책/기록 원문
 
-## 2. 기술 레퍼런스
-[`docs/002_시스템_기술_레퍼런스.md`](docs/002_시스템_기술_레퍼런스.md)는 실제 코드 구조를 기준으로 작성된 기술 문서입니다. `Code.gs`, `web/admin`, `web/student`, `web/shared`가 각각 어떤 책임을 가지며 어떤 데이터 흐름으로 동작하는지를 함수군 단위로 해설합니다.
+## 시작 경로
+- 위키 메인: [docs/Wiki/README.md](./docs/Wiki/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/README.md)
+- 히스토리 인덱스: [docs/History/README.md](./docs/History/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/README.md)
 
-## 3. 마이그레이션 기록
-[`docs/003_구글시트에서_깃허브페이지스_마이그레이션_기록.md`](docs/003_구글시트에서_깃허브페이지스_마이그레이션_기록.md)는 기존 GAS HTML 단일 구조에서 GitHub Pages + API 게이트웨이 구조로 이전한 과정을 시간 순서로 정리합니다. 의사결정의 이유, 적용 방식, 배포 선택 근거가 담겨 있습니다.
+## 운영 URL
+- 관리자: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/admin/`
+- 학생(Latest): `https://cloud-club.github.io/CloudClubAttendanceSystem/web/student/latest/`
+- 랜딩: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/`
 
-## 4. 세션/리다이렉트 장애 해결 기록
-[`docs/004_세션_리다이렉트_ORB_이슈_해결_기록.md`](docs/004_세션_리다이렉트_ORB_이슈_해결_기록.md)는 마이그레이션 이후 발생한 네트워크 오류를 어떻게 재현하고 해결했는지에 대한 장애 분석 보고서입니다. 특히 `/u/{n}` 리다이렉트와 ORB 차단 문제를 운영 관점에서 추적한 흐름을 담고 있습니다.
-
-## 5. 관리자 기능 확장 문서(004 이후)
-`004` 이후 관리자 기능 확장과 안정화는 기능별 심화 문서로 분리되어 있습니다.
-
-- 연대기(시간순): [`docs/005_관리자기능_확장_연대기_2026-02-18.md`](docs/005_관리자기능_확장_연대기_2026-02-18.md)
-- 시즌/참조시트 운영: [`docs/006_시즌표준화_참조시트_및_관리자탭기반_운영.md`](docs/006_시즌표준화_참조시트_및_관리자탭기반_운영.md)
-- variable 정책/정규화: [`docs/007_variable_단일테이블정책_정규화_템플릿운영.md`](docs/007_variable_단일테이블정책_정규화_템플릿운영.md)
-- 유고/수동승인/수료 정책: [`docs/008_유고처리_수동승인_수료판정_운영정책.md`](docs/008_유고처리_수동승인_수료판정_운영정책.md)
-- 일정 캘린더/일자 유일성: [`docs/009_일정관리_GUI_캘린더_일자유일성정책.md`](docs/009_일정관리_GUI_캘린더_일자유일성정책.md)
-- 랭킹/카운트다운 정책: [`docs/010_출석현황_랭킹규칙_카운트다운정책.md`](docs/010_출석현황_랭킹규칙_카운트다운정책.md)
-- 배포/Secret/API URL 런북: [`docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md`](docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md)
-- 통합 검증 체크리스트: [`docs/012_운영자_개발자_통합_검증체크리스트.md`](docs/012_운영자_개발자_통합_검증체크리스트.md)
-- 인증 전환 배경/인프라 구조: [`docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md`](docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md)
-- 권한관리체계(user/admin/super): [`docs/020_권한관리체계_user_admin_super_운영정책.md`](docs/020_권한관리체계_user_admin_super_운영정책.md)
-- Apps Script 권한/배포 수동 복구(Quick): [`docs/mission-c-manual-setup.md`](docs/mission-c-manual-setup.md)
-- Google 인증 장애 SSOT 런북(Gate): [`docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md`](docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md)
-
-## 현재 운영 주소
-
-운영 기준 접근 주소는 아래와 같습니다.
-
-- 관리자 페이지: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/admin/`
-- 학생 페이지(기본): `https://cloud-club.github.io/CloudClubAttendanceSystem/web/student/latest/`
-- 안내 루트: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/`
-
-## 보안 원칙
-
-이 저장소는 퍼블릭 저장소이기 때문에 OAuth/운영 비밀값은 문서나 코드에 기록하지 않습니다. 관리자 인증 관련 민감값(`GOOGLE_OAUTH_CLIENT_ID`, 운영 URL 등)은 GitHub가 아니라 Apps Script `Script Properties`에서만 관리합니다. 관리자 허용 계정 목록은 스프레드시트 `_admins` 시트에서 관리합니다.
+## 핵심 코드 경로
+- 백엔드: [Code.gs](./Code.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Code.gs)
+- 관리자 프런트: [web/admin/index.html](./web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
+- 관리자 스크립트: [web/admin/admin.js](./web/admin/admin.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/admin.js)
+- 학생 프런트: [web/student/latest/index.html](./web/student/latest/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/latest/index.html)
+- 학생 스크립트: [web/student/student.js](./web/student/student.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/student.js)
