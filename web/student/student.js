@@ -842,7 +842,7 @@ function handleAttendanceResponse(response) {
             오늘의 운세
             <i class="fas fa-star"></i>
           </h4>
-          <p class="fortune-text">${response.fortune}</p>
+          <p class="fortune-text">${escapeHtml(response.fortune)}</p>
         </div>
       `;
     }

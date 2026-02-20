@@ -1693,6 +1693,45 @@
       width: 100%;
     }
 
+    .fortune-editor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .fortune-editor-grid .form-group {
+      margin: 0;
+      max-width: none;
+      text-align: left;
+    }
+
+    .fortune-textarea {
+      min-height: 240px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      letter-spacing: 0;
+      line-height: 1.5;
+    }
+
+    .fortune-current-code-wrap {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.62);
+      padding: 12px;
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .fortune-current-code-wrap pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #dbeafe;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
     .import-chip-row {
       display: flex;
       flex-wrap: wrap;
@@ -3265,6 +3304,10 @@
         <i class="fas fa-calendar-alt"></i>
         <span>일정 관리</span>
       </button>
+      <button class="tab-button" onclick="openTab('fortune', event)">
+        <i class="fas fa-clover"></i>
+        <span>운세 관리</span>
+      </button>
       <button class="tab-button" onclick="openTab('excused', event)">
         <i class="fas fa-notes-medical"></i>
         <span>유고 처리</span>
@@ -3781,6 +3824,106 @@
       </div>
     </div>
 
+    <!-- 운세 관리 탭 -->
+    <div id="fortune" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-clover card-icon"></i>
+          <h2 class="card-title">운세 관리</h2>
+        </div>
+        <p class="info-text">CSV/XLSX 업로드 또는 직접 편집으로 운세를 전체 교체할 수 있습니다. 저장 전 1차 검증(길이/중복/최소 건수)을 통과해야 합니다.</p>
+        <div id="fortuneCompatibilityNotice" class="compat-notice">
+          <div><strong>백엔드 버전 확인 중...</strong></div>
+        </div>
+
+        <div class="fortune-editor-grid">
+          <div class="form-group">
+            <label for="fortuneFileInput" class="form-label">파일 업로드</label>
+            <input id="fortuneFileInput" class="form-input" type="file" accept=".csv,.tsv,.xlsx,.xls,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+          </div>
+          <div class="sheet-actions" style="margin: 0;">
+            <button id="fortuneLoadFileBtn" type="button" class="btn btn-secondary" onclick="loadFortuneFromFile()">
+              <i class="fas fa-file-upload"></i>
+              <span>파일 불러오기</span>
+            </button>
+            <button id="fortuneAnalyzeBtn" type="button" class="btn btn-secondary" onclick="analyzeFortuneInput()">
+              <i class="fas fa-vial"></i>
+              <span>검증/미리보기</span>
+            </button>
+            <button id="fortuneResetBtn" type="button" class="btn btn-secondary" onclick="resetFortuneEditor()">
+              <i class="fas fa-undo"></i>
+              <span>초기화</span>
+            </button>
+            <button id="fortuneRefreshBtn" type="button" class="btn btn-secondary" onclick="refreshFortuneManagement()">
+              <i class="fas fa-sync-alt"></i>
+              <span>버전 새로고침</span>
+            </button>
+          </div>
+        </div>
+        <div id="fortuneAnalyzeResult" style="display:none;"></div>
+
+        <div class="form-group" style="max-width:none; text-align:left; margin-top: 14px;">
+          <label for="fortuneTextInput" class="form-label">직접 편집 / 붙여넣기</label>
+          <textarea id="fortuneTextInput" class="form-input fortune-textarea" placeholder="1행 1운세 또는 CSV/TSV 데이터를 붙여넣고 검증을 실행하세요."></textarea>
+          <p class="info-text" style="font-size:13px; margin-top:8px;">빈 행은 자동 제외됩니다. 중복 문구/200자 초과 문구는 저장할 수 없습니다.</p>
+        </div>
+
+        <div id="fortuneValidationSummary" class="import-chip-row"></div>
+        <div id="fortunePreviewWrap" class="table-wrap">
+          <p class="info-text">분석 후 미리보기가 표시됩니다.</p>
+        </div>
+
+        <label class="import-confirm-box import-confirm-box-primary">
+          <input id="fortuneUploadConfirmed" type="checkbox" onchange="refreshFortuneExecuteButtonState()">
+          <span>미리보기/검증 결과를 확인했고, 기존 운세를 새 데이터로 전체 교체합니다.</span>
+        </label>
+
+        <div class="sheet-actions">
+          <button id="fortuneSaveBtn" type="button" class="btn" disabled onclick="executeFortuneUpload()">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>저장(신규 버전 생성)</span>
+          </button>
+        </div>
+        <div id="fortuneSaveResult" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-code card-icon"></i>
+          <h2 class="card-title">현재 운세 원본</h2>
+        </div>
+        <p id="fortuneCurrentVersionLabel" class="info-text" style="margin-top:0;">현재 버전: -</p>
+        <div class="fortune-current-code-wrap">
+          <pre><code id="fortuneCurrentCode">(불러오는 중...)</code></pre>
+        </div>
+        <div class="sheet-actions" style="margin-top:12px;">
+          <button id="fortuneLoadCurrentEditorBtn" type="button" class="btn btn-secondary" onclick="loadCurrentFortuneIntoEditor()">
+            <i class="fas fa-pen"></i>
+            <span>편집기로 불러오기</span>
+          </button>
+          <button id="fortuneDownloadCurrentCsvBtn" type="button" class="btn btn-secondary" onclick="downloadCurrentFortuneCsv()">
+            <i class="fas fa-file-csv"></i>
+            <span>현재본 CSV</span>
+          </button>
+          <button id="fortuneDownloadCurrentXlsxBtn" type="button" class="btn btn-secondary" onclick="downloadCurrentFortuneXlsx()">
+            <i class="fas fa-file-excel"></i>
+            <span>현재본 XLSX</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-history card-icon"></i>
+          <h2 class="card-title">운세 버전 히스토리</h2>
+        </div>
+        <p class="info-text">각 버전을 편집기로 불러오거나 CSV/XLSX로 다운로드할 수 있습니다.</p>
+        <div id="fortuneVersionTableWrap" class="table-wrap">
+          <div class="loader" style="margin: 24px auto;"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 시즌 생성/업로드 탭 -->
     <div id="seasonImport" class="tab-content">
       <div id="importBaseCard" class="card" data-import-card data-default-open="true">
@@ -4206,6 +4349,7 @@
   <script src="./scripts/25_graduation_excused.js"></script>
   <script src="./scripts/26_admin_users.js"></script>
   <script src="./scripts/27_qr_links.js"></script>
+  <script src="./scripts/28_fortune.js"></script>
   <script src="./scripts/90_bootstrap.js"></script>
   <script src="./scripts/99_compat_handlers.js"></script>
 </body>

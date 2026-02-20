@@ -19,7 +19,7 @@ const ADMINS_SHEET_HEADERS = ['name', 'season', 'phone', 'email', 'role', 'is_ac
 const ADMIN_SEASON_SYNC_CACHE_KEY = 'admin_season_sync_latest_v1';
 const ADMIN_SEASON_SYNC_CACHE_TTL_SECONDS = 60;
 const GOOGLE_TOKENINFO_ENDPOINT = 'https://oauth2.googleapis.com/tokeninfo?id_token=';
-const API_VERSION = '2026.02.20-v5.1';
+const API_VERSION = '2026.02.20-v5.2';
 const ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS = 90;
 const ATTENDANCE_DASHBOARD_CACHE_MAX_BYTES = 90000;
 
@@ -54,6 +54,40 @@ const IMPORT_TARGET_MODE_CREATE = 'create';
 const IMPORT_TARGET_MODE_UPDATE = 'update';
 const IMPORT_EFFECTIVE_SCOPE_ALL = 'all';
 const IMPORT_EFFECTIVE_SCOPE_TARGET_ONLY = 'targetSeasonOnly';
+const FORTUNE_VERSION_SHEET_NAME = '_fortune_versions';
+const FORTUNE_VERSION_HEADERS = [
+  'version_id',
+  'created_at',
+  'created_by_email',
+  'source_type',
+  'row_count',
+  'is_current',
+  'note'
+];
+const FORTUNE_ENTRY_SHEET_NAME = '_fortune_entries';
+const FORTUNE_ENTRY_HEADERS = [
+  'version_id',
+  'row_no',
+  'fortune_text'
+];
+const FORTUNE_UPLOAD_META_SHEET_NAME = '_fortune_upload_meta';
+const FORTUNE_UPLOAD_META_HEADERS = [
+  'upload_id',
+  'staging_sheet_name',
+  'status',
+  'created_at',
+  'updated_at',
+  'created_by_email',
+  'expected_rows',
+  'received_rows'
+];
+const FORTUNE_UPLOAD_STAGING_PREFIX = '_fortune_stg_';
+const FORTUNE_UPLOAD_STATUS_ACTIVE = 'active';
+const FORTUNE_UPLOAD_STATUS_FINALIZED = 'finalized';
+const FORTUNE_UPLOAD_STATUS_ABORTED = 'aborted';
+const FORTUNE_MAX_TEXT_LENGTH = 200;
+const FORTUNE_CACHE_KEY = 'fortune_current_v1';
+const FORTUNE_CACHE_TTL_SECONDS = 300;
 const MEMBER_V2_SHEET_HEADERS = [
   'Name',
   'Season',
@@ -124,7 +158,13 @@ const SUPPORTED_API_ACTIONS = [
   'seasonImportChunk',
   'seasonImportDiff',
   'seasonImportFinalize',
-  'seasonImportAbort'
+  'seasonImportAbort',
+  'fortuneVersionList',
+  'fortuneVersionGet',
+  'fortuneUploadBegin',
+  'fortuneUploadChunk',
+  'fortuneUploadFinalize',
+  'fortuneUploadAbort'
 ];
 const ACTION_ACCESS_PUBLIC = 'public';
 const ACTION_ACCESS_ADMIN = 'admin';
@@ -170,7 +210,13 @@ const ACTION_ACCESS_LEVELS = Object.freeze({
   seasonImportChunk: ACTION_ACCESS_SUPER,
   seasonImportDiff: ACTION_ACCESS_SUPER,
   seasonImportFinalize: ACTION_ACCESS_SUPER,
-  seasonImportAbort: ACTION_ACCESS_SUPER
+  seasonImportAbort: ACTION_ACCESS_SUPER,
+  fortuneVersionList: ACTION_ACCESS_ADMIN,
+  fortuneVersionGet: ACTION_ACCESS_ADMIN,
+  fortuneUploadBegin: ACTION_ACCESS_ADMIN,
+  fortuneUploadChunk: ACTION_ACCESS_ADMIN,
+  fortuneUploadFinalize: ACTION_ACCESS_ADMIN,
+  fortuneUploadAbort: ACTION_ACCESS_ADMIN
 });
 
 const VARIABLE_CATALOG = {

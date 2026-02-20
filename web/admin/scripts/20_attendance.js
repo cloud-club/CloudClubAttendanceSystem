@@ -427,6 +427,10 @@ function openTab(tabName, evt) {
     loadScheduleList();
   }
 
+  if (tabName === 'fortune') {
+    refreshFortuneManagement();
+  }
+
   if (tabName === 'variables') {
     loadVariables();
   }

@@ -77,6 +77,12 @@ CloudClub 출석 시스템은 8기까지 Google Apps Script가 화면과 데이�
 - 학생(Latest): `https://cloud-club.github.io/CloudClubAttendanceSystem/web/student/latest/`
 - 랜딩: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/`
 
+## 회귀 더블체크
+- 실행기: [scripts/run_doublecheck.sh](./scripts/run_doublecheck.sh) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/scripts/run_doublecheck.sh)
+- 정적 가드: [scripts/doublecheck_static_guard.js](./scripts/doublecheck_static_guard.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/scripts/doublecheck_static_guard.js)
+- API 비교: [scripts/doublecheck_api_snapshot.js](./scripts/doublecheck_api_snapshot.js), [scripts/doublecheck_api_compare.js](./scripts/doublecheck_api_compare.js)
+- 운영 체크리스트: [docs/Wiki/06_Doublecheck_Regression_Gate.md](./docs/Wiki/06_Doublecheck_Regression_Gate.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/06_Doublecheck_Regression_Gate.md)
+
 ## 핵심 코드 경로
 - 백엔드 엔트리: [Appsscript/00_entry_api.gs](./Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
 - 백엔드 권한/상수: [Appsscript/01_constants_access.gs](./Appsscript/01_constants_access.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/01_constants_access.gs)

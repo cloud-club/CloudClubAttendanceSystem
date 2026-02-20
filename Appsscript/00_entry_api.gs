@@ -343,6 +343,30 @@ function handleApiRequest(params) {
         data = abortSeasonImport(params);
         break;
 
+      case 'fortuneVersionList':
+        data = fortuneVersionList(ensureAdmin(), params);
+        break;
+
+      case 'fortuneVersionGet':
+        data = fortuneVersionGet(ensureAdmin(), params);
+        break;
+
+      case 'fortuneUploadBegin':
+        data = fortuneUploadBegin(ensureAdmin(), params);
+        break;
+
+      case 'fortuneUploadChunk':
+        data = fortuneUploadChunk(ensureAdmin(), params);
+        break;
+
+      case 'fortuneUploadFinalize':
+        data = fortuneUploadFinalize(ensureAdmin(), params);
+        break;
+
+      case 'fortuneUploadAbort':
+        data = fortuneUploadAbort(ensureAdmin(), params);
+        break;
+
       default:
         return jsonp(callback, apiError('UNSUPPORTED_ACTION', `지원하지 않는 api입니다: ${action}`));
     }

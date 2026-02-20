@@ -1,10 +1,10 @@
 // fortune.gs
 
 /**
- * 랜덤 운세 메시지를 반환합니다.
- * @returns {string} 오늘의 운세 메시지
+ * 기본 내장 운세 목록을 반환합니다.
+ * @returns {string[]} 하드코딩 기본 운세 목록
  */
-function getRandomFortune() {
+function getBuiltinFortunes() {
   const fortunes = [
     // --- 기본 운세 ---
     "오늘은 기분 좋은 하루가 될 거예요! 🌟",
@@ -569,7 +569,32 @@ function getRandomFortune() {
     "이 운세는 그저 'string'일 뿐, 당신의 미래는 당신이 코딩하기 나름입니다.",
   ];
 
+  return fortunes;
+}
+
+function getFortunesForRuntime() {
+  try {
+    if (typeof getCurrentFortuneTextList === 'function') {
+      const stored = getCurrentFortuneTextList();
+      if (Array.isArray(stored) && stored.length > 0) {
+        return stored;
+      }
+    }
+  } catch (error) {
+    Logger.log('운세 저장본 로드 실패: ' + error.toString());
+  }
+  return getBuiltinFortunes();
+}
+
+/**
+ * 랜덤 운세 메시지를 반환합니다.
+ * @returns {string} 오늘의 운세 메시지
+ */
+function getRandomFortune() {
+  const fortunes = getFortunesForRuntime();
+  if (!Array.isArray(fortunes) || fortunes.length === 0) {
+    return '';
+  }
   const randomIndex = Math.floor(Math.random() * fortunes.length);
   return fortunes[randomIndex];
 }
-

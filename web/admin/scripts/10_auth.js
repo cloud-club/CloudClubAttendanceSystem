@@ -512,6 +512,11 @@ async function refreshSeasonData() {
     return;
   }
 
+  if (activeTab === 'fortune') {
+    await refreshFortuneManagement();
+    return;
+  }
+
   if (activeTab === 'variables') {
     if (!isSuperAdmin()) return;
     await loadVariables();
