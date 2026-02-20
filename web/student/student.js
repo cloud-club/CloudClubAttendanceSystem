@@ -2,6 +2,32 @@ let countdownInterval;
 let isAttendanceActive = false;
 let currentSeason = '';
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
+const STUDENT_ALLOWED_ACTIONS = {
+  sheets: true,
+  session: true,
+  ranking: true,
+  attendance: true,
+  status: true
+};
+
+function createStudentApiError(code, message) {
+  const err = new Error(message || '요청을 처리할 수 없습니다.');
+  err.code = String(code || 'UNKNOWN');
+  return err;
+}
+
+function callStudentApi(action, params) {
+  const normalizedAction = String(action || '').trim();
+  if (!normalizedAction || !STUDENT_ALLOWED_ACTIONS[normalizedAction]) {
+    return Promise.reject(createStudentApiError('FORBIDDEN_STUDENT_ACTION', `학생 페이지에서 허용되지 않은 API 호출입니다: ${normalizedAction}`));
+  }
+
+  if (!window.CloudClubApi || typeof window.CloudClubApi.call !== 'function') {
+    return Promise.reject(createStudentApiError('API_UNAVAILABLE', 'CloudClubApi를 사용할 수 없습니다.'));
+  }
+
+  return window.CloudClubApi.call(normalizedAction, params || {});
+}
 
 function normalizeSeasonAlias(value) {
   const raw = String(value || '').trim().toLowerCase();
@@ -93,11 +119,7 @@ function updateUrlSeasonParam(alias) {
 }
 
 async function resolveLatestSeasonAlias() {
-  if (!window.CloudClubApi || typeof window.CloudClubApi.call !== 'function') {
-    throw new Error('CloudClubApi를 사용할 수 없습니다.');
-  }
-
-  const sheets = await window.CloudClubApi.call('sheets');
+  const sheets = await callStudentApi('sheets');
   const latest = pickLatestSeasonAliasFromSheets(sheets);
   if (!latest) {
     throw new Error('최신 시즌을 찾을 수 없습니다.');
@@ -143,6 +165,15 @@ function getDisplayErrorMessage(error, fallbackMessage) {
   }
 
   return (error && error.message) ? error.message : fallbackMessage;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function createConfetti() {
@@ -316,7 +347,7 @@ function renderCountdown(session) {
 
 async function checkAttendanceSession() {
   try {
-    const session = await CloudClubApi.call('session', buildSeasonParams());
+    const session = await callStudentApi('session', buildSeasonParams());
     renderCountdown(session);
   } catch (error) {
     renderCountdown({ active: false, message: getDisplayErrorMessage(error, '세션 정보를 불러올 수 없습니다.') });
@@ -325,7 +356,7 @@ async function checkAttendanceSession() {
 
 async function loadRankings() {
   try {
-    const response = await CloudClubApi.call('ranking', buildSeasonParams());
+    const response = await callStudentApi('ranking', buildSeasonParams());
     displayRankings(response);
   } catch (error) {
     handleRankingError(error);
@@ -360,7 +391,7 @@ function displayRankings(response) {
   const rankingBoard = document.getElementById('rankingBoard');
 
   if (!response.success) {
-    rankingBoard.innerHTML = `<div class="error">순위를 불러올 수 없습니다: ${response.message || ''}</div>`;
+    rankingBoard.innerHTML = `<div class="error">순위를 불러올 수 없습니다: ${escapeHtml(response.message || '')}</div>`;
     return;
   }
 
@@ -385,21 +416,28 @@ function displayRankings(response) {
   `;
 
   rankings.forEach(item => {
+    const name = escapeHtml(String(item && item.name || '-'));
+    const seasonLabel = escapeHtml(String((item && (item.seasonLabel || item.grade)) || '-'));
+    const attendanceRate = Number(item && item.attendanceRate);
+    const attendedCount = Number(item && item.attendedCount);
+    const totalSessions = Number(item && item.totalSessions);
+
     const rankDisplay = item.rank <= 3
       ? `<span class="rank-medal rank-${item.rank}">${item.rank}</span>`
       : `<span style="color: #94a3b8;">${item.rank}</span>`;
 
     const avgOffset = item.avgAttendOffset || item.avgAttendTime;
-    const avgTimeDisplay = avgOffset === '미출석'
+    const avgOffsetText = String(avgOffset || '').trim();
+    const avgTimeDisplay = avgOffsetText === '' || avgOffsetText === '미출석'
       ? '<span style="color: #64748b;">-</span>'
-      : `<span style="color: #60a5fa;">${escapeHtml(avgOffset)}</span>`;
+      : `<span style="color: #60a5fa;">${escapeHtml(avgOffsetText)}</span>`;
 
     tableHTML += `
       <tr>
         <td>${rankDisplay}</td>
-        <td><span class="grade-badge">${item.seasonLabel || item.grade || '-'}</span>${item.name}</td>
-        <td><span class="highlight-text">${item.attendanceRate}%</span></td>
-        <td>${item.attendedCount}/${item.totalSessions}</td>
+        <td><span class="grade-badge">${seasonLabel}</span>${name}</td>
+        <td><span class="highlight-text">${Number.isFinite(attendanceRate) ? attendanceRate : 0}%</span></td>
+        <td>${Number.isFinite(attendedCount) ? attendedCount : 0}/${Number.isFinite(totalSessions) ? totalSessions : '-'}</td>
         <td>${avgTimeDisplay}</td>
       </tr>
     `;
@@ -411,7 +449,7 @@ function displayRankings(response) {
 
 function handleRankingError(error) {
   const rankingBoard = document.getElementById('rankingBoard');
-  rankingBoard.innerHTML = `<div class="error">${getDisplayErrorMessage(error, '순위를 불러오는 중 오류가 발생했습니다.')}</div>`;
+  rankingBoard.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '순위를 불러오는 중 오류가 발생했습니다.'))}</div>`;
   console.error('Ranking error:', error);
 }
 
@@ -454,7 +492,7 @@ async function doAttendance(event) {
   localStorage.setItem('lastUsedPhone', phoneNumber);
 
   try {
-    const response = await CloudClubApi.call('attendance', buildSeasonParams({ phone: phoneNumber }));
+    const response = await callStudentApi('attendance', buildSeasonParams({ phone: phoneNumber }));
     handleAttendanceResponse(response);
   } catch (error) {
     handleAttendanceError(error);
@@ -568,7 +606,7 @@ async function checkAttendanceStatus(event) {
   statusResult.style.display = 'block';
 
   try {
-    const response = await CloudClubApi.call('status', buildSeasonParams({ phone: phoneNumber }));
+    const response = await callStudentApi('status', buildSeasonParams({ phone: phoneNumber }));
     handleStatusResponse(response);
   } catch (error) {
     handleStatusError(error);

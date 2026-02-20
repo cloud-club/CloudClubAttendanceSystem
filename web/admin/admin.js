@@ -104,6 +104,12 @@ const MANUAL_MEMBER_STATUS_LABELS = {
   future: '미기록(예정)',
   recorded: '기록됨'
 };
+const EXPECTED_AUTH_REJECTION_CODES = new Set([
+  'UNAUTHORIZED',
+  'AUTH_ADMIN_NOT_REGISTERED',
+  'AUTH_ADMIN_INACTIVE',
+  'AUTH_ADMIN_CONFIG_INVALID'
+]);
 
 let manualApproveState = createManualApproveInitialState();
 
@@ -247,6 +253,51 @@ function setAuthGateMessage(message, isError) {
   if (!node) return;
   node.textContent = message || '';
   node.classList.toggle('error', !!isError);
+}
+
+function closeAuthInfoPopover() {
+  const popover = document.getElementById('authInfoPopover');
+  const button = document.getElementById('authInfoButton');
+  if (popover) popover.hidden = true;
+  if (button) button.setAttribute('aria-expanded', 'false');
+}
+
+function toggleAuthInfoPopover() {
+  const popover = document.getElementById('authInfoPopover');
+  const button = document.getElementById('authInfoButton');
+  if (!popover || !button) return;
+
+  const isExpanded = button.getAttribute('aria-expanded') === 'true';
+  const next = !isExpanded;
+  button.setAttribute('aria-expanded', next ? 'true' : 'false');
+  popover.hidden = !next;
+}
+
+function logGoogleLoginFailure(error) {
+  const code = String((error && error.code) || '').trim();
+  const payload = {
+    code: code,
+    message: error && error.message,
+    debugUrl: error && error.debugUrl,
+    error: error
+  };
+
+  if (EXPECTED_AUTH_REJECTION_CODES.has(code)) {
+    console.info('Google 로그인 거절:', payload);
+    return;
+  }
+
+  if (code === 'AUTH_SERVER_SCOPE_MISSING') {
+    console.warn('Google 로그인 차단(서버 권한 누락):', payload);
+    return;
+  }
+
+  if (code === 'TIMEOUT') {
+    console.warn('Google 로그인 지연:', payload);
+    return;
+  }
+
+  console.error('Google 로그인 실패:', payload);
 }
 
 function showAuthGate() {
@@ -2793,7 +2844,7 @@ async function renderGoogleLoginButton() {
     );
     return;
   }
-  console.info('관리자 인증 canary 통과:', canary.code);
+  console.debug('관리자 인증 canary 통과:', canary.code);
 
   const loaded = await waitForGoogleIdentityClient(12000);
   if (!loaded) {
@@ -2847,12 +2898,7 @@ async function handleGoogleCredentialResponse(googleResponse) {
     showAdminApp();
     await initializeDashboard();
   } catch (error) {
-    console.error('Google 로그인 실패:', {
-      code: error && error.code,
-      message: error && error.message,
-      debugUrl: error && error.debugUrl,
-      error: error
-    });
+    logGoogleLoginFailure(error);
     resetAdminAuthState({
       message: getDisplayErrorMessage(error, '등록된 관리자 Gmail 계정만 로그인할 수 있습니다.'),
       isError: true
@@ -8576,6 +8622,20 @@ async function applyExcusedChange(payload) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('click', (event) => {
+    const popover = document.getElementById('authInfoPopover');
+    const button = document.getElementById('authInfoButton');
+    if (!popover || popover.hidden || !button) return;
+    if (button.contains(event.target) || popover.contains(event.target)) return;
+    closeAuthInfoPopover();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeAuthInfoPopover();
+    }
+  });
+
   handleAdminRoleChange();
   resetAdminAuthState({ silent: true });
   bootstrapAdminAuth().catch((error) => {

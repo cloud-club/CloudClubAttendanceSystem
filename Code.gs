@@ -125,6 +125,51 @@ const SUPPORTED_API_ACTIONS = [
   'seasonImportFinalize',
   'seasonImportAbort'
 ];
+const ACTION_ACCESS_PUBLIC = 'public';
+const ACTION_ACCESS_ADMIN = 'admin';
+const ACTION_ACCESS_SUPER = 'super';
+const ACTION_ACCESS_LEVELS = Object.freeze({
+  health: ACTION_ACCESS_PUBLIC,
+  apiInfo: ACTION_ACCESS_PUBLIC,
+  authGoogleConfig: ACTION_ACCESS_PUBLIC,
+  authGoogleLogin: ACTION_ACCESS_PUBLIC,
+  session: ACTION_ACCESS_PUBLIC,
+  attendance: ACTION_ACCESS_PUBLIC,
+  status: ACTION_ACCESS_PUBLIC,
+  ranking: ACTION_ACCESS_PUBLIC,
+  sheets: ACTION_ACCESS_PUBLIC,
+  verifyAdminKey: ACTION_ACCESS_PUBLIC,
+  authSession: ACTION_ACCESS_ADMIN,
+  authLogout: ACTION_ACCESS_ADMIN,
+  adminSeasonList: ACTION_ACCESS_ADMIN,
+  attendanceDashboardSummary: ACTION_ACCESS_ADMIN,
+  attendanceDashboardDrilldown: ACTION_ACCESS_ADMIN,
+  studentUrl: ACTION_ACCESS_ADMIN,
+  adminUrl: ACTION_ACCESS_ADMIN,
+  sheetLink: ACTION_ACCESS_ADMIN,
+  scheduleList: ACTION_ACCESS_ADMIN,
+  scheduleSave: ACTION_ACCESS_ADMIN,
+  scheduleDelete: ACTION_ACCESS_ADMIN,
+  members: ACTION_ACCESS_ADMIN,
+  manualApprove: ACTION_ACCESS_ADMIN,
+  manualApproveBatch: ACTION_ACCESS_ADMIN,
+  excusedSet: ACTION_ACCESS_ADMIN,
+  graduationReport: ACTION_ACCESS_ADMIN,
+  sheetSchemaAudit: ACTION_ACCESS_ADMIN,
+  adminUsersList: ACTION_ACCESS_SUPER,
+  adminUsersUpsert: ACTION_ACCESS_SUPER,
+  adminUsersDelete: ACTION_ACCESS_SUPER,
+  setActiveSheet: ACTION_ACCESS_SUPER,
+  variablesGet: ACTION_ACCESS_SUPER,
+  variablesUpdate: ACTION_ACCESS_SUPER,
+  variablesNormalize: ACTION_ACCESS_SUPER,
+  variablesResetTemplate: ACTION_ACCESS_SUPER,
+  seasonImportBegin: ACTION_ACCESS_SUPER,
+  seasonImportChunk: ACTION_ACCESS_SUPER,
+  seasonImportDiff: ACTION_ACCESS_SUPER,
+  seasonImportFinalize: ACTION_ACCESS_SUPER,
+  seasonImportAbort: ACTION_ACCESS_SUPER
+});
 
 const VARIABLE_CATALOG = {
   attendance_open_offset_min: {
@@ -424,6 +469,15 @@ function handleApiRequest(params) {
     };
     const ensureSuper = () => requireSuperAdmin(ensureAdmin());
     const ensureSeasonAlias = (seasonInput) => requireSeasonAccess(ensureAdmin(), seasonInput);
+    const accessLevel = ACTION_ACCESS_LEVELS[action];
+    if (!accessLevel) {
+      return jsonp(callback, apiError('UNSUPPORTED_ACTION', `지원하지 않는 api입니다: ${action}`));
+    }
+    if (accessLevel === ACTION_ACCESS_ADMIN) {
+      ensureAdmin();
+    } else if (accessLevel === ACTION_ACCESS_SUPER) {
+      ensureSuper();
+    }
 
     switch (action) {
       case 'health':
@@ -730,10 +784,16 @@ function apiError(code, message) {
 }
 
 function getApiInfo() {
+  const accessLevelByAction = {};
+  SUPPORTED_API_ACTIONS.forEach(action => {
+    accessLevelByAction[action] = ACTION_ACCESS_LEVELS[action] || ACTION_ACCESS_PUBLIC;
+  });
+
   return {
     success: true,
     apiVersion: API_VERSION,
     supportedActions: SUPPORTED_API_ACTIONS.slice(),
+    accessLevelByAction: accessLevelByAction,
     scriptTimeZone: Session.getScriptTimeZone(),
     serverTime: formatDateTime(new Date())
   };

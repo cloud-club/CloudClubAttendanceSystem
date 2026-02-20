@@ -145,6 +145,62 @@
       font-weight: 700;
     }
 
+    .auth-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .auth-title-row h3 {
+      margin: 0;
+    }
+
+    .auth-info-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(147, 187, 252, 0.5);
+      background: rgba(30, 64, 175, 0.2);
+      color: #bfdbfe;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .auth-info-btn:hover {
+      border-color: rgba(147, 187, 252, 0.9);
+      background: rgba(30, 64, 175, 0.35);
+      color: #dbeafe;
+    }
+
+    .auth-info-btn:focus-visible {
+      outline: 2px solid #60a5fa;
+      outline-offset: 2px;
+    }
+
+    .auth-info-popover {
+      margin: 12px auto 0;
+      max-width: 420px;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #bfdbfe;
+      border: 1px solid rgba(147, 187, 252, 0.35);
+      border-radius: 10px;
+      background: rgba(30, 64, 175, 0.18);
+      padding: 10px 12px;
+      word-break: break-word;
+    }
+
+    .auth-info-popover[hidden] {
+      display: none !important;
+    }
+
     .auth-card p {
       color: #94a3b8;
       font-size: 14px;
@@ -2832,6 +2888,11 @@
         padding: 15px;
       }
 
+      .auth-info-popover {
+        font-size: 11px;
+        padding: 9px 10px;
+      }
+
       .season-toolbar {
         top: 8px;
       }
@@ -3125,13 +3186,29 @@
 
     <section id="authGate" class="auth-gate">
       <div class="auth-card">
-        <h3>관리자 Google 인증</h3>
-        <p>등록된 관리자 Gmail 계정만 관리자 페이지에 접근할 수 있습니다. 인증 전에는 관리자 데이터가 로드되지 않습니다.</p>
+        <div class="auth-title-row">
+          <h3>관리자 인증</h3>
+          <button
+            type="button"
+            id="authInfoButton"
+            class="auth-info-btn"
+            aria-label="관리자 로그인 안내 보기"
+            aria-expanded="false"
+            aria-controls="authInfoPopover"
+            onclick="toggleAuthInfoPopover()"
+          >
+            <i class="fas fa-info" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p>
+          등록된 관리자 Gmail 계정만 관리자 페이지에 접근할 수 있습니다.<br>
+          인증 전에는 관리자 데이터가 로드되지 않습니다.
+        </p>
         <div id="authGateMessage" class="auth-status">Google 로그인 준비 중입니다...</div>
         <div id="googleLoginButton" class="auth-google-button"></div>
-        <p class="auth-gate-footnote">
-          로그인 허용 대상: 등록된 Gmail(`@gmail.com`, `@googlemail.com`) + 고정 Super Admin(`cloudclub2022@gmail.com`)
-        </p>
+        <div id="authInfoPopover" class="auth-info-popover" role="note" hidden>
+          Google 시트(_admins)에 등록된 관리자 계정 또는 CloudClub 고정 Super Admin(cloudclub2022@gmail.com)만 로그인할 수 있습니다.
+        </div>
       </div>
     </section>
 
