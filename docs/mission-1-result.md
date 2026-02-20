@@ -6,9 +6,6 @@
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/web/admin/index.html`
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/web/shared/api-jsonp.js`
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/web/student/student.js`
-- `/Users/sbu/SBU/CloudClubAttendanceSystem/Index.html`
-- `/Users/sbu/SBU/CloudClubAttendanceSystem/StudentInterface.html`
-- `/Users/sbu/SBU/CloudClubAttendanceSystem/AdminInterface.html`
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/baseline.md`
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/mission-1-plan.md`
 - `/Users/sbu/SBU/CloudClubAttendanceSystem/docs/mission-1-result.md`
@@ -51,7 +48,7 @@
 5. 호환 응답 확장
 - `grade` 유지.
 - `season`, `seasonLabel` 병행 반환.
-- admin/student/legacy UI에서 `seasonLabel || grade` 사용.
+- admin/student UI에서 `seasonLabel || grade` 사용.
 
 ## 5) 테스트 시나리오 및 결과
 - `node --check /tmp/Code_gs_check.js`: 통과

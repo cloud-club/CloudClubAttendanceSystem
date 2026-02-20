@@ -27,6 +27,10 @@
       overflow-x: hidden;
       min-height: 100vh;
     }
+
+    .is-hidden {
+      display: none !important;
+    }
     
     /* Background Pattern */
     .bg-pattern {
@@ -116,6 +120,114 @@
       margin: 32px auto;
       border-radius: 2px;
       animation: fadeIn 1.2s ease-out;
+    }
+
+    .auth-gate {
+      max-width: 520px;
+      margin: 0 auto 40px;
+      animation: fadeInUp 0.6s ease-out;
+    }
+
+    .auth-card {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(147, 187, 252, 0.25);
+      border-radius: 20px;
+      padding: 28px 24px;
+      backdrop-filter: blur(12px);
+      text-align: center;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    }
+
+    .auth-card h3 {
+      margin-bottom: 10px;
+      color: #e2e8f0;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .auth-card p {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 16px;
+      line-height: 1.55;
+    }
+
+    .auth-status {
+      margin: 0 auto 14px;
+      max-width: 420px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(15, 23, 42, 0.5);
+      color: #cbd5e1;
+      font-size: 13px;
+      padding: 10px 12px;
+      line-height: 1.5;
+      text-align: left;
+      word-break: break-word;
+    }
+
+    .auth-status.error {
+      border-color: rgba(239, 68, 68, 0.4);
+      background: rgba(127, 29, 29, 0.25);
+      color: #fecaca;
+    }
+
+    .auth-google-button {
+      display: flex;
+      justify-content: center;
+      min-height: 44px;
+      margin-top: 4px;
+    }
+
+    .auth-gate-footnote {
+      margin-top: 14px;
+      color: #93bbfc;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .admin-session-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(15, 23, 42, 0.65);
+    }
+
+    .admin-session-user {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .admin-session-name {
+      color: #e2e8f0;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .admin-session-email {
+      color: #94a3b8;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .admin-session-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #bfdbfe;
+      border: 1px solid rgba(147, 197, 253, 0.45);
+      background: rgba(30, 64, 175, 0.2);
     }
 
     .season-toolbar {
@@ -1283,6 +1395,105 @@
       outline: none;
       border-color: #60a5fa;
       box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+    }
+
+    .admin-users-form-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .admin-users-form-grid .form-group {
+      margin: 0;
+      max-width: 100%;
+      text-align: left;
+    }
+
+    .admin-users-form-grid .form-label {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .admin-users-form-grid .form-input,
+    .admin-users-form-grid .sheet-select {
+      text-align: left;
+      letter-spacing: 0;
+      padding: 12px 14px;
+      font-size: 15px;
+    }
+
+    .admin-users-form-grid .checkbox-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #dbeafe;
+      user-select: none;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .admin-users-form-grid .checkbox-inline input[type='checkbox'] {
+      width: 16px;
+      height: 16px;
+      accent-color: #60a5fa;
+    }
+
+    .admin-users-role-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      color: #0f172a;
+    }
+
+    .admin-users-role-chip.super {
+      background: #fde68a;
+      border-color: #f59e0b;
+    }
+
+    .admin-users-role-chip.season_admin {
+      background: #d9e2f3;
+      border-color: #93c5fd;
+    }
+
+    .admin-users-active-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      color: #0f172a;
+    }
+
+    .admin-users-active-chip.active {
+      background: #d9ead3;
+      border-color: #86efac;
+    }
+
+    .admin-users-active-chip.inactive {
+      background: #f4cccc;
+      border-color: #fca5a5;
+    }
+
+    .admin-users-row-actions {
+      display: inline-flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .admin-users-row-actions .btn {
+      padding: 8px 10px;
+      font-size: 12px;
+      gap: 6px;
     }
 
     .variable-row {
@@ -2912,6 +3123,32 @@
       <div class="divider"></div>
     </header>
 
+    <section id="authGate" class="auth-gate">
+      <div class="auth-card">
+        <h3>관리자 Google 인증</h3>
+        <p>등록된 관리자 Gmail 계정만 관리자 페이지에 접근할 수 있습니다. 인증 전에는 관리자 데이터가 로드되지 않습니다.</p>
+        <div id="authGateMessage" class="auth-status">Google 로그인 준비 중입니다...</div>
+        <div id="googleLoginButton" class="auth-google-button"></div>
+        <p class="auth-gate-footnote">
+          로그인 허용 대상: 등록된 Gmail(`@gmail.com`, `@googlemail.com`) + 고정 Super Admin(`cloudclub2022@gmail.com`)
+        </p>
+      </div>
+    </section>
+
+    <div id="adminApp" class="is-hidden">
+      <div id="adminSessionBar" class="admin-session-bar">
+        <div class="admin-session-user">
+          <span id="adminSessionName" class="admin-session-name">관리자</span>
+          <span id="adminSessionEmail" class="admin-session-email">-</span>
+          <span id="adminSessionRole" class="admin-session-chip">season_admin</span>
+          <span id="adminSessionSeason" class="admin-session-chip">season_-</span>
+        </div>
+        <button type="button" class="btn btn-secondary" style="padding:10px 12px;font-size:13px;" onclick="logoutAdmin()">
+          <i class="fas fa-sign-out-alt"></i>
+          <span>로그아웃</span>
+        </button>
+      </div>
+
     <div class="season-toolbar">
       <div class="season-toolbar-panel">
         <div class="season-toolbar-row">
@@ -2959,7 +3196,7 @@
         <i class="fas fa-qrcode"></i>
         <span>QR코드 관리</span>
       </button>
-      <button class="tab-button" onclick="openTab('variables', event)">
+      <button class="tab-button tab-super-only" data-super-only="true" onclick="openTab('variables', event)">
         <i class="fas fa-sliders-h"></i>
         <span>변수명 관리</span>
       </button>
@@ -2967,9 +3204,13 @@
         <i class="fas fa-user-check"></i>
         <span>수료 판정</span>
       </button>
-      <button class="tab-button" onclick="openTab('seasonImport', event)">
+      <button class="tab-button tab-super-only" data-super-only="true" onclick="openTab('seasonImport', event)">
         <i class="fas fa-file-import"></i>
         <span>시즌 생성/업로드</span>
+      </button>
+      <button class="tab-button tab-super-only" data-super-only="true" onclick="openTab('adminUsers', event)">
+        <i class="fas fa-user-cog"></i>
+        <span>관리자 관리</span>
       </button>
     </nav>
 
@@ -3708,6 +3949,76 @@
         </div>
       </div>
     </div>
+
+    <div id="adminUsers" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-users-cog card-icon"></i>
+          <h2 class="card-title">관리자 계정 관리 (Super Admin 전용)</h2>
+        </div>
+        <p class="info-text">`_admins` 화이트리스트를 관리합니다. Gmail 계정만 등록 가능하며, `cloudclub2022@gmail.com`은 고정 Super Admin으로 유지됩니다.</p>
+        <form onsubmit="saveAdminUser(event)">
+          <div class="admin-users-form-grid">
+            <div class="form-group">
+              <label for="adminUserEmailInput" class="form-label">이메일</label>
+              <input id="adminUserEmailInput" class="form-input" type="email" placeholder="example@gmail.com" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="adminUserNameInput" class="form-label">이름</label>
+              <input id="adminUserNameInput" class="form-input" type="text" placeholder="관리자 이름" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="adminUserSeasonInput" class="form-label">시즌</label>
+              <input id="adminUserSeasonInput" class="form-input" type="text" placeholder="예: 9 또는 season_09" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="adminUserPhoneInput" class="form-label">전화번호</label>
+              <input id="adminUserPhoneInput" class="form-input" type="tel" placeholder="01012345678" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="adminUserRoleSelect" class="form-label">권한(role)</label>
+              <select id="adminUserRoleSelect" class="sheet-select" onchange="handleAdminRoleChange()">
+                <option value="season_admin" selected>season_admin</option>
+                <option value="super">super</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">활성 상태</label>
+              <label class="checkbox-inline">
+                <input id="adminUserIsActiveInput" type="checkbox" checked>
+                <span>활성(is_active)</span>
+              </label>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <button type="submit" class="btn">
+              <i class="fas fa-save"></i>
+              <span>관리자 저장</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="resetAdminUserForm()">
+              <i class="fas fa-eraser"></i>
+              <span>입력 초기화</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="loadAdminUsers()">
+              <i class="fas fa-sync-alt"></i>
+              <span>목록 새로고침</span>
+            </button>
+          </div>
+        </form>
+        <div id="adminUsersResult" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-list card-icon"></i>
+          <h2 class="card-title">등록 관리자 목록</h2>
+        </div>
+        <div id="adminUsersTableWrap" class="table-wrap">
+          <div class="loader" style="margin: 24px auto;"></div>
+        </div>
+      </div>
+    </div>
+    </div>
   </div>
 
   <footer class="site-footer">
@@ -3802,6 +4113,7 @@
   <script src="../shared/env.js"></script>
   <script src="../shared/config.js"></script>
   <script src="../shared/api-jsonp.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <script src="./admin.js"></script>
 </body>

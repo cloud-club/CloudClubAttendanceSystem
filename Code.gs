@@ -9,9 +9,17 @@ const LATE_COLOR = '#fce5cd';
 const EXCUSED_COLOR = '#d9e2f3';
 const ABSENT_COLOR = '#f4cccc';
 
-const ADMIN_TOKEN_TTL_SECONDS = 6 * 60 * 60;
-const ADMIN_TOKEN_CACHE_PREFIX = 'admin_token_';
-const API_VERSION = '2026.02.19-v4.0';
+const ADMIN_SESSION_TTL_SECONDS = 6 * 60 * 60;
+const ADMIN_SESSION_CACHE_PREFIX = 'admin_session_';
+const ADMIN_SUPER_EMAIL = 'cloudclub2022@gmail.com';
+const ADMIN_ROLE_SUPER = 'super';
+const ADMIN_ROLE_SEASON_ADMIN = 'season_admin';
+const ADMINS_SHEET_NAME = '_admins';
+const ADMINS_SHEET_HEADERS = ['name', 'season', 'phone', 'email', 'role', 'is_active', 'created_at', 'updated_at'];
+const ADMIN_SEASON_SYNC_CACHE_KEY = 'admin_season_sync_latest_v1';
+const ADMIN_SEASON_SYNC_CACHE_TTL_SECONDS = 60;
+const GOOGLE_TOKENINFO_ENDPOINT = 'https://oauth2.googleapis.com/tokeninfo?id_token=';
+const API_VERSION = '2026.02.19-v5.0';
 const ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS = 90;
 const ATTENDANCE_DASHBOARD_CACHE_MAX_BYTES = 90000;
 
@@ -78,6 +86,14 @@ const MEMBER_FIELD_ORDER = [
 const SUPPORTED_API_ACTIONS = [
   'health',
   'apiInfo',
+  'authGoogleConfig',
+  'authGoogleLogin',
+  'authSession',
+  'authLogout',
+  'adminSeasonList',
+  'adminUsersList',
+  'adminUsersUpsert',
+  'adminUsersDelete',
   'session',
   'attendance',
   'status',
@@ -311,7 +327,7 @@ const VARIABLE_KEY_TAB_MAP = {
 /**
  * 웹앱 진입점
  * - api 파라미터가 있으면 JSONP API 라우팅
- * - 그 외에는 GitHub Pages로 리디렉션 (미설정 시 레거시 HTML fallback)
+ * - 그 외에는 GitHub Pages로 리디렉션
  */
 function doGet(e) {
   const params = (e && e.parameter) ? e.parameter : {};
@@ -324,29 +340,38 @@ function doGet(e) {
   const seasonAlias = toSeasonAlias(params.season || '');
 
   if (mode === 'student') {
-    const studentBase = getFrontendStudentBaseUrl();
-    if (isFrontendUrlConfigured(studentBase)) {
+    try {
       const studentUrl = generateStudentQRCodeUrl(seasonAlias || params.season || '');
       return createRedirectOutput(studentUrl);
+    } catch (error) {
+      return createMessageOutput('학생 페이지 URL 미설정', error.message || 'FRONTEND_STUDENT_BASE_URL을 설정하세요.');
     }
-
-    // fallback: 레거시 학생 인터페이스
-    const template = HtmlService.createTemplateFromFile('StudentInterface');
-    template.season = seasonAlias;
-    return template.evaluate()
-      .setTitle('출석체크')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
-  const adminUrl = getFrontendAdminUrl();
-  if (isFrontendUrlConfigured(adminUrl)) {
+  const adminUrl = getAdminAccessUrl();
+  if (adminUrl) {
     return createRedirectOutput(adminUrl);
   }
 
-  // fallback: 레거시 관리자 인터페이스
-  return HtmlService.createHtmlOutputFromFile('AdminInterface')
+  return createMessageOutput('관리자 페이지 URL 미설정', 'FRONTEND_ADMIN_BASE_URL을 설정하세요.')
     .setTitle('Cloud Club 출석체크 관리자')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function createMessageOutput(title, message) {
+  const html = [
+    '<!DOCTYPE html>',
+    '<html><head>',
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '</head><body style="font-family:Arial,sans-serif;padding:24px;line-height:1.6;">',
+    `<h2 style="margin-top:0;">${escapeHtmlAttr(title || '알림')}</h2>`,
+    `<p>${escapeHtmlAttr(message || '')}</p>`,
+    '</body></html>'
+  ].join('');
+
+  return HtmlService.createHtmlOutput(html)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -390,6 +415,16 @@ function handleApiRequest(params) {
     }
 
     let data;
+    let adminContext = null;
+    const ensureAdmin = () => {
+      if (!adminContext) {
+        adminContext = requireAdmin(params);
+      }
+      return adminContext;
+    };
+    const ensureSuper = () => requireSuperAdmin(ensureAdmin());
+    const ensureSeasonAlias = (seasonInput) => requireSeasonAccess(ensureAdmin(), seasonInput);
+
     switch (action) {
       case 'health':
         data = {
@@ -401,6 +436,49 @@ function handleApiRequest(params) {
 
       case 'apiInfo':
         data = getApiInfo();
+        break;
+
+      case 'authGoogleConfig':
+        data = getAuthGoogleConfig();
+        break;
+
+      case 'authGoogleLogin':
+        data = authGoogleLogin((params.idToken || params.credential || '').trim());
+        break;
+
+      case 'authSession': {
+        const ctx = ensureAdmin();
+        data = {
+          success: true,
+          authenticated: true,
+          user: ctx
+        };
+        break;
+      }
+
+      case 'authLogout': {
+        const token = String(params.adminToken || '').trim();
+        if (token) {
+          revokeAdminSession(token);
+        }
+        data = { success: true };
+        break;
+      }
+
+      case 'adminSeasonList':
+        data = getAdminSeasonList(ensureAdmin());
+        break;
+
+      case 'adminUsersList':
+        data = adminUsersList(ensureSuper());
+        break;
+
+      case 'adminUsersUpsert':
+        data = adminUsersUpsert(ensureSuper(), params);
+        break;
+
+      case 'adminUsersDelete':
+        data = adminUsersDelete(ensureSuper(), params);
         break;
 
       case 'session':
@@ -430,18 +508,14 @@ function handleApiRequest(params) {
         break;
 
       case 'attendanceDashboardSummary': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = getAttendanceDashboardSummary(params);
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getAttendanceDashboardSummary(Object.assign({}, params, { season: seasonAlias }));
         break;
       }
 
       case 'attendanceDashboardDrilldown': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = getAttendanceDashboardDrilldown(params);
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getAttendanceDashboardDrilldown(Object.assign({}, params, { season: seasonAlias }));
         break;
       }
 
@@ -450,32 +524,25 @@ function handleApiRequest(params) {
         break;
 
       case 'setActiveSheet': {
-        const token = (params.adminToken || '').trim();
-        if (!verifyAdminToken(token)) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-
+        ensureSuper();
         const sheetName = (params.sheet || '').trim();
         if (!sheetName) {
           return jsonp(callback, apiError('INVALID_SHEET', 'sheet 파라미터가 필요합니다.'));
         }
-
         data = setActiveSheet(sheetName);
         break;
       }
 
-      case 'verifyAdminKey': {
-        const adminKey = (params.adminKey || '').trim();
-        data = verifyAdminKey(adminKey);
+      case 'verifyAdminKey':
+        data = verifyAdminKey((params.adminKey || '').trim());
         break;
-      }
 
       case 'studentUrl': {
-        const season = (params.season || '').trim();
-        if (!season) {
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        if (!seasonAlias) {
           return jsonp(callback, apiError('INVALID_SEASON', 'season 파라미터가 필요합니다.'));
         }
-        data = { url: generateStudentQRCodeUrl(season) };
+        data = { url: generateStudentQRCodeUrl(seasonAlias) };
         break;
       }
 
@@ -484,158 +551,111 @@ function handleApiRequest(params) {
         break;
 
       case 'sheetLink': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = getSheetLink(params.season || '');
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getSheetLink(seasonAlias);
         break;
       }
 
-      case 'variablesGet': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'variablesGet':
+        ensureSuper();
         data = getVariablesPayload();
         break;
-      }
 
       case 'variablesUpdate': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-
+        ensureSuper();
         const items = parseItemsJson(params.itemsJson || params.items || '[]');
         data = updateVariables(items);
         break;
       }
 
-      case 'variablesNormalize': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'variablesNormalize':
+        ensureSuper();
         data = normalizeVariablesPayload();
         break;
-      }
 
-      case 'variablesResetTemplate': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'variablesResetTemplate':
+        ensureSuper();
         data = resetVariablesTemplate(params.mode || 'preserve');
         break;
-      }
 
       case 'scheduleList': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = getScheduleList(params.season || '');
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getScheduleList(seasonAlias);
         break;
       }
 
       case 'scheduleSave': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = saveSchedule(params);
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = saveSchedule(Object.assign({}, params, { season: seasonAlias }));
         break;
       }
 
       case 'scheduleDelete': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = deleteSchedule(params);
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = deleteSchedule(Object.assign({}, params, { season: seasonAlias }));
         break;
       }
 
       case 'members': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = getMembers(params.season || '');
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getMembers(seasonAlias);
         break;
       }
 
       case 'manualApprove': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = manualApproveAttendance(params);
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = manualApproveAttendance(Object.assign({}, params, { season: seasonAlias }));
         break;
       }
 
       case 'manualApproveBatch': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = manualApproveBatchAttendance(params);
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = manualApproveBatchAttendance(Object.assign({}, params, { season: seasonAlias }));
         break;
       }
 
       case 'excusedSet': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = setExcusedAttendance(params);
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = setExcusedAttendance(Object.assign({}, params, { season: seasonAlias }));
         break;
       }
 
       case 'graduationReport': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = getGraduationReport(params.season || '');
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getGraduationReport(seasonAlias);
         break;
       }
 
       case 'sheetSchemaAudit': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
-        data = getSheetSchemaAudit(params.season || '');
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getSheetSchemaAudit(seasonAlias);
         break;
       }
 
-      case 'seasonImportBegin': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'seasonImportBegin':
+        ensureSuper();
         data = beginSeasonImport(params);
         break;
-      }
 
-      case 'seasonImportChunk': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'seasonImportChunk':
+        ensureSuper();
         data = importSeasonChunk(params);
         break;
-      }
 
-      case 'seasonImportDiff': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'seasonImportDiff':
+        ensureSuper();
         data = getSeasonImportDiff(params);
         break;
-      }
 
-      case 'seasonImportFinalize': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'seasonImportFinalize':
+        ensureSuper();
         data = finalizeSeasonImport(params);
         break;
-      }
 
-      case 'seasonImportAbort': {
-        if (!verifyAdminToken((params.adminToken || '').trim())) {
-          return jsonp(callback, apiError('UNAUTHORIZED', '관리자 인증이 필요합니다.'));
-        }
+      case 'seasonImportAbort':
+        ensureSuper();
         data = abortSeasonImport(params);
         break;
-      }
 
       default:
         return jsonp(callback, apiError('UNSUPPORTED_ACTION', `지원하지 않는 api입니다: ${action}`));
@@ -643,6 +663,9 @@ function handleApiRequest(params) {
 
     return jsonp(callback, apiSuccess(data));
   } catch (error) {
+    if (error && error.apiCode) {
+      return jsonp(callback, apiError(error.apiCode, error.message || '요청 처리 중 오류가 발생했습니다.'));
+    }
     Logger.log('API 오류: ' + error.toString());
     Logger.log(error.stack || '');
     return jsonp(callback, apiError('INTERNAL_ERROR', error.message || '내부 오류가 발생했습니다.'));
@@ -714,56 +737,794 @@ function getApiInfo() {
 }
 
 function verifyAdminKey(adminKey) {
-  if (!adminKey) {
-    return {
-      success: false,
-      message: '관리자 키를 입력해주세요.'
-    };
-  }
-
-  const scriptProperties = PropertiesService.getScriptProperties();
-  const storedHash = (scriptProperties.getProperty('ADMIN_KEY_HASH') || '').trim().toLowerCase();
-
-  if (!storedHash) {
-    return {
-      success: false,
-      message: 'ADMIN_KEY_HASH가 설정되지 않았습니다. Apps Script Script properties를 확인하세요.'
-    };
-  }
-
-  const inputHash = sha256Hex(adminKey);
-  if (inputHash !== storedHash) {
-    return {
-      success: false,
-      message: '관리자 키가 올바르지 않습니다.'
-    };
-  }
-
-  const token = issueAdminToken();
   return {
-    success: true,
-    token: token,
-    expiresInSeconds: ADMIN_TOKEN_TTL_SECONDS
+    success: false,
+    code: 'PASSWORD_LOGIN_DISABLED',
+    message: '비밀번호 로그인은 비활성화되었습니다. Google 로그인만 사용할 수 있습니다.'
   };
 }
 
-function issueAdminToken() {
-  const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+function createApiException(code, message) {
+  const err = new Error(message || '요청 처리 중 오류가 발생했습니다.');
+  err.apiCode = String(code || 'INTERNAL_ERROR');
+  return err;
+}
+
+function throwApiException(code, message) {
+  throw createApiException(code, message);
+}
+
+function getGoogleOAuthClientId() {
+  const raw = PropertiesService.getScriptProperties().getProperty('GOOGLE_OAUTH_CLIENT_ID');
+  return String(raw || '').trim();
+}
+
+function normalizeAdminEmail(value) {
+  return normalizeImportEmail(value || '');
+}
+
+function isAllowedAdminEmail(email) {
+  const normalized = normalizeAdminEmail(email);
+  if (!isValidImportEmail(normalized)) return false;
+  return /@(gmail\.com|googlemail\.com)$/i.test(normalized);
+}
+
+function toSeasonAliasFromNumber(seasonNo) {
+  const parsed = normalizeSeasonNumber(seasonNo);
+  if (isNaN(parsed)) return '';
+  return `season_${String(parsed).padStart(2, '0')}`;
+}
+
+function normalizeAdminRole(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === ADMIN_ROLE_SUPER) return ADMIN_ROLE_SUPER;
+  return ADMIN_ROLE_SEASON_ADMIN;
+}
+
+function getAdminsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(ADMINS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(ADMINS_SHEET_NAME, ss.getNumSheets() + 1);
+    sheet.getRange(1, 1, 1, ADMINS_SHEET_HEADERS.length).setValues([ADMINS_SHEET_HEADERS]);
+    sheet.hideSheet();
+    return sheet;
+  }
+
+  const lastCol = Math.max(sheet.getLastColumn(), ADMINS_SHEET_HEADERS.length);
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+  const normalized = ADMINS_SHEET_HEADERS.map((header, idx) => {
+    const existing = String(headers[idx] || '').trim();
+    return existing || header;
+  });
+  sheet.getRange(1, 1, 1, normalized.length).setValues([normalized]);
+  if (!sheet.isSheetHidden()) {
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+function getAdminRecords() {
+  const sheet = getAdminsSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, ADMINS_SHEET_HEADERS.length).getValues();
+  const records = [];
+
+  rows.forEach((row, idx) => {
+    const email = normalizeAdminEmail(row[3]);
+    if (!email) return;
+
+    const role = normalizeAdminRole(row[4]);
+    const seasonNo = normalizeSeasonNumber(row[1]);
+    const isActiveParsed = parseBooleanLikeValue(row[5]);
+    const isActive = isActiveParsed.value === null ? true : !!isActiveParsed.value;
+
+    records.push({
+      rowIndex: idx + 2,
+      name: String(row[0] || '').trim(),
+      season: role === ADMIN_ROLE_SUPER ? null : (isNaN(seasonNo) ? null : seasonNo),
+      phone: normalizePhone(row[2]),
+      email: email,
+      role: role,
+      isActive: isActive,
+      createdAt: String(row[6] || '').trim(),
+      updatedAt: String(row[7] || '').trim()
+    });
+  });
+
+  return records;
+}
+
+function parseSeasonNoFromAlias(alias) {
+  const normalizedAlias = toSeasonAlias(alias || '');
+  if (!normalizedAlias) return NaN;
+
+  const parts = normalizedAlias.split('_');
+  if (parts.length !== 2) return NaN;
+  const parsed = parseInt(parts[1], 10);
+  return isNaN(parsed) ? NaN : parsed;
+}
+
+function getLatestSeasonSheetCandidate() {
+  const candidates = getSeasonSheetCandidates();
+  if (!candidates || candidates.length === 0) {
+    return null;
+  }
+  return candidates[0];
+}
+
+function collectLatestSeasonStaffAdminCandidates() {
+  const latest = getLatestSeasonSheetCandidate();
+  if (!latest || !latest.sheet) {
+    return {
+      seasonAlias: '',
+      seasonNo: null,
+      items: [],
+      map: {}
+    };
+  }
+
+  const seasonAlias = toSeasonAlias(latest.alias || latest.name || '');
+  let seasonNo = latest.seasonNo;
+  if (isNaN(seasonNo) || seasonNo < 1) {
+    seasonNo = parseSeasonNoFromAlias(seasonAlias);
+  }
+
+  const values = latest.sheet.getDataRange().getValues();
+  if (!values || values.length < 2) {
+    return {
+      seasonAlias: seasonAlias,
+      seasonNo: isNaN(seasonNo) ? null : seasonNo,
+      items: [],
+      map: {}
+    };
+  }
+
+  const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+  const map = {};
+  const items = [];
+
+  for (let i = 1; i < values.length; i++) {
+    const member = readMemberFromRow(values[i], memberSchema);
+    if (!member || member.isStaff !== true) continue;
+
+    const email = normalizeAdminEmail(member.email || '');
+    if (!email || !isAllowedAdminEmail(email)) continue;
+    if (map[email]) continue;
+
+    const item = {
+      email: email,
+      name: String(member.name || '').trim(),
+      phone: normalizePhone(member.phone),
+      seasonNo: isNaN(seasonNo) ? null : seasonNo,
+      seasonAlias: seasonAlias,
+      sourceRowIndex: i + 1
+    };
+
+    map[email] = item;
+    items.push(item);
+  }
+
+  return {
+    seasonAlias: seasonAlias,
+    seasonNo: isNaN(seasonNo) ? null : seasonNo,
+    items: items,
+    map: map
+  };
+}
+
+function syncSeasonAdminsFromLatestSeason(options) {
+  const opts = options || {};
+  const force = opts.force === true;
+  const source = String(opts.source || '').trim();
   const cache = CacheService.getScriptCache();
-  cache.put(ADMIN_TOKEN_CACHE_PREFIX + token, '1', ADMIN_TOKEN_TTL_SECONDS);
+
+  if (!force && cache.get(ADMIN_SEASON_SYNC_CACHE_KEY) === '1') {
+    return {
+      success: true,
+      skipped: true,
+      reason: 'cache',
+      source: source
+    };
+  }
+
+  const lock = LockService.getDocumentLock();
+  let locked = false;
+
+  try {
+    lock.waitLock(5000);
+    locked = true;
+
+    if (!force && cache.get(ADMIN_SEASON_SYNC_CACHE_KEY) === '1') {
+      return {
+        success: true,
+        skipped: true,
+        reason: 'cache_after_lock',
+        source: source
+      };
+    }
+
+    const candidatePack = collectLatestSeasonStaffAdminCandidates();
+    const latestMap = candidatePack.map || {};
+    const latestItems = candidatePack.items || [];
+    const latestSeasonNo = normalizeSeasonNumber(candidatePack.seasonNo);
+    const latestSeasonAlias = String(candidatePack.seasonAlias || '').trim();
+
+    if (!latestSeasonAlias || isNaN(latestSeasonNo)) {
+      return {
+        success: false,
+        skipped: true,
+        source: source,
+        reason: 'latest_season_unavailable',
+        message: '최신 시즌 시트를 식별하지 못해 season_admin 자동 동기화를 건너뜁니다.'
+      };
+    }
+
+    const sheet = getAdminsSheet();
+    const records = getAdminRecords();
+    const nowText = formatDateTime(new Date());
+    const existingEmailMap = {};
+
+    let updatedCount = 0;
+    let insertedCount = 0;
+    let deactivatedCount = 0;
+    let unchangedCount = 0;
+    let manualInactiveKeptCount = 0;
+
+    records.forEach(record => {
+      if (!record || !record.email) return;
+
+      existingEmailMap[record.email] = true;
+      if (record.role !== ADMIN_ROLE_SEASON_ADMIN) return;
+
+      const candidate = latestMap[record.email] || null;
+      const currentName = String(record.name || '').trim();
+      const currentPhone = normalizePhone(record.phone);
+      const currentSeasonNo = normalizeSeasonNumber(record.season);
+      const currentSeasonCell = isNaN(currentSeasonNo) ? '' : currentSeasonNo;
+      const currentActive = !!record.isActive;
+
+      const nextName = candidate ? String(candidate.name || currentName).trim() : currentName;
+      const nextPhone = candidate ? normalizePhone(candidate.phone) : currentPhone;
+      let nextSeasonCell = currentSeasonCell;
+
+      if (candidate && !isNaN(latestSeasonNo)) {
+        nextSeasonCell = latestSeasonNo;
+      }
+
+      let nextActive = false;
+      if (candidate) {
+        // 수동 비활성(is_active=false)은 자동으로 복구하지 않는다.
+        nextActive = currentActive === false ? false : true;
+        if (currentActive === false) {
+          manualInactiveKeptCount++;
+        }
+      } else {
+        nextActive = false;
+        if (currentActive) {
+          deactivatedCount++;
+        }
+      }
+
+      const createdAt = String(record.createdAt || nowText).trim() || nowText;
+      const seasonChanged = String(nextSeasonCell) !== String(currentSeasonCell);
+      const changed = (
+        nextName !== currentName ||
+        nextPhone !== currentPhone ||
+        seasonChanged ||
+        nextActive !== currentActive
+      );
+
+      if (!changed) {
+        unchangedCount++;
+        return;
+      }
+
+      const rowValues = [
+        nextName,
+        nextSeasonCell,
+        nextPhone,
+        record.email,
+        ADMIN_ROLE_SEASON_ADMIN,
+        nextActive,
+        createdAt,
+        nowText
+      ];
+
+      sheet.getRange(record.rowIndex, 1, 1, ADMINS_SHEET_HEADERS.length).setValues([rowValues]);
+      updatedCount++;
+    });
+
+    latestItems.forEach(candidate => {
+      if (!candidate || !candidate.email) return;
+      if (existingEmailMap[candidate.email]) return;
+      if (isNaN(latestSeasonNo)) return;
+
+      const rowValues = [
+        String(candidate.name || '').trim(),
+        latestSeasonNo,
+        normalizePhone(candidate.phone),
+        candidate.email,
+        ADMIN_ROLE_SEASON_ADMIN,
+        true,
+        nowText,
+        nowText
+      ];
+
+      const nextRow = sheet.getLastRow() + 1;
+      sheet.getRange(nextRow, 1, 1, ADMINS_SHEET_HEADERS.length).setValues([rowValues]);
+      insertedCount++;
+    });
+
+    cache.put(ADMIN_SEASON_SYNC_CACHE_KEY, '1', ADMIN_SEASON_SYNC_CACHE_TTL_SECONDS);
+
+    return {
+      success: true,
+      skipped: false,
+      source: source,
+      seasonAlias: String(candidatePack.seasonAlias || ''),
+      seasonNo: isNaN(latestSeasonNo) ? null : latestSeasonNo,
+      candidateCount: latestItems.length,
+      updatedCount: updatedCount,
+      insertedCount: insertedCount,
+      deactivatedCount: deactivatedCount,
+      manualInactiveKeptCount: manualInactiveKeptCount,
+      unchangedCount: unchangedCount
+    };
+  } catch (error) {
+    Logger.log('season_admin 자동 동기화 오류: ' + error.toString());
+    Logger.log(error.stack || '');
+    return {
+      success: false,
+      skipped: true,
+      source: source,
+      message: error.message || 'season_admin 동기화 중 오류가 발생했습니다.'
+    };
+  } finally {
+    if (locked) {
+      lock.releaseLock();
+    }
+  }
+}
+
+function sanitizeAdminContext(input) {
+  const base = input || {};
+  const normalizedEmail = normalizeAdminEmail(base.email || '');
+  const role = normalizeAdminRole(base.role || ADMIN_ROLE_SEASON_ADMIN);
+  const seasonNo = normalizeSeasonNumber(base.season);
+  const normalizedSeason = role === ADMIN_ROLE_SUPER ? null : (isNaN(seasonNo) ? null : seasonNo);
+  const seasonAlias = normalizedSeason === null ? '' : toSeasonAliasFromNumber(normalizedSeason);
+
+  return {
+    email: normalizedEmail,
+    name: String(base.name || '').trim(),
+    phone: normalizePhone(base.phone),
+    role: role,
+    season: normalizedSeason,
+    seasonAlias: seasonAlias,
+    isActive: base.isActive !== false,
+    isSuperFixed: !!base.isSuperFixed
+  };
+}
+
+function buildAdminContextByEmail(email) {
+  const normalizedEmail = normalizeAdminEmail(email);
+  if (!normalizedEmail || !isAllowedAdminEmail(normalizedEmail)) {
+    return null;
+  }
+
+  if (normalizedEmail === ADMIN_SUPER_EMAIL) {
+    return sanitizeAdminContext({
+      email: normalizedEmail,
+      name: 'CloudClub Super Admin',
+      phone: '',
+      role: ADMIN_ROLE_SUPER,
+      season: null,
+      isActive: true,
+      isSuperFixed: true
+    });
+  }
+
+  const records = getAdminRecords();
+  const record = records.find(item => item.email === normalizedEmail);
+  if (!record || !record.isActive) return null;
+
+  if (record.role === ADMIN_ROLE_SEASON_ADMIN && record.season === null) {
+    return null;
+  }
+
+  return sanitizeAdminContext(record);
+}
+
+function validateGoogleIdToken(idToken) {
+  const token = String(idToken || '').trim();
+  if (!token) {
+    throwApiException('UNAUTHORIZED', 'Google ID token이 필요합니다.');
+  }
+
+  const clientId = getGoogleOAuthClientId();
+  if (!clientId) {
+    throwApiException('INTERNAL_ERROR', 'GOOGLE_OAUTH_CLIENT_ID가 설정되지 않았습니다.');
+  }
+
+  const response = UrlFetchApp.fetch(
+    GOOGLE_TOKENINFO_ENDPOINT + encodeURIComponent(token),
+    { method: 'get', muteHttpExceptions: true }
+  );
+  const statusCode = response.getResponseCode();
+  if (statusCode !== 200) {
+    throwApiException('UNAUTHORIZED', 'Google ID token 검증에 실패했습니다.');
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(response.getContentText() || '{}');
+  } catch (error) {
+    throwApiException('UNAUTHORIZED', 'Google ID token 응답이 올바르지 않습니다.');
+  }
+
+  const aud = String(payload.aud || '').trim();
+  const iss = String(payload.iss || '').trim();
+  const exp = Number(payload.exp || 0);
+  const email = normalizeAdminEmail(payload.email || '');
+  const emailVerified = String(payload.email_verified || '').toLowerCase() === 'true';
+
+  if (aud !== clientId) {
+    throwApiException('UNAUTHORIZED', 'Google OAuth clientId가 일치하지 않습니다.');
+  }
+
+  if (!(iss === 'https://accounts.google.com' || iss === 'accounts.google.com')) {
+    throwApiException('UNAUTHORIZED', 'Google 발급 토큰이 아닙니다.');
+  }
+
+  if (!exp || Date.now() >= exp * 1000) {
+    throwApiException('UNAUTHORIZED', '만료된 Google 토큰입니다.');
+  }
+
+  if (!emailVerified || !isAllowedAdminEmail(email)) {
+    throwApiException('UNAUTHORIZED', '허용되지 않은 Google 계정입니다.');
+  }
+
+  return {
+    sub: String(payload.sub || '').trim(),
+    email: email,
+    name: String(payload.name || '').trim(),
+    picture: String(payload.picture || '').trim()
+  };
+}
+
+function issueAdminSession(context) {
+  const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  const normalized = sanitizeAdminContext(context);
+  const cache = CacheService.getScriptCache();
+  cache.put(
+    ADMIN_SESSION_CACHE_PREFIX + token,
+    JSON.stringify(normalized),
+    ADMIN_SESSION_TTL_SECONDS
+  );
   return token;
 }
 
-function verifyAdminToken(token) {
-  if (!token) return false;
-  const cache = CacheService.getScriptCache();
-  const key = ADMIN_TOKEN_CACHE_PREFIX + token;
-  const hit = cache.get(key);
-  if (hit !== '1') return false;
+function verifyAdminSession(token) {
+  const rawToken = String(token || '').trim();
+  if (!rawToken) return null;
 
-  // active 토큰은 만료 시간을 갱신
-  cache.put(key, '1', ADMIN_TOKEN_TTL_SECONDS);
-  return true;
+  const cache = CacheService.getScriptCache();
+  const key = ADMIN_SESSION_CACHE_PREFIX + rawToken;
+  const raw = cache.get(key);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const normalized = sanitizeAdminContext(parsed);
+    cache.put(key, JSON.stringify(normalized), ADMIN_SESSION_TTL_SECONDS);
+    return normalized;
+  } catch (error) {
+    return null;
+  }
+}
+
+function revokeAdminSession(token) {
+  const rawToken = String(token || '').trim();
+  if (!rawToken) return;
+  CacheService.getScriptCache().remove(ADMIN_SESSION_CACHE_PREFIX + rawToken);
+}
+
+function verifyAdminToken(token) {
+  return !!verifyAdminSession(token);
+}
+
+function requireAdmin(params) {
+  const token = String((params && params.adminToken) || '').trim();
+  if (!token) {
+    throwApiException('UNAUTHORIZED', '관리자 인증이 필요합니다.');
+  }
+
+  const sessionContext = verifyAdminSession(token);
+  if (!sessionContext || !sessionContext.email) {
+    throwApiException('UNAUTHORIZED', '관리자 세션이 유효하지 않습니다.');
+  }
+
+  // 관리자 API 재검증 시 최신 시즌 운영진 동기화를 주기적으로 반영한다.
+  syncSeasonAdminsFromLatestSeason({
+    force: false,
+    source: 'requireAdmin'
+  });
+
+  const latestContext = buildAdminContextByEmail(sessionContext.email);
+  if (!latestContext || !latestContext.isActive) {
+    revokeAdminSession(token);
+    throwApiException('UNAUTHORIZED', '관리자 계정 권한이 없습니다.');
+  }
+
+  // 최신 관리자 정보를 기준으로 세션 컨텍스트를 갱신한다.
+  CacheService.getScriptCache().put(
+    ADMIN_SESSION_CACHE_PREFIX + token,
+    JSON.stringify(latestContext),
+    ADMIN_SESSION_TTL_SECONDS
+  );
+
+  return latestContext;
+}
+
+function requireSuperAdmin(adminContext) {
+  const ctx = sanitizeAdminContext(adminContext || {});
+  if (ctx.role !== ADMIN_ROLE_SUPER) {
+    throwApiException('FORBIDDEN', 'Super Admin 권한이 필요합니다.');
+  }
+  return ctx;
+}
+
+function requireSeasonAccess(adminContext, seasonInput) {
+  const ctx = sanitizeAdminContext(adminContext || {});
+  const requestedRaw = String(seasonInput || '').trim();
+  const requestedAlias = requestedRaw ? toSeasonAlias(requestedRaw) : '';
+
+  if (requestedRaw && !requestedAlias) {
+    throwApiException('INVALID_SEASON', '유효한 season 파라미터가 필요합니다. (예: season_07)');
+  }
+
+  if (ctx.role === ADMIN_ROLE_SUPER) {
+    return requestedAlias || '';
+  }
+
+  const ownAlias = ctx.seasonAlias || toSeasonAliasFromNumber(ctx.season);
+  if (!ownAlias) {
+    throwApiException('FORBIDDEN', '시즌 관리자 권한이 올바르지 않습니다.');
+  }
+
+  if (!requestedAlias) {
+    return ownAlias;
+  }
+
+  if (requestedAlias !== ownAlias) {
+    throwApiException('FORBIDDEN_SEASON', '해당 시즌 접근 권한이 없습니다.');
+  }
+
+  return ownAlias;
+}
+
+function getAuthGoogleConfig() {
+  const clientId = getGoogleOAuthClientId();
+  return {
+    success: !!clientId,
+    loginMode: 'google_only',
+    gmailOnly: true,
+    googleClientId: clientId,
+    message: clientId ? '' : 'GOOGLE_OAUTH_CLIENT_ID가 설정되지 않았습니다.'
+  };
+}
+
+function authGoogleLogin(idToken) {
+  // 로그인 직전 최신 시즌 운영진 기반 관리자 권한을 강제 동기화한다.
+  syncSeasonAdminsFromLatestSeason({
+    force: true,
+    source: 'authGoogleLogin'
+  });
+
+  const tokenPayload = validateGoogleIdToken(idToken);
+  const context = buildAdminContextByEmail(tokenPayload.email);
+  if (!context || !context.isActive) {
+    throwApiException('UNAUTHORIZED', '등록된 관리자 Gmail 계정만 로그인할 수 있습니다.');
+  }
+
+  const token = issueAdminSession(context);
+  return {
+    success: true,
+    token: token,
+    expiresInSeconds: ADMIN_SESSION_TTL_SECONDS,
+    user: context
+  };
+}
+
+function getAdminSeasonList(adminContext) {
+  const ctx = sanitizeAdminContext(adminContext || {});
+  const active = getActiveAttendanceSheetInfo();
+  const activeAlias = active ? active.seasonAlias : '';
+  const candidates = getSeasonSheetCandidates();
+  let list = candidates;
+
+  if (ctx.role !== ADMIN_ROLE_SUPER) {
+    const ownAlias = ctx.seasonAlias || toSeasonAliasFromNumber(ctx.season);
+    list = candidates.filter(item => item.alias === ownAlias);
+  }
+
+  return {
+    success: true,
+    role: ctx.role,
+    season: ctx.season,
+    seasonAlias: ctx.seasonAlias || toSeasonAliasFromNumber(ctx.season),
+    sheets: list.map(item => ({
+      name: item.name,
+      alias: item.alias,
+      isActive: item.alias === activeAlias,
+      isLegacy: item.isLegacy,
+      isSeason: true
+    }))
+  };
+}
+
+function parseAdminSeasonParam(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const alias = toSeasonAlias(raw);
+  if (alias) {
+    const parsed = parseInt(alias.split('_')[1], 10);
+    return isNaN(parsed) ? NaN : parsed;
+  }
+  const parsedNumber = normalizeSeasonNumber(raw);
+  return isNaN(parsedNumber) ? NaN : parsedNumber;
+}
+
+function adminUsersList(adminContext) {
+  const ctx = sanitizeAdminContext(adminContext || {});
+  requireSuperAdmin(ctx);
+
+  const rows = getAdminRecords()
+    .filter(item => item.email !== ADMIN_SUPER_EMAIL)
+    .sort((a, b) => {
+      if (a.role !== b.role) {
+        return a.role === ADMIN_ROLE_SUPER ? -1 : 1;
+      }
+      return String(a.email || '').localeCompare(String(b.email || ''));
+    });
+
+  const fixedSuper = sanitizeAdminContext({
+    email: ADMIN_SUPER_EMAIL,
+    name: 'CloudClub Super Admin',
+    role: ADMIN_ROLE_SUPER,
+    season: null,
+    phone: '',
+    isActive: true,
+    isSuperFixed: true
+  });
+
+  return {
+    success: true,
+    items: [fixedSuper].concat(rows.map(item => sanitizeAdminContext(item)))
+  };
+}
+
+function adminUsersUpsert(adminContext, params) {
+  const ctx = sanitizeAdminContext(adminContext || {});
+  requireSuperAdmin(ctx);
+
+  const email = normalizeAdminEmail(params.email || '');
+  if (!email || !isAllowedAdminEmail(email)) {
+    throwApiException('INVALID_EMAIL', 'Gmail 형식의 관리자 이메일이 필요합니다.');
+  }
+
+  if (email === ADMIN_SUPER_EMAIL) {
+    if (String(params.role || ADMIN_ROLE_SUPER).trim().toLowerCase() !== ADMIN_ROLE_SUPER) {
+      throwApiException('FORBIDDEN', '고정 Super Admin의 role은 변경할 수 없습니다.');
+    }
+    const requestedActive = parseBooleanLikeValue(params.isActive);
+    if (requestedActive.value === false) {
+      throwApiException('FORBIDDEN', '고정 Super Admin은 비활성화할 수 없습니다.');
+    }
+    return {
+      success: true,
+      message: '고정 Super Admin 정책이 유지됩니다.',
+      item: sanitizeAdminContext({
+        email: ADMIN_SUPER_EMAIL,
+        name: 'CloudClub Super Admin',
+        role: ADMIN_ROLE_SUPER,
+        season: null,
+        phone: '',
+        isActive: true,
+        isSuperFixed: true
+      })
+    };
+  }
+
+  const role = normalizeAdminRole(params.role || ADMIN_ROLE_SEASON_ADMIN);
+  const seasonNo = parseAdminSeasonParam(params.season);
+  if (role === ADMIN_ROLE_SEASON_ADMIN && (seasonNo === null || isNaN(seasonNo))) {
+    throwApiException('INVALID_SEASON', 'season_admin은 유효한 season 값을 가져야 합니다.');
+  }
+
+  const normalizedPhone = normalizePhone(params.phone);
+  const normalizedName = String(params.name || '').trim();
+  const activeParsed = parseBooleanLikeValue(params.isActive);
+  const isActive = activeParsed.value === null ? true : !!activeParsed.value;
+  const nowText = formatDateTime(new Date());
+
+  const sheet = getAdminsSheet();
+  const records = getAdminRecords();
+  const matched = records.filter(item => item.email === email);
+  if (matched.length > 1) {
+    throwApiException('CONFLICT_EMAIL', '동일 이메일이 _admins 시트에 중복되어 있습니다. 중복 행을 정리 후 다시 시도하세요.');
+  }
+  const existing = matched.length === 1 ? matched[0] : null;
+
+  const rowValues = [
+    normalizedName,
+    role === ADMIN_ROLE_SUPER ? '' : seasonNo,
+    normalizedPhone,
+    email,
+    role,
+    isActive,
+    existing ? String(existing.createdAt || nowText) : nowText,
+    nowText
+  ];
+
+  if (existing) {
+    sheet.getRange(existing.rowIndex, 1, 1, ADMINS_SHEET_HEADERS.length).setValues([rowValues]);
+  } else {
+    const nextRow = sheet.getLastRow() + 1;
+    sheet.getRange(nextRow, 1, 1, ADMINS_SHEET_HEADERS.length).setValues([rowValues]);
+  }
+
+  return {
+    success: true,
+    message: existing ? '관리자 정보가 수정되었습니다.' : '관리자가 추가되었습니다.',
+    item: sanitizeAdminContext({
+      name: normalizedName,
+      season: role === ADMIN_ROLE_SUPER ? null : seasonNo,
+      phone: normalizedPhone,
+      email: email,
+      role: role,
+      isActive: isActive,
+      isSuperFixed: false
+    })
+  };
+}
+
+function adminUsersDelete(adminContext, params) {
+  const ctx = sanitizeAdminContext(adminContext || {});
+  requireSuperAdmin(ctx);
+
+  const email = normalizeAdminEmail(params.email || '');
+  if (!email) {
+    throwApiException('INVALID_EMAIL', '삭제할 관리자 email 파라미터가 필요합니다.');
+  }
+
+  if (email === ADMIN_SUPER_EMAIL) {
+    throwApiException('FORBIDDEN', '고정 Super Admin은 삭제할 수 없습니다.');
+  }
+
+  const records = getAdminRecords();
+  const matched = records.filter(item => item.email === email);
+  if (matched.length > 1) {
+    throwApiException('CONFLICT_EMAIL', '동일 이메일이 _admins 시트에 중복되어 있습니다. 중복 행을 정리 후 다시 시도하세요.');
+  }
+  const found = matched.length === 1 ? matched[0] : null;
+  if (!found) {
+    return {
+      success: false,
+      message: '삭제 대상 관리자를 찾을 수 없습니다.'
+    };
+  }
+
+  const sheet = getAdminsSheet();
+  sheet.deleteRow(found.rowIndex);
+  return {
+    success: true,
+    message: '관리자가 삭제되었습니다.',
+    email: email
+  };
 }
 
 function sha256Hex(value) {
@@ -801,7 +1562,7 @@ function getAdminAccessUrl() {
     return configured;
   }
 
-  return ScriptApp.getService().getUrl() + '?mode=admin';
+  return '';
 }
 
 function toSeasonAlias(input) {
@@ -3082,13 +3843,12 @@ function generateStudentQRCodeUrl(seasonName) {
   }
 
   const studentBase = getFrontendStudentBaseUrl();
-  if (isFrontendUrlConfigured(studentBase)) {
-    const separator = studentBase.indexOf('?') === -1 ? '?' : '&';
-    return `${studentBase}${separator}season=${encodeURIComponent(alias || '')}`;
+  if (!isFrontendUrlConfigured(studentBase)) {
+    throw new Error('FRONTEND_STUDENT_BASE_URL이 설정되지 않았습니다.');
   }
 
-  const baseUrl = ScriptApp.getService().getUrl();
-  return `${baseUrl}?mode=student&season=${encodeURIComponent(alias || '')}`;
+  const separator = studentBase.indexOf('?') === -1 ? '?' : '&';
+  return `${studentBase}${separator}season=${encodeURIComponent(alias || '')}`;
 }
 
 /**

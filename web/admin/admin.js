@@ -2,8 +2,14 @@ let countdownInterval;
 let isAttendanceActive = false;
 let currentSeasonUrl = '';
 let adminToken = '';
+let currentAdminUser = null;
 let currentSheetName = '';
 let currentSeasonAlias = '';
+let dashboardInitialized = false;
+let authFlowLocked = false;
+let googleClientId = '';
+let adminUsersCache = [];
+let adminUsersEditingEmail = '';
 let scheduleItems = [];
 let membersCache = [];
 let variableItems = [];
@@ -72,6 +78,14 @@ let attendanceDashboardState = {
 };
 
 const ATTENDANCE_DASHBOARD_STORAGE_KEY = 'cc_admin_attendance_dashboard_v2';
+const ADMIN_TOKEN_STORAGE_KEY = 'cc_admin_token';
+const ADMIN_ROLE_SUPER = 'super';
+const ADMIN_ROLE_SEASON_ADMIN = 'season_admin';
+const SUPER_ONLY_TABS = {
+  variables: true,
+  seasonImport: true,
+  adminUsers: true
+};
 const ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION = 5;
 const ATTENDANCE_DASHBOARD_STATUS_LABELS = {
   on_time: '출석',
@@ -173,6 +187,126 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function getCurrentAdminRole() {
+  return String((currentAdminUser && currentAdminUser.role) || '').trim().toLowerCase();
+}
+
+function isSuperAdminUser(user) {
+  return String((user && user.role) || '').trim().toLowerCase() === ADMIN_ROLE_SUPER;
+}
+
+function isSuperAdmin() {
+  return isSuperAdminUser(currentAdminUser);
+}
+
+function getTabButtonByName(tabName) {
+  return Array.from(document.querySelectorAll('.tab-button'))
+    .find(btn => btn.getAttribute('onclick') && btn.getAttribute('onclick').indexOf(`openTab('${tabName}'`) >= 0);
+}
+
+function setAuthGateMessage(message, isError) {
+  const node = document.getElementById('authGateMessage');
+  if (!node) return;
+  node.textContent = message || '';
+  node.classList.toggle('error', !!isError);
+}
+
+function showAuthGate() {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('adminApp');
+  if (gate) gate.classList.remove('is-hidden');
+  if (app) app.classList.add('is-hidden');
+}
+
+function showAdminApp() {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('adminApp');
+  if (gate) gate.classList.add('is-hidden');
+  if (app) app.classList.remove('is-hidden');
+}
+
+function updateAdminSessionBar() {
+  const nameNode = document.getElementById('adminSessionName');
+  const emailNode = document.getElementById('adminSessionEmail');
+  const roleNode = document.getElementById('adminSessionRole');
+  const seasonNode = document.getElementById('adminSessionSeason');
+  const user = currentAdminUser || {};
+  const role = getCurrentAdminRole() || ADMIN_ROLE_SEASON_ADMIN;
+  const seasonAlias = String(user.seasonAlias || '').trim();
+  const seasonValue = role === ADMIN_ROLE_SUPER ? 'all_seasons' : (seasonAlias || 'season_unknown');
+
+  if (nameNode) {
+    const safeName = String(user.name || '').trim();
+    nameNode.textContent = safeName || '관리자';
+  }
+  if (emailNode) {
+    emailNode.textContent = String(user.email || '-');
+  }
+  if (roleNode) {
+    roleNode.textContent = role;
+  }
+  if (seasonNode) {
+    seasonNode.textContent = seasonValue;
+  }
+}
+
+function updateRoleBasedUi() {
+  const isSuper = isSuperAdmin();
+
+  document.querySelectorAll('[data-super-only="true"]').forEach(node => {
+    node.classList.toggle('is-hidden', !isSuper);
+  });
+
+  Object.keys(SUPER_ONLY_TABS).forEach(tabName => {
+    const panel = document.getElementById(tabName);
+    if (panel) {
+      panel.classList.toggle('is-hidden', !isSuper);
+    }
+  });
+
+  const seasonSelect = document.getElementById('sheetSelect');
+  if (seasonSelect) {
+    seasonSelect.disabled = !isSuper;
+  }
+}
+
+function redirectToFirstAllowedTab() {
+  const activeTab = getActiveTabName();
+  if (SUPER_ONLY_TABS[activeTab] && !isSuperAdmin()) {
+    const fallbackButton = getTabButtonByName('attend');
+    if (fallbackButton) {
+      openTab('attend', { currentTarget: fallbackButton });
+    }
+  }
+}
+
+function resetAdminAuthState(options) {
+  const opts = options || {};
+  adminToken = '';
+  currentAdminUser = null;
+  adminUsersCache = [];
+  adminUsersEditingEmail = '';
+  sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+  showAuthGate();
+  updateRoleBasedUi();
+
+  if (!opts.silent) {
+    setAuthGateMessage(opts.message || '관리자 인증이 필요합니다. Google 로그인 후 다시 시도해주세요.', !!opts.isError);
+  }
+}
+
+function setAdminAuthState(token, user) {
+  adminToken = String(token || '').trim();
+  currentAdminUser = user || null;
+  if (adminToken) {
+    sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
+  } else {
+    sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+  }
+  updateAdminSessionBar();
+  updateRoleBasedUi();
 }
 
 function formatDateTimeFromMs(ms) {
@@ -2525,89 +2659,178 @@ function createConfetti() {
 
 function handleUnauthorizedError(error) {
   if (error && error.code === 'UNAUTHORIZED') {
-    sessionStorage.removeItem('cc_admin_token');
-    alert('관리자 인증이 만료되었습니다. 페이지를 새로고침 후 다시 인증해주세요.');
+    resetAdminAuthState({
+      message: '관리자 인증이 만료되었습니다. 등록된 Gmail 계정으로 다시 로그인해주세요.',
+      isError: true
+    });
+    renderGoogleLoginButton().catch((renderError) => {
+      console.error('Google 로그인 버튼 재초기화 실패:', renderError);
+    });
     return true;
   }
 
   return false;
 }
 
-async function ensureAdminAccess() {
-  const cachedToken = sessionStorage.getItem('cc_admin_token');
-  if (cachedToken) {
-    adminToken = cachedToken;
+async function waitForGoogleIdentityClient(timeoutMs) {
+  const timeout = Math.max(2000, Number(timeoutMs || 10000));
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeout) {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      return true;
+    }
+    await new Promise(resolve => setTimeout(resolve, 120));
+  }
+
+  return false;
+}
+
+async function renderGoogleLoginButton() {
+  setAuthGateMessage('Google 로그인 설정을 확인하는 중입니다...');
+  const response = await CloudClubApi.call('authGoogleConfig');
+  const clientId = String((response && response.googleClientId) || '').trim();
+  if (!clientId) {
+    setAuthGateMessage('Google OAuth Client ID가 설정되지 않았습니다. 운영 환경 Script Properties를 확인해주세요.', true);
+    return;
+  }
+  googleClientId = clientId;
+
+  const loaded = await waitForGoogleIdentityClient(12000);
+  if (!loaded) {
+    setAuthGateMessage('Google 로그인 SDK를 불러오지 못했습니다. 브라우저 확장/네트워크 차단 여부를 확인해주세요.', true);
     return;
   }
 
-  await new Promise((resolve) => {
-    const backdrop = document.createElement('div');
-    backdrop.className = 'admin-key-modal-backdrop';
+  const loginContainer = document.getElementById('googleLoginButton');
+  if (!loginContainer) {
+    throw new Error('Google 로그인 버튼 컨테이너를 찾을 수 없습니다.');
+  }
 
-    backdrop.innerHTML = `
-      <div class="admin-key-modal">
-        <h3>관리자 인증</h3>
-        <p>관리자 키를 입력하세요.</p>
-        <input id="adminKeyInput" type="password" placeholder="관리자 키 입력" autocomplete="off" />
-        <div class="admin-key-modal-actions">
-          <button id="adminKeySubmitBtn" type="button">확인</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(backdrop);
-
-    const input = document.getElementById('adminKeyInput');
-    const submitButton = document.getElementById('adminKeySubmitBtn');
-
-    const submit = async () => {
-      const adminKey = input.value.trim();
-      if (!adminKey) {
-        alert('관리자 키를 입력해주세요.');
-        input.focus();
-        return;
-      }
-
-      submitButton.disabled = true;
-      submitButton.textContent = '검증 중...';
-
-      try {
-        const response = await CloudClubApi.call('verifyAdminKey', { adminKey });
-
-        if (!response.success || !response.token) {
-          alert(response.message || '관리자 인증에 실패했습니다.');
-          submitButton.disabled = false;
-          submitButton.textContent = '확인';
-          input.focus();
-          return;
-        }
-
-        adminToken = response.token;
-        sessionStorage.setItem('cc_admin_token', adminToken);
-        backdrop.remove();
-        resolve();
-      } catch (error) {
-        alert(getDisplayErrorMessage(error, '관리자 인증 중 오류가 발생했습니다.'));
-        console.error('관리자 인증 오류:', error);
-        submitButton.disabled = false;
-        submitButton.textContent = '확인';
-        input.focus();
-      }
-    };
-
-    submitButton.addEventListener('click', submit);
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        submit();
-      }
-    });
-
-    setTimeout(() => input.focus(), 0);
+  loginContainer.innerHTML = '';
+  window.google.accounts.id.initialize({
+    client_id: googleClientId,
+    callback: handleGoogleCredentialResponse,
+    auto_select: false,
+    cancel_on_tap_outside: true
   });
+  window.google.accounts.id.renderButton(loginContainer, {
+    theme: 'outline',
+    size: 'large',
+    text: 'signin_with',
+    shape: 'pill',
+    width: 320,
+    logo_alignment: 'left'
+  });
+
+  setAuthGateMessage('등록된 관리자 Gmail 계정으로 로그인하세요.');
+}
+
+async function handleGoogleCredentialResponse(googleResponse) {
+  if (authFlowLocked) return;
+  authFlowLocked = true;
+  const credential = String((googleResponse && googleResponse.credential) || '').trim();
+
+  if (!credential) {
+    setAuthGateMessage('Google 인증 토큰을 받지 못했습니다. 다시 시도해주세요.', true);
+    authFlowLocked = false;
+    return;
+  }
+
+  try {
+    setAuthGateMessage('Google 토큰을 검증하는 중입니다...');
+    const login = await CloudClubApi.call('authGoogleLogin', { idToken: credential });
+    if (!login || !login.success || !login.token || !login.user) {
+      throw new Error((login && login.message) || 'Google 로그인에 실패했습니다.');
+    }
+
+    setAdminAuthState(login.token, login.user);
+    showAdminApp();
+    await initializeDashboard();
+  } catch (error) {
+    console.error('Google 로그인 실패:', error);
+    resetAdminAuthState({
+      message: getDisplayErrorMessage(error, '등록된 관리자 Gmail 계정만 로그인할 수 있습니다.'),
+      isError: true
+    });
+  } finally {
+    authFlowLocked = false;
+  }
+}
+
+async function restoreAdminSession() {
+  const cachedToken = sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
+  if (!cachedToken) return false;
+
+  try {
+    const response = await CloudClubApi.call('authSession', { adminToken: cachedToken });
+    if (!response || !response.success || !response.authenticated || !response.user) {
+      sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      return false;
+    }
+
+    setAdminAuthState(cachedToken, response.user);
+    showAdminApp();
+    await initializeDashboard();
+    return true;
+  } catch (error) {
+    console.warn('세션 복구 실패:', error);
+    sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    return false;
+  }
+}
+
+async function logoutAdmin() {
+  const token = String(adminToken || '').trim();
+  if (token) {
+    try {
+      await CloudClubApi.call('authLogout', { adminToken: token });
+    } catch (error) {
+      console.warn('로그아웃 API 호출 실패:', error);
+    }
+  }
+  if (window.google && window.google.accounts && window.google.accounts.id) {
+    window.google.accounts.id.disableAutoSelect();
+  }
+
+  resetAdminAuthState({
+    message: '로그아웃되었습니다. Google 계정으로 다시 로그인하세요.',
+    isError: false
+  });
+  try {
+    await renderGoogleLoginButton();
+  } catch (error) {
+    console.error('로그아웃 후 로그인 버튼 초기화 실패:', error);
+  }
+}
+
+async function bootstrapAdminAuth() {
+  if (authFlowLocked) return;
+  authFlowLocked = true;
+  showAuthGate();
+  setAuthGateMessage('관리자 세션을 확인하는 중입니다...');
+
+  try {
+    const restored = await restoreAdminSession();
+    if (restored) {
+      return;
+    }
+    resetAdminAuthState({ silent: true });
+    await renderGoogleLoginButton();
+  } catch (error) {
+    console.error('인증 초기화 실패:', error);
+    setAuthGateMessage(getDisplayErrorMessage(error, '관리자 인증 초기화 중 오류가 발생했습니다.'), true);
+  } finally {
+    authFlowLocked = false;
+  }
 }
 
 async function initializeDashboard() {
-  await ensureAdminAccess();
+  if (!adminToken) {
+    throw new Error('관리자 세션 토큰이 없습니다.');
+  }
+
+  const firstInit = !dashboardInitialized;
 
   await Promise.all([
     loadAdminQrCode(),
@@ -2626,35 +2849,37 @@ async function initializeDashboard() {
     if (statusPhoneInput) statusPhoneInput.value = savedPhone;
   }
 
-  const scheduleSelect = document.getElementById('scheduleSessionSelect');
-  if (scheduleSelect) {
-    scheduleSelect.addEventListener('change', handleScheduleSelectionChange);
-  }
-  const scheduleDateInput = document.getElementById('scheduleDateInput');
-  const scheduleStartTimeInput = document.getElementById('scheduleStartTimeInput');
-  const scheduleEndInput = document.getElementById('scheduleEndInput');
-  if (scheduleDateInput) {
-    scheduleDateInput.addEventListener('change', updateSchedulePreview);
-  }
-  if (scheduleStartTimeInput) {
-    scheduleStartTimeInput.addEventListener('change', onScheduleStartTimeChanged);
-  }
-  if (scheduleEndInput) {
-    scheduleEndInput.addEventListener('input', () => {
-      scheduleEndAutoManaged = false;
-      updateSchedulePreview();
-    });
-  }
+  if (firstInit) {
+    const scheduleSelect = document.getElementById('scheduleSessionSelect');
+    if (scheduleSelect) {
+      scheduleSelect.addEventListener('change', handleScheduleSelectionChange);
+    }
+    const scheduleDateInput = document.getElementById('scheduleDateInput');
+    const scheduleStartTimeInput = document.getElementById('scheduleStartTimeInput');
+    const scheduleEndInput = document.getElementById('scheduleEndInput');
+    if (scheduleDateInput) {
+      scheduleDateInput.addEventListener('change', updateSchedulePreview);
+    }
+    if (scheduleStartTimeInput) {
+      scheduleStartTimeInput.addEventListener('change', onScheduleStartTimeChanged);
+    }
+    if (scheduleEndInput) {
+      scheduleEndInput.addEventListener('input', () => {
+        scheduleEndAutoManaged = false;
+        updateSchedulePreview();
+      });
+    }
 
-  const statusPhoneInput = document.getElementById('statusPhoneInput');
-  if (statusPhoneInput) {
-    statusPhoneInput.addEventListener('click', function () {
-      this.focus();
-    });
-  }
+    const statusPhoneInput = document.getElementById('statusPhoneInput');
+    if (statusPhoneInput) {
+      statusPhoneInput.addEventListener('click', function () {
+        this.focus();
+      });
+    }
 
-  initializeAttendanceDashboardUi();
-  initializeManualApproveUi();
+    initializeAttendanceDashboardUi();
+    initializeManualApproveUi();
+  }
 
   if (!calendarSelectedDateKey) {
     calendarSelectedDateKey = getDateKeyFromDate(new Date());
@@ -2666,35 +2891,53 @@ async function initializeDashboard() {
   updateImportModeHintFromInput();
   initializeImportCollapsibleCards();
 
-  const importSeasonNoInput = document.getElementById('importSeasonNoInput');
-  if (importSeasonNoInput) {
-    importSeasonNoInput.addEventListener('input', () => {
-      invalidatePendingImportPreparation('season-input-typing');
-      importManualConfirmed = false;
-      updateImportModeHintFromInput();
-      if (importInference) {
-        rebuildImportPreview();
-      }
-    });
-    importSeasonNoInput.addEventListener('blur', () => {
-      invalidatePendingImportPreparation('season-input-blur');
-      const parsed = normalizeSeasonInputFieldValue();
-      updateImportModeHintFromInput();
-      if (parsed && importInference) {
-        rebuildImportPreview();
-      }
-    });
+  if (firstInit) {
+    const importSeasonNoInput = document.getElementById('importSeasonNoInput');
+    if (importSeasonNoInput) {
+      importSeasonNoInput.addEventListener('input', () => {
+        invalidatePendingImportPreparation('season-input-typing');
+        importManualConfirmed = false;
+        updateImportModeHintFromInput();
+        if (importInference) {
+          rebuildImportPreview();
+        }
+      });
+      importSeasonNoInput.addEventListener('blur', () => {
+        invalidatePendingImportPreparation('season-input-blur');
+        const parsed = normalizeSeasonInputFieldValue();
+        updateImportModeHintFromInput();
+        if (parsed && importInference) {
+          rebuildImportPreview();
+        }
+      });
+    }
+
+    const importModeSelect = document.getElementById('importModeSelect');
+    if (importModeSelect) {
+      importModeSelect.addEventListener('change', () => {
+        invalidatePendingImportPreparation('import-mode-changed');
+        importManualConfirmed = false;
+        if (importInference) {
+          rebuildImportPreview();
+        }
+      });
+    }
   }
 
-  const importModeSelect = document.getElementById('importModeSelect');
-  if (importModeSelect) {
-    importModeSelect.addEventListener('change', () => {
-      invalidatePendingImportPreparation('import-mode-changed');
-      importManualConfirmed = false;
-      if (importInference) {
-        rebuildImportPreview();
-      }
-    });
+  if (firstInit) {
+    dashboardInitialized = true;
+  }
+
+  updateRoleBasedUi();
+  redirectToFirstAllowedTab();
+
+  if (isSuperAdmin()) {
+    await loadAdminUsers();
+  } else {
+    const wrap = document.getElementById('adminUsersTableWrap');
+    if (wrap) {
+      wrap.innerHTML = '<div class="info-text">Super Admin 권한에서만 관리자 목록을 확인할 수 있습니다.</div>';
+    }
   }
 
   // Keep first-load data hydration aligned with the default active tab.
@@ -2722,13 +2965,21 @@ async function refreshSeasonData() {
   }
 
   if (activeTab === 'variables') {
+    if (!isSuperAdmin()) return;
     await loadVariables();
     return;
   }
 
   if (activeTab === 'seasonImport') {
+    if (!isSuperAdmin()) return;
     syncImportSeasonInputByCurrentSelection();
     await refreshSheetSchemaAudit();
+    return;
+  }
+
+  if (activeTab === 'adminUsers') {
+    if (!isSuperAdmin()) return;
+    await loadAdminUsers();
     return;
   }
 
@@ -2810,7 +3061,10 @@ async function generateSeasonQRCode() {
   }
 
   try {
-    const response = await CloudClubApi.call('studentUrl', { season: selectedSeason });
+    const response = await CloudClubApi.call('studentUrl', {
+      season: selectedSeason,
+      adminToken: adminToken
+    });
     handleSeasonQRCode(response.url);
   } catch (error) {
     handleSeasonQRCodeError(error);
@@ -2845,6 +3099,7 @@ function handleSeasonQRCode(studentUrl) {
 }
 
 function handleSeasonQRCodeError(error) {
+  if (handleUnauthorizedError(error)) return;
   alert('QR코드 생성 중 오류가 발생했습니다: ' + getDisplayErrorMessage(error, '알 수 없는 오류'));
 }
 
@@ -4819,8 +5074,18 @@ function handleRankingError(error) {
 
 async function loadSheets() {
   try {
-    const sheets = await CloudClubApi.call('sheets');
+    const payload = await CloudClubApi.call('adminSeasonList', {
+      adminToken: adminToken
+    });
+    if (payload && currentAdminUser) {
+      if (payload.role) currentAdminUser.role = payload.role;
+      if (payload.season !== undefined) currentAdminUser.season = payload.season;
+      if (payload.seasonAlias !== undefined) currentAdminUser.seasonAlias = payload.seasonAlias;
+      updateAdminSessionBar();
+    }
+    const sheets = Array.isArray(payload && payload.sheets) ? payload.sheets : [];
     const sheetSelect = document.getElementById('sheetSelect');
+    if (!sheetSelect) return;
     sheetSelect.innerHTML = '';
 
     if (!Array.isArray(sheets) || sheets.length === 0) {
@@ -4846,16 +5111,31 @@ async function loadSheets() {
 
     currentSheetName = sheetSelect.value;
     currentSeasonAlias = getSelectedSeasonAlias();
+    sheetSelect.disabled = !isSuperAdmin();
     syncImportSeasonInputByCurrentSelection();
     updateImportModeHintFromInput();
   } catch (error) {
+    if (handleUnauthorizedError(error)) return;
     console.error('시트 목록 조회 실패:', error);
+    const sheetSelect = document.getElementById('sheetSelect');
+    if (sheetSelect) {
+      sheetSelect.innerHTML = '<option value="">시즌 목록을 불러오지 못했습니다.</option>';
+    }
   }
 }
 
 async function changeSheet() {
   const sheetName = getSelectedSheetName();
   if (!sheetName) return;
+
+  if (!isSuperAdmin()) {
+    currentSheetName = getSelectedSheetName();
+    currentSeasonAlias = getSelectedSeasonAlias();
+    syncImportSeasonInputByCurrentSelection();
+    updateImportModeHintFromInput();
+    await refreshSeasonData();
+    return;
+  }
 
   try {
     const response = await CloudClubApi.call('setActiveSheet', {
@@ -4882,7 +5162,261 @@ async function changeSheet() {
     }
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
+    if (error && error.code === 'FORBIDDEN') {
+      alert('시즌 전환은 Super Admin 권한에서만 가능합니다.');
+      return;
+    }
     alert('시트 변경 중 오류가 발생했습니다: ' + getDisplayErrorMessage(error, '알 수 없는 오류'));
+  }
+}
+
+function handleAdminRoleChange() {
+  const roleSelect = document.getElementById('adminUserRoleSelect');
+  const seasonInput = document.getElementById('adminUserSeasonInput');
+  if (!roleSelect || !seasonInput) return;
+  const role = String(roleSelect.value || '').trim().toLowerCase();
+  const seasonRequired = role !== ADMIN_ROLE_SUPER;
+  seasonInput.required = seasonRequired;
+  seasonInput.disabled = !seasonRequired;
+  if (!seasonRequired) {
+    seasonInput.value = '';
+  }
+}
+
+function resetAdminUserForm() {
+  adminUsersEditingEmail = '';
+  const emailInput = document.getElementById('adminUserEmailInput');
+  const nameInput = document.getElementById('adminUserNameInput');
+  const seasonInput = document.getElementById('adminUserSeasonInput');
+  const phoneInput = document.getElementById('adminUserPhoneInput');
+  const roleSelect = document.getElementById('adminUserRoleSelect');
+  const activeInput = document.getElementById('adminUserIsActiveInput');
+
+  if (emailInput) {
+    emailInput.value = '';
+    emailInput.readOnly = false;
+  }
+  if (nameInput) nameInput.value = '';
+  if (seasonInput) seasonInput.value = '';
+  if (phoneInput) phoneInput.value = '';
+  if (roleSelect) roleSelect.value = ADMIN_ROLE_SEASON_ADMIN;
+  if (activeInput) activeInput.checked = true;
+  handleAdminRoleChange();
+}
+
+function getAdminSeasonText(item) {
+  if (!item) return '-';
+  if (String(item.role || '').toLowerCase() === ADMIN_ROLE_SUPER) return 'all';
+  const alias = String(item.seasonAlias || '').trim();
+  if (alias) return alias;
+  const seasonNo = Number(item.season);
+  if (!isNaN(seasonNo) && seasonNo > 0) {
+    return `season_${String(seasonNo).padStart(2, '0')}`;
+  }
+  return '-';
+}
+
+function renderAdminUsers(items) {
+  const wrap = document.getElementById('adminUsersTableWrap');
+  if (!wrap) return;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    wrap.innerHTML = '<div class="info-text">등록된 관리자 계정이 없습니다.</div>';
+    return;
+  }
+
+  const rows = items.map(item => {
+    const email = String(item.email || '').trim();
+    const role = String(item.role || '').trim() || ADMIN_ROLE_SEASON_ADMIN;
+    const activeClass = item.isActive === false ? 'inactive' : 'active';
+    const activeLabel = item.isActive === false ? 'inactive' : 'active';
+    const isFixedSuper = !!item.isSuperFixed;
+
+    const editButton = isFixedSuper
+      ? '<span class="admin-users-role-chip super">고정 정책</span>'
+      : `<button type="button" class="btn btn-secondary" onclick="editAdminUser('${encodeURIComponent(email)}')"><i class="fas fa-pen"></i><span>수정</span></button>`;
+    const deleteButton = isFixedSuper
+      ? ''
+      : `<button type="button" class="btn btn-secondary" onclick="deleteAdminUser('${encodeURIComponent(email)}')"><i class="fas fa-trash"></i><span>삭제</span></button>`;
+
+    return `
+      <tr>
+        <td>${escapeHtml(item.name || '-')}</td>
+        <td>${escapeHtml(email)}</td>
+        <td>${escapeHtml(getAdminSeasonText(item))}</td>
+        <td>${escapeHtml(item.phone || '-')}</td>
+        <td><span class="admin-users-role-chip ${escapeHtml(role)}">${escapeHtml(role)}</span></td>
+        <td><span class="admin-users-active-chip ${activeClass}">${activeLabel}</span></td>
+        <td>
+          <div class="admin-users-row-actions">
+            ${editButton}
+            ${deleteButton}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  wrap.innerHTML = `
+    <table class="management-table">
+      <thead>
+        <tr>
+          <th>이름</th>
+          <th>이메일</th>
+          <th>시즌</th>
+          <th>전화번호</th>
+          <th>role</th>
+          <th>active</th>
+          <th>동작</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+async function loadAdminUsers() {
+  if (!isSuperAdmin()) return;
+  const wrap = document.getElementById('adminUsersTableWrap');
+  if (wrap) {
+    wrap.innerHTML = '<div class="loader" style="margin: 24px auto;"></div>';
+  }
+
+  try {
+    const response = await CloudClubApi.call('adminUsersList', {
+      adminToken: adminToken
+    });
+
+    const items = Array.isArray(response && response.items) ? response.items : [];
+    adminUsersCache = items;
+    renderAdminUsers(items);
+  } catch (error) {
+    if (handleUnauthorizedError(error)) return;
+    if (wrap) {
+      wrap.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '관리자 목록 조회 중 오류가 발생했습니다.'))}</div>`;
+    }
+  }
+}
+
+function editAdminUser(encodedEmail) {
+  if (!isSuperAdmin()) return;
+  const email = decodeURIComponent(String(encodedEmail || '')).trim().toLowerCase();
+  const found = adminUsersCache.find(item => String(item.email || '').trim().toLowerCase() === email);
+  if (!found) {
+    alert('수정할 관리자 정보를 찾을 수 없습니다.');
+    return;
+  }
+
+  if (found.isSuperFixed) {
+    alert('고정 Super Admin은 수정할 수 없습니다.');
+    return;
+  }
+
+  adminUsersEditingEmail = email;
+  const emailInput = document.getElementById('adminUserEmailInput');
+  const nameInput = document.getElementById('adminUserNameInput');
+  const seasonInput = document.getElementById('adminUserSeasonInput');
+  const phoneInput = document.getElementById('adminUserPhoneInput');
+  const roleSelect = document.getElementById('adminUserRoleSelect');
+  const activeInput = document.getElementById('adminUserIsActiveInput');
+
+  if (emailInput) {
+    emailInput.value = found.email || '';
+    emailInput.readOnly = true;
+  }
+  if (nameInput) nameInput.value = found.name || '';
+  if (seasonInput) seasonInput.value = getAdminSeasonText(found) === 'all' ? '' : getAdminSeasonText(found);
+  if (phoneInput) phoneInput.value = found.phone || '';
+  if (roleSelect) roleSelect.value = found.role || ADMIN_ROLE_SEASON_ADMIN;
+  if (activeInput) activeInput.checked = found.isActive !== false;
+  handleAdminRoleChange();
+
+  const result = document.getElementById('adminUsersResult');
+  if (result) {
+    result.className = 'success';
+    result.style.display = 'block';
+    result.textContent = `${found.email} 항목을 수정 중입니다. 저장 버튼으로 반영하세요.`;
+  }
+}
+
+async function saveAdminUser(event) {
+  if (event) event.preventDefault();
+  if (!isSuperAdmin()) {
+    alert('Super Admin 권한에서만 관리자 변경이 가능합니다.');
+    return;
+  }
+
+  const emailInput = document.getElementById('adminUserEmailInput');
+  const nameInput = document.getElementById('adminUserNameInput');
+  const seasonInput = document.getElementById('adminUserSeasonInput');
+  const phoneInput = document.getElementById('adminUserPhoneInput');
+  const roleSelect = document.getElementById('adminUserRoleSelect');
+  const activeInput = document.getElementById('adminUserIsActiveInput');
+
+  const email = String(emailInput && emailInput.value || '').trim().toLowerCase();
+  const role = String(roleSelect && roleSelect.value || ADMIN_ROLE_SEASON_ADMIN).trim().toLowerCase();
+  const seasonText = String(seasonInput && seasonInput.value || '').trim();
+  if (!email) {
+    alert('관리자 이메일을 입력해주세요.');
+    return;
+  }
+  if (role !== ADMIN_ROLE_SUPER && !seasonText) {
+    alert('season_admin은 시즌 값을 입력해야 합니다.');
+    return;
+  }
+
+  const payload = {
+    adminToken: adminToken,
+    email: email,
+    name: String(nameInput && nameInput.value || '').trim(),
+    season: role === ADMIN_ROLE_SUPER ? '' : seasonText,
+    phone: String(phoneInput && phoneInput.value || '').trim(),
+    role: role,
+    isActive: activeInput && activeInput.checked ? 'true' : 'false'
+  };
+
+  try {
+    const response = await CloudClubApi.call('adminUsersUpsert', payload);
+    const successMessage = (response && response.message) ? response.message : '관리자 정보가 저장되었습니다.';
+    showBoxMessage('adminUsersResult', `✅ ${escapeHtml(successMessage)}`, true);
+    await loadAdminUsers();
+    resetAdminUserForm();
+  } catch (error) {
+    if (handleUnauthorizedError(error)) return;
+    showBoxMessage('adminUsersResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '관리자 저장 중 오류가 발생했습니다.'))}`, false);
+  }
+}
+
+async function deleteAdminUser(encodedEmail) {
+  if (!isSuperAdmin()) {
+    alert('Super Admin 권한에서만 삭제할 수 있습니다.');
+    return;
+  }
+
+  const email = decodeURIComponent(String(encodedEmail || '')).trim().toLowerCase();
+  if (!email) return;
+  if (!window.confirm(`${email} 계정을 관리자 목록에서 삭제하시겠습니까?`)) {
+    return;
+  }
+
+  try {
+    const response = await CloudClubApi.call('adminUsersDelete', {
+      adminToken: adminToken,
+      email: email
+    });
+    if (!response || !response.success) {
+      alert((response && response.message) || '관리자 삭제에 실패했습니다.');
+      return;
+    }
+
+    showToast('<i class="fas fa-check-circle"></i> 관리자 계정이 삭제되었습니다.', true);
+    await loadAdminUsers();
+    if (adminUsersEditingEmail === email) {
+      resetAdminUserForm();
+    }
+  } catch (error) {
+    if (handleUnauthorizedError(error)) return;
+    alert(getDisplayErrorMessage(error, '관리자 삭제 중 오류가 발생했습니다.'));
   }
 }
 
@@ -5026,10 +5560,27 @@ async function checkAttendanceSession() {
 }
 
 function openTab(tabName, evt) {
+  if (SUPER_ONLY_TABS[tabName] && !isSuperAdmin()) {
+    alert('해당 탭은 Super Admin 권한에서만 접근할 수 있습니다.');
+    return;
+  }
+
+  const targetTab = document.getElementById(tabName);
+  if (!targetTab || targetTab.classList.contains('is-hidden')) {
+    return;
+  }
+
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
   document.querySelectorAll('.tab-button').forEach(tb => tb.classList.remove('active'));
-  document.getElementById(tabName).classList.add('active');
-  evt.currentTarget.classList.add('active');
+  targetTab.classList.add('active');
+  if (evt && evt.currentTarget) {
+    evt.currentTarget.classList.add('active');
+  } else {
+    const tabButton = getTabButtonByName(tabName);
+    if (tabButton) {
+      tabButton.classList.add('active');
+    }
+  }
 
   if (tabName === 'status') {
     loadAttendanceDashboard({ forceReload: false });
@@ -5060,6 +5611,10 @@ function openTab(tabName, evt) {
     updateImportModeHintFromInput();
     initializeImportCollapsibleCards();
     refreshSheetSchemaAudit();
+  }
+
+  if (tabName === 'adminUsers') {
+    loadAdminUsers();
   }
 }
 
@@ -7917,8 +8472,10 @@ async function applyExcusedChange(payload) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  initializeDashboard().catch((error) => {
-    alert(getDisplayErrorMessage(error, '초기화 중 오류가 발생했습니다.'));
+  handleAdminRoleChange();
+  resetAdminAuthState({ silent: true });
+  bootstrapAdminAuth().catch((error) => {
+    setAuthGateMessage(getDisplayErrorMessage(error, '초기 인증 처리 중 오류가 발생했습니다.'), true);
     console.error(error);
   });
 });

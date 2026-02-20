@@ -28,16 +28,15 @@
 ## 5) 기존 출석 페이지/집계 위치
 - 관리자 화면: `/Users/sbu/SBU/CloudClubAttendanceSystem/web/admin/index.html` + `/Users/sbu/SBU/CloudClubAttendanceSystem/web/admin/admin.js`
 - 학생 화면: `/Users/sbu/SBU/CloudClubAttendanceSystem/web/student/index.html` + `/Users/sbu/SBU/CloudClubAttendanceSystem/web/student/student.js`
-- 레거시 fallback: `/Users/sbu/SBU/CloudClubAttendanceSystem/Index.html`, `/Users/sbu/SBU/CloudClubAttendanceSystem/StudentInterface.html`, `/Users/sbu/SBU/CloudClubAttendanceSystem/AdminInterface.html`
+- 레거시 GAS HTML fallback은 제거됨(`Index.html`, `StudentInterface.html`, `AdminInterface.html` 삭제 완료)
 - 집계 계산 위치: 서버(`Code.gs`)에서 계산 후 클라이언트 렌더.
 
-## 6) 관리자 기능 접근 제한 (Google OAuth 제외)
-- 현재 인증: `verifyAdminKey` -> `adminToken` 발급/검증.
-- 관리자 전용 액션은 `adminToken` 필수.
-- 업로드/시즌 생성/스키마 감사 액션도 동일 정책 적용.
-- OAuth 전환 대비 단일 권한 게이트 역할:
-  - 현재 형태: 액션별 `verifyAdminToken` 검사.
-  - 목표 추상화: `requireAdmin()`, `requireSeasonAccess(seasonId)` 형태로 치환 가능.
+## 6) 관리자 기능 접근 제한 (Google OAuth 전환 완료)
+- 인증: `authGoogleLogin`(Google ID Token 검증) -> `adminToken` 세션 발급.
+- 인가: `_admins` 화이트리스트 + 고정 Super Admin(`cloudclub2022@gmail.com`) + `is_active`.
+- 관리자 전용 액션은 `requireAdmin()` 단일 지점으로 강제.
+- 시즌 범위 액션은 `requireSeasonAccess()`로 강제(시즌 관리자는 본인 시즌만).
+- 비밀번호 기반 `verifyAdminKey`는 `PASSWORD_LOGIN_DISABLED` 응답으로 고정.
 
 ## 7) 업로드 파이프라인 현황 (Mission 1 반영)
 - 2단계 반영: 미리보기 -> 확정 업로드.
