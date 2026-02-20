@@ -3831,7 +3831,7 @@
           <i class="fas fa-clover card-icon"></i>
           <h2 class="card-title">운세 관리</h2>
         </div>
-        <p class="info-text">CSV/XLSX 업로드 또는 직접 편집으로 운세를 전체 교체할 수 있습니다. 저장 전 1차 검증(길이/중복/최소 건수)을 통과해야 합니다.</p>
+        <p class="info-text">CSV/XLSX 업로드 또는 직접 편집으로 운세를 전체 교체할 수 있습니다. 저장 전 1차 검증(길이/중복/최소 건수)을 통과해야 하며, 중복 문구는 자동 제외됩니다.</p>
         <div id="fortuneCompatibilityNotice" class="compat-notice">
           <div><strong>백엔드 버전 확인 중...</strong></div>
         </div>
@@ -3865,13 +3865,17 @@
         <div class="form-group" style="max-width:none; text-align:left; margin-top: 14px;">
           <label for="fortuneTextInput" class="form-label">직접 편집 / 붙여넣기</label>
           <textarea id="fortuneTextInput" class="form-input fortune-textarea" placeholder="1행 1운세 또는 CSV/TSV 데이터를 붙여넣고 검증을 실행하세요."></textarea>
-          <p class="info-text" style="font-size:13px; margin-top:8px;">빈 행은 자동 제외됩니다. 중복 문구/200자 초과 문구는 저장할 수 없습니다.</p>
+          <p class="info-text" style="font-size:13px; margin-top:8px;">빈 행/중복 문구는 자동 제외됩니다. 200자 초과 문구는 저장할 수 없습니다.</p>
         </div>
 
         <div id="fortuneValidationSummary" class="import-chip-row"></div>
+        <div id="fortuneSaveEligibility" style="margin-top:10px;">
+          <p class="info-text">검증을 실행하면 저장 가능 여부가 표시됩니다.</p>
+        </div>
         <div id="fortunePreviewWrap" class="table-wrap">
           <p class="info-text">분석 후 미리보기가 표시됩니다.</p>
         </div>
+        <div id="fortunePreviewPager" class="sheet-actions" style="margin-top:10px;"></div>
 
         <label class="import-confirm-box import-confirm-box-primary">
           <input id="fortuneUploadConfirmed" type="checkbox" onchange="refreshFortuneExecuteButtonState()">
@@ -3894,7 +3898,7 @@
         </div>
         <p id="fortuneCurrentVersionLabel" class="info-text" style="margin-top:0;">현재 버전: -</p>
         <div class="fortune-current-code-wrap">
-          <pre><code id="fortuneCurrentCode">(불러오는 중...)</code></pre>
+          <pre><code id="fortuneCurrentCode">(현재 운세 원본을 불러오는 중...)</code></pre>
         </div>
         <div class="sheet-actions" style="margin-top:12px;">
           <button id="fortuneLoadCurrentEditorBtn" type="button" class="btn btn-secondary" onclick="loadCurrentFortuneIntoEditor()">

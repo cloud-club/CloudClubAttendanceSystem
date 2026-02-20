@@ -371,13 +371,17 @@ function parseFortuneRowsJson(raw) {
 
 function validateFortuneRows(rows) {
   const errors = [];
+  const warnings = [];
   const seen = {};
   const validRows = [];
+  let droppedDuplicateCount = 0;
+  let droppedEmptyCount = 0;
 
   (rows || []).forEach((row, idx) => {
     const sourceRowNo = idx + 1;
     const text = canonicalFortuneText(row && row.fortune !== undefined ? row.fortune : row);
     if (!text) {
+      droppedEmptyCount += 1;
       return;
     }
 
@@ -392,10 +396,11 @@ function validateFortuneRows(rows) {
 
     const key = text;
     if (Object.prototype.hasOwnProperty.call(seen, key)) {
-      errors.push({
+      droppedDuplicateCount += 1;
+      warnings.push({
         rowNo: sourceRowNo,
         code: 'DUPLICATE_FORTUNE',
-        message: `${sourceRowNo}행: ${seen[key]}행과 중복 문구입니다.`
+        message: `${sourceRowNo}행: ${seen[key]}행과 중복 문구로 자동 제외됩니다.`
       });
       return;
     }
@@ -418,7 +423,10 @@ function validateFortuneRows(rows) {
   return {
     success: errors.length === 0,
     errors: errors,
-    rows: validRows
+    warnings: warnings,
+    rows: validRows,
+    droppedDuplicateCount: droppedDuplicateCount,
+    droppedEmptyCount: droppedEmptyCount
   };
 }
 
@@ -728,7 +736,11 @@ function fortuneUploadFinalize(adminContext, params) {
         errorCode: 'FORTUNE_VALIDATION_FAILED',
         message: '운세 데이터 서버 검증에 실패했습니다.',
         errorCount: validation.errors.length,
-        errors: validation.errors.slice(0, 50)
+        errors: validation.errors.slice(0, 50),
+        warningCount: Array.isArray(validation.warnings) ? validation.warnings.length : 0,
+        warnings: Array.isArray(validation.warnings) ? validation.warnings.slice(0, 50) : [],
+        droppedDuplicateCount: Math.max(0, Number(validation.droppedDuplicateCount || 0)),
+        droppedEmptyCount: Math.max(0, Number(validation.droppedEmptyCount || 0))
       };
     }
 
@@ -771,7 +783,10 @@ function fortuneUploadFinalize(adminContext, params) {
       success: true,
       newVersionId: newVersionId,
       rowCount: validation.rows.length,
-      currentVersionId: newVersionId
+      currentVersionId: newVersionId,
+      warningCount: Array.isArray(validation.warnings) ? validation.warnings.length : 0,
+      droppedDuplicateCount: Math.max(0, Number(validation.droppedDuplicateCount || 0)),
+      droppedEmptyCount: Math.max(0, Number(validation.droppedEmptyCount || 0))
     };
   } catch (error) {
     Logger.log('fortuneUploadFinalize 오류: ' + error.toString());
