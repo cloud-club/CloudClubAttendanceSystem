@@ -5,9 +5,27 @@
 ## 한눈에 보는 운영 아키텍처
 ```mermaid
 flowchart LR
-  U[학생/운영진 접속] --> P[GitHub Pages 정적 웹]
-  P --> A[Apps Script API - doGet/handleApiRequest]
-  A --> S[Google Sheets 시즌/메타 데이터]
+  subgraph U[사용자]
+    U1[학생]
+    U2[운영진]
+  end
+
+  subgraph GH[GitHub]
+    P[GitHub Pages]
+  end
+
+  subgraph G[Google]
+    A[Google Apps Script]
+    O[Google OAuth]
+    S[Google Sheets]
+  end
+
+  U1 --> P
+  U2 --> P
+  P --> A
+  A --> O
+  O --> A
+  A --> S
   S --> A
   A --> P
 ```
