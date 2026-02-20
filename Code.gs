@@ -7775,3 +7775,9 @@ function requiredCheckBySession(requiredPositions, sessions, sessionKey) {
 
   return false;
 }
+
+function __authorizeExternalRequest() {
+  UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=dummy", {
+    muteHttpExceptions: true
+  });
+}
