@@ -29,6 +29,7 @@ CloudClub 출석 시스템은 단순한 웹 페이지가 아니라, 동아리 �
 - 랭킹/카운트다운 정책: [`docs/010_출석현황_랭킹규칙_카운트다운정책.md`](docs/010_출석현황_랭킹규칙_카운트다운정책.md)
 - 배포/Secret/API URL 런북: [`docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md`](docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md)
 - 통합 검증 체크리스트: [`docs/012_운영자_개발자_통합_검증체크리스트.md`](docs/012_운영자_개발자_통합_검증체크리스트.md)
+- Apps Script 권한/배포 수동 복구: [`docs/mission-c-manual-setup.md`](docs/mission-c-manual-setup.md)
 
 ## 현재 운영 주소
 

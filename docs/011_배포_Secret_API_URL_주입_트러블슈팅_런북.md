@@ -18,6 +18,7 @@
 3. `Deploy GitHub Pages` 워크플로우 실행(`workflow_dispatch` 또는 push)
 4. 배포 완료 후 관리자 페이지 강력 새로고침
 5. 변수 탭 상단의 API URL(마스킹)/`apiVersion`으로 반영 확인
+6. 로그인 전 canary(`authGoogleLogin(dummy)`)가 `AUTH_SERVER_SCOPE_MISSING`이 아닌지 확인
 
 핵심은 순서를 뒤집지 않는 것이다. Secret을 먼저 바꾸고 재배포를 생략하면, 저장소 설정은 최신인데 실제 서비스 페이지는 구 URL을 계속 사용한다. 이 상태는 로그상으로 즉시 드러나지 않기 때문에, 위 절차를 체크리스트처럼 고정해 반복하는 것이 가장 안전하다.
 
@@ -48,6 +49,7 @@ Secret이 비어 있거나 주입 실패면 배포를 실패시켜야 조용한 
 | `apiInfo` | 서버 버전/지원 액션/타임존 조회 | 프런트-백엔드 버전 불일치 진단 가능 |
 | `env.js` | Secret URL 주입 방식 안전화 | `API_BASE_URL` 미설정 장애 재발률 감소 |
 | workflow 검증 | Secret/주입/API 헬스 체크 실패 시 배포 중단 | 불완전 산출물 배포 차단 |
+| auth canary 검증 | `authGoogleLogin(dummy)`에서 scope 오류 감지 시 배포 중단 | `AUTH_SERVER_SCOPE_MISSING` 상태의 운영 배포 방지 |
 
 ## 5. 커밋 근거표(커밋 ID, 변경 파일, 핵심 diff 요약)
 | 커밋 | 핵심 변경 | 주요 파일 |
@@ -68,6 +70,7 @@ Secret이 비어 있거나 주입 실패면 배포를 실패시켜야 조용한 
 3. 관리자 페이지 초기 로딩에서 `MISSING_API_BASE_URL` 에러가 사라졌는지 확인한다.
 4. `env.js`에 placeholder(`__API_BASE_URL__`)가 남아있지 않은지 확인한다.
 5. workflow 로그에서 Secret 검증, 주입 검증, 헬스체크 단계가 모두 통과했는지 확인한다.
+6. workflow 로그에서 `Auth scope canary` 단계가 통과했는지 확인한다.
 
 ## 8. 실제 운영 사례(실패 예시/대응 예시)
 ### 사례 1. Secret은 바꿨는데 관리자 페이지는 계속 `API_BASE_URL 미설정`이 뜬 경우

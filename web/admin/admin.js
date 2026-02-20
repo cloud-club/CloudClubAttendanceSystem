@@ -178,7 +178,7 @@ function getDisplayErrorMessage(error, fallbackMessage) {
   }
 
   if (error && error.code === 'AUTH_SERVER_SCOPE_MISSING') {
-    return '관리자 인증 서버 권한이 누락되었습니다. Apps Script에서 Deploy > Manage deployments > Edit > Deploy로 재배포 후 권한 승인(UrlFetchApp)을 완료해주세요.';
+    return '관리자 인증 서버 권한(script.external_request)이 누락되었습니다. Apps Script 배포 소유자 계정으로 UrlFetchApp 권한 승인을 완료한 뒤, Deploy > Manage deployments > Edit > Deploy로 동일 배포를 재배포해주세요.';
   }
 
   if (error && error.code === 'AUTH_ADMIN_NOT_REGISTERED') {
@@ -2728,6 +2728,48 @@ async function waitForGoogleIdentityClient(timeoutMs) {
   return false;
 }
 
+function isAuthCanaryPassCode(code) {
+  const normalized = String(code || '').trim();
+  if (!normalized) return false;
+
+  if (normalized === 'AUTH_ID_TOKEN_VERIFY_FAILED') return true;
+  if (normalized === 'AUTH_ID_TOKEN_PAYLOAD_INVALID') return true;
+  if (normalized.indexOf('AUTH_ID_TOKEN_') === 0) return true;
+  return false;
+}
+
+async function runAuthScopeCanary() {
+  try {
+    await CloudClubApi.call('authGoogleLogin', { idToken: 'dummy' });
+    return {
+      ok: false,
+      error: {
+        code: 'AUTH_CANARY_UNEXPECTED_SUCCESS',
+        message: 'authGoogleLogin(dummy) canary가 예외 없이 성공했습니다. 운영 설정을 다시 확인해주세요.'
+      }
+    };
+  } catch (error) {
+    const code = String((error && error.code) || '').trim();
+
+    if (code === 'AUTH_SERVER_SCOPE_MISSING') {
+      return { ok: false, error: error };
+    }
+
+    if (isAuthCanaryPassCode(code)) {
+      return { ok: true, code: code };
+    }
+
+    return {
+      ok: false,
+      error: {
+        code: code || 'AUTH_CANARY_FAILED',
+        message: (error && error.message) || '관리자 인증 서버 canary 검증에 실패했습니다.',
+        debugUrl: error && error.debugUrl
+      }
+    };
+  }
+}
+
 async function renderGoogleLoginButton() {
   setAuthGateMessage('Google 로그인 설정을 확인하는 중입니다...');
   const response = await CloudClubApi.call('authGoogleConfig');
@@ -2737,6 +2779,21 @@ async function renderGoogleLoginButton() {
     return;
   }
   googleClientId = clientId;
+
+  setAuthGateMessage('관리자 인증 서버 canary를 점검하는 중입니다...');
+  const canary = await runAuthScopeCanary();
+  if (!canary.ok) {
+    console.error('관리자 인증 canary 실패:', canary.error);
+    setAuthGateMessage(
+      getDisplayErrorMessage(
+        canary.error,
+        '관리자 인증 서버 canary 점검에 실패했습니다. 운영 설정(배포/권한) 확인 후 다시 시도해주세요.'
+      ),
+      true
+    );
+    return;
+  }
+  console.info('관리자 인증 canary 통과:', canary.code);
 
   const loaded = await waitForGoogleIdentityClient(12000);
   if (!loaded) {

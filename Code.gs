@@ -777,7 +777,7 @@ function isUrlFetchPermissionError(error) {
 function getAuthServerScopeMissingMessage() {
   return [
     'Apps Script Web App에 UrlFetchApp.fetch 권한(script.external_request)이 없습니다.',
-    'Deploy > Manage deployments > Edit > Deploy로 재배포 후 권한 승인 팝업을 완료하세요.'
+    '배포 소유자 계정으로 UrlFetchApp 권한을 승인한 뒤 Deploy > Manage deployments > Edit > Deploy로 동일 배포를 재배포하세요.'
   ].join(' ');
 }
 
