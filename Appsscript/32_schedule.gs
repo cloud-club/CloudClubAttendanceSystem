@@ -282,7 +282,7 @@ function deleteSchedule(params) {
       return {
         success: false,
         errorCode: 'SCHEDULE_DELETE_CONFIRM_KEY_MISMATCH',
-        message: '강제 삭제 확인 문자열이 일치하지 않습니다. sessionKey를 정확히 입력하세요.'
+        message: '강제 삭제 확인이 실패했습니다. 표시된 회차 키를 그대로 입력해 주세요.'
       };
     }
 
@@ -304,4 +304,3 @@ function deleteSchedule(params) {
     };
   }
 }
-

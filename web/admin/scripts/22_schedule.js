@@ -791,7 +791,7 @@ function openScheduleDeleteForceModal(state) {
   const input = document.getElementById('scheduleDeleteForceInput');
   if (!modal || !text || !input) return;
 
-  text.textContent = `${state.sessionKey} 회차에 ${state.attendanceRecordCount}건의 기록이 있습니다. 강제 삭제를 진행하려면 sessionKey를 정확히 입력하세요.`;
+  text.textContent = `${state.sessionKey} 회차에 ${state.attendanceRecordCount}건의 기록이 있습니다. 아래 회차 키를 복사해서 그대로 입력하면 강제 삭제가 진행됩니다.`;
   input.value = '';
   modal.style.display = 'flex';
   setTimeout(() => input.focus(), 0);
@@ -812,7 +812,7 @@ async function submitScheduleDeleteForceModal() {
   const typed = input ? input.value.trim() : '';
   const expected = scheduleDeleteForceState.sessionKey;
   if (typed !== expected) {
-    alert(`sessionKey가 일치하지 않습니다. (${expected})`);
+    alert(`회차 키가 일치하지 않습니다. 아래에 표시된 그대로 입력하세요. (${expected})`);
     return;
   }
 
