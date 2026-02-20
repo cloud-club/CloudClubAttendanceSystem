@@ -29,7 +29,10 @@ CloudClub 출석 시스템은 단순한 웹 페이지가 아니라, 동아리 �
 - 랭킹/카운트다운 정책: [`docs/010_출석현황_랭킹규칙_카운트다운정책.md`](docs/010_출석현황_랭킹규칙_카운트다운정책.md)
 - 배포/Secret/API URL 런북: [`docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md`](docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md)
 - 통합 검증 체크리스트: [`docs/012_운영자_개발자_통합_검증체크리스트.md`](docs/012_운영자_개발자_통합_검증체크리스트.md)
-- Apps Script 권한/배포 수동 복구: [`docs/mission-c-manual-setup.md`](docs/mission-c-manual-setup.md)
+- 인증 전환 배경/인프라 구조: [`docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md`](docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md)
+- 권한관리체계(user/admin/super): [`docs/020_권한관리체계_user_admin_super_운영정책.md`](docs/020_권한관리체계_user_admin_super_운영정책.md)
+- Apps Script 권한/배포 수동 복구(Quick): [`docs/mission-c-manual-setup.md`](docs/mission-c-manual-setup.md)
+- Google 인증 장애 SSOT 런북(Gate): [`docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md`](docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md)
 
 ## 현재 운영 주소
 

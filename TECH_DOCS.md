@@ -14,10 +14,16 @@
 - 랭킹/카운트다운: [`docs/010_출석현황_랭킹규칙_카운트다운정책.md`](docs/010_출석현황_랭킹규칙_카운트다운정책.md)
 - 배포 런북(Secret/API URL): [`docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md`](docs/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md)
 - 통합 검증: [`docs/012_운영자_개발자_통합_검증체크리스트.md`](docs/012_운영자_개발자_통합_검증체크리스트.md)
+- 인증 전환 배경/인프라 구조: [`docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md`](docs/018_관리자_인증전환_배경_구현방식_및_인프라구조.md)
+- 권한관리체계(user/admin/super): [`docs/020_권한관리체계_user_admin_super_운영정책.md`](docs/020_권한관리체계_user_admin_super_운영정책.md)
+- Mission C Quick Guide: [`docs/mission-c-manual-setup.md`](docs/mission-c-manual-setup.md)
+- Google 인증 장애 SSOT 런북: [`docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md`](docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md)
 
 빠른 이동:
 
 - variable 표준 템플릿: [`docs/variable_template_v3_5.csv`](docs/variable_template_v3_5.csv)
 - API/운영 검증 표: [`docs/012_운영자_개발자_통합_검증체크리스트.md`](docs/012_운영자_개발자_통합_검증체크리스트.md)
+- 인증 장애 대응 표준: [`docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md`](docs/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md)
+- 권한 정책 기준 문서: [`docs/020_권한관리체계_user_admin_super_운영정책.md`](docs/020_권한관리체계_user_admin_super_운영정책.md)
 
-실무에서는 `README -> 001 -> 002 -> 003 -> 004 -> 005~012` 순서로 읽으면 가장 빠르게 전체 맥락을 파악할 수 있습니다.
+실무에서는 `README -> 001 -> 002 -> 003 -> 004 -> 005~012 -> 018 -> 019 -> 020 -> mission-c` 순서로 읽으면 가장 빠르게 전체 맥락을 파악할 수 있습니다.
