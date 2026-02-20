@@ -3203,16 +3203,8 @@ async function openCurrentSheet() {
 }
 
 async function generateSeasonQRCode() {
-  const selectedSeason = getSelectedSeasonAlias();
-
-  if (!selectedSeason) {
-    alert('먼저 시트를 선택해주세요.');
-    return;
-  }
-
   try {
     const response = await CloudClubApi.call('studentUrl', {
-      season: selectedSeason,
       adminToken: adminToken
     });
     handleSeasonQRCode(response.url);

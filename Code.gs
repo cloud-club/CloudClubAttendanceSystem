@@ -19,7 +19,7 @@ const ADMINS_SHEET_HEADERS = ['name', 'season', 'phone', 'email', 'role', 'is_ac
 const ADMIN_SEASON_SYNC_CACHE_KEY = 'admin_season_sync_latest_v1';
 const ADMIN_SEASON_SYNC_CACHE_TTL_SECONDS = 60;
 const GOOGLE_TOKENINFO_ENDPOINT = 'https://oauth2.googleapis.com/tokeninfo?id_token=';
-const API_VERSION = '2026.02.19-v5.0';
+const API_VERSION = '2026.02.20-v5.1';
 const ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS = 90;
 const ATTENDANCE_DASHBOARD_CACHE_MAX_BYTES = 90000;
 
@@ -98,6 +98,7 @@ const SUPPORTED_API_ACTIONS = [
   'attendance',
   'status',
   'ranking',
+  'latestSeason',
   'attendanceDashboardSummary',
   'attendanceDashboardDrilldown',
   'sheets',
@@ -137,6 +138,7 @@ const ACTION_ACCESS_LEVELS = Object.freeze({
   attendance: ACTION_ACCESS_PUBLIC,
   status: ACTION_ACCESS_PUBLIC,
   ranking: ACTION_ACCESS_PUBLIC,
+  latestSeason: ACTION_ACCESS_PUBLIC,
   sheets: ACTION_ACCESS_PUBLIC,
   verifyAdminKey: ACTION_ACCESS_PUBLIC,
   authSession: ACTION_ACCESS_ADMIN,
@@ -382,11 +384,10 @@ function doGet(e) {
   }
 
   const mode = params.mode;
-  const seasonAlias = toSeasonAlias(params.season || '');
 
   if (mode === 'student') {
     try {
-      const studentUrl = generateStudentQRCodeUrl(seasonAlias || params.season || '');
+      const studentUrl = generateStudentQRCodeUrl(params.season || '');
       return createRedirectOutput(studentUrl);
     } catch (error) {
       return createMessageOutput('학생 페이지 URL 미설정', error.message || 'FRONTEND_STUDENT_BASE_URL을 설정하세요.');
@@ -536,7 +537,7 @@ function handleApiRequest(params) {
         break;
 
       case 'session':
-        data = params.season ? getSeasonAttendanceSession(params.season) : getAttendanceSession();
+        data = getSeasonAttendanceSession(resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
         break;
 
       case 'attendance': {
@@ -544,7 +545,7 @@ function handleApiRequest(params) {
         if (!phone) {
           return jsonp(callback, apiError('INVALID_PHONE', '전화번호가 입력되지 않았습니다.'));
         }
-        data = params.season ? markSeasonAttendance(phone, params.season) : markAttendance(phone);
+        data = markSeasonAttendance(phone, resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
         break;
       }
 
@@ -553,12 +554,16 @@ function handleApiRequest(params) {
         if (!phone) {
           return jsonp(callback, apiError('INVALID_PHONE', '전화번호가 입력되지 않았습니다.'));
         }
-        data = params.season ? getSeasonAttendanceStatus(phone, params.season) : getAttendanceStatus(phone);
+        data = getSeasonAttendanceStatus(phone, resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
         break;
       }
 
       case 'ranking':
-        data = params.season ? getSeasonAttendanceRanking(params.season) : getAttendanceRanking();
+        data = getSeasonAttendanceRanking(resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
+        break;
+
+      case 'latestSeason':
+        data = getLatestSeasonInfo();
         break;
 
       case 'attendanceDashboardSummary': {
@@ -592,9 +597,10 @@ function handleApiRequest(params) {
         break;
 
       case 'studentUrl': {
-        const seasonAlias = ensureSeasonAlias(params.season || '');
-        if (!seasonAlias) {
-          return jsonp(callback, apiError('INVALID_SEASON', 'season 파라미터가 필요합니다.'));
+        const requestedSeason = String(params.season || '').trim();
+        let seasonAlias = '';
+        if (requestedSeason) {
+          seasonAlias = ensureSeasonAlias(requestedSeason);
         }
         data = { url: generateStudentQRCodeUrl(seasonAlias) };
         break;
@@ -1447,6 +1453,67 @@ function requireSeasonAccess(adminContext, seasonInput) {
   return ownAlias;
 }
 
+function resolveLatestSeasonAlias() {
+  const latest = getLatestSeasonSheetCandidate();
+  if (!latest) {
+    throwApiException('INVALID_SEASON', '최신 시즌 시트를 찾을 수 없습니다.');
+  }
+
+  const latestAlias = toSeasonAlias(latest.alias || latest.name || '');
+  if (!latestAlias) {
+    throwApiException('INVALID_SEASON', '최신 시즌 alias를 해석할 수 없습니다.');
+  }
+
+  return latestAlias;
+}
+
+function getLatestSeasonInfo() {
+  const seasonAlias = resolveLatestSeasonAlias();
+  const seasonNo = parseSeasonNoFromAlias(seasonAlias);
+  return {
+    success: true,
+    seasonAlias: seasonAlias,
+    seasonNo: isNaN(seasonNo) ? null : seasonNo
+  };
+}
+
+function resolvePublicSeasonAccess(params, ensureAdminFn) {
+  const latestAlias = resolveLatestSeasonAlias();
+  const requestedRaw = String((params && params.season) || '').trim();
+
+  if (!requestedRaw) {
+    return {
+      seasonAlias: latestAlias,
+      latestAlias: latestAlias,
+      isLatest: true,
+      requiresAdmin: false
+    };
+  }
+
+  const requestedAlias = toSeasonAlias(requestedRaw);
+  if (!requestedAlias) {
+    throwApiException('INVALID_SEASON', '유효한 season 파라미터가 필요합니다. (예: season_07)');
+  }
+
+  if (requestedAlias === latestAlias) {
+    return {
+      seasonAlias: latestAlias,
+      latestAlias: latestAlias,
+      isLatest: true,
+      requiresAdmin: false
+    };
+  }
+
+  const adminContext = ensureAdminFn ? ensureAdminFn() : requireAdmin(params || {});
+  const seasonAlias = requireSeasonAccess(adminContext, requestedAlias);
+  return {
+    seasonAlias: seasonAlias,
+    latestAlias: latestAlias,
+    isLatest: false,
+    requiresAdmin: true
+  };
+}
+
 function getAuthGoogleConfig() {
   const clientId = getGoogleOAuthClientId();
   const frontendAdminBaseUrl = getFrontendAdminUrl();
@@ -1701,6 +1768,38 @@ function getFrontendAdminUrl() {
 function getFrontendStudentBaseUrl() {
   const raw = PropertiesService.getScriptProperties().getProperty('FRONTEND_STUDENT_BASE_URL');
   return (raw || '').trim();
+}
+
+function getFrontendStudentLatestUrlBase() {
+  const configured = getFrontendStudentBaseUrl();
+  if (!isFrontendUrlConfigured(configured)) {
+    throw new Error('FRONTEND_STUDENT_BASE_URL이 설정되지 않았습니다.');
+  }
+
+  const matched = String(configured || '').trim().match(/^(https?:\/\/[^?#]+)(\?[^#]*)?(#.*)?$/i);
+  if (!matched) {
+    return configured;
+  }
+
+  let path = String(matched[1] || '').trim().replace(/\/+$/g, '');
+  if (/\/index\.html$/i.test(path)) {
+    path = path.replace(/\/index\.html$/i, '');
+  }
+  if (!/\/latest$/i.test(path)) {
+    path = `${path}/latest`;
+  }
+  path = `${path}/`;
+
+  return `${path}${matched[2] || ''}${matched[3] || ''}`;
+}
+
+function appendSeasonQueryToUrl(url, seasonAlias) {
+  const normalized = toSeasonAlias(seasonAlias || '');
+  if (!normalized) return String(url || '').trim();
+
+  const base = String(url || '').trim();
+  const separator = base.indexOf('?') === -1 ? '?' : '&';
+  return `${base}${separator}season=${encodeURIComponent(normalized)}`;
 }
 
 function isFrontendUrlConfigured(url) {
@@ -3987,19 +4086,24 @@ function getQRCodeUrl() {
  * 시즌별 학생용 URL 생성
  */
 function generateStudentQRCodeUrl(seasonName) {
-  let alias = toSeasonAlias(seasonName);
-  if (!alias) {
-    const active = getActiveAttendanceSheetInfo();
-    alias = active ? active.seasonAlias : '';
+  const latestBaseUrl = getFrontendStudentLatestUrlBase();
+  const requestedAlias = toSeasonAlias(seasonName);
+  if (!requestedAlias) {
+    return latestBaseUrl;
   }
 
-  const studentBase = getFrontendStudentBaseUrl();
-  if (!isFrontendUrlConfigured(studentBase)) {
-    throw new Error('FRONTEND_STUDENT_BASE_URL이 설정되지 않았습니다.');
+  let latestAlias = '';
+  try {
+    latestAlias = resolveLatestSeasonAlias();
+  } catch (error) {
+    latestAlias = '';
   }
 
-  const separator = studentBase.indexOf('?') === -1 ? '?' : '&';
-  return `${studentBase}${separator}season=${encodeURIComponent(alias || '')}`;
+  if (latestAlias && requestedAlias === latestAlias) {
+    return latestBaseUrl;
+  }
+
+  return appendSeasonQueryToUrl(latestBaseUrl, requestedAlias);
 }
 
 /**

@@ -39,7 +39,7 @@ CloudClub 출석 시스템은 단순한 웹 페이지가 아니라, 동아리 �
 운영 기준 접근 주소는 아래와 같습니다.
 
 - 관리자 페이지: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/admin/`
-- 학생 페이지: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/student/?season=<시트명>`
+- 학생 페이지(기본): `https://cloud-club.github.io/CloudClubAttendanceSystem/web/student/latest/`
 - 안내 루트: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/`
 
 ## 보안 원칙

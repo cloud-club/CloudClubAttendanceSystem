@@ -1,13 +1,25 @@
 let countdownInterval;
 let isAttendanceActive = false;
 let currentSeason = '';
+let latestSeason = '';
+let requestedSeason = '';
+let requiresHistoricalAdminAuth = false;
+let studentAdminToken = '';
+let studentAuthFlowLocked = false;
+let studentPageInitialized = false;
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
+const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
 const STUDENT_ALLOWED_ACTIONS = {
   sheets: true,
+  latestSeason: true,
   session: true,
   ranking: true,
   attendance: true,
-  status: true
+  status: true,
+  authGoogleConfig: true,
+  authGoogleLogin: true,
+  authSession: true,
+  authLogout: true
 };
 
 function createStudentApiError(code, message) {
@@ -104,21 +116,220 @@ function updateSeasonInfoBadge() {
   seasonInfo.innerHTML = `<i class="fas fa-calendar-alt"></i> ${currentSeason}`;
 }
 
-function updateUrlSeasonParam(alias) {
-  const normalized = normalizeSeasonAlias(alias);
-  if (!normalized) return;
+function getRequestedSeasonAliasFromUrl() {
+  try {
+    const query = new URLSearchParams(window.location.search);
+    return normalizeSeasonAlias(query.get('season'));
+  } catch (error) {
+    return '';
+  }
+}
 
+function removeSeasonQueryFromCurrentUrl() {
   try {
     const url = new URL(window.location.href);
-    url.searchParams.set('season', normalized);
+    if (!url.searchParams.has('season')) return;
+    url.searchParams.delete('season');
     const nextUrl = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState({}, '', nextUrl);
   } catch (error) {
-    // If URL parsing fails, keep current URL.
+    // Ignore URL rewrite errors.
+  }
+}
+
+function redirectToLatestPath(message) {
+  if (message) {
+    showSeasonWarning(message);
+  }
+
+  setTimeout(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('season');
+      window.location.replace(`${url.pathname}${url.search}${url.hash}`);
+    } catch (error) {
+      window.location.replace(window.location.pathname || '/');
+    }
+  }, 650);
+}
+
+function readStudentAdminTokenFromSession() {
+  try {
+    return String(sessionStorage.getItem(STUDENT_ADMIN_TOKEN_STORAGE_KEY) || '').trim();
+  } catch (error) {
+    return '';
+  }
+}
+
+function writeStudentAdminTokenToSession(token) {
+  const normalized = String(token || '').trim();
+  if (!normalized) return;
+  try {
+    sessionStorage.setItem(STUDENT_ADMIN_TOKEN_STORAGE_KEY, normalized);
+  } catch (error) {
+    // Ignore storage write failures.
+  }
+}
+
+function clearStudentAdminTokenFromSession() {
+  studentAdminToken = '';
+  try {
+    sessionStorage.removeItem(STUDENT_ADMIN_TOKEN_STORAGE_KEY);
+  } catch (error) {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function setStudentAuthGateMessage(message, isError) {
+  const node = document.getElementById('studentAuthGateMessage');
+  if (!node) return;
+  node.textContent = String(message || '').trim();
+  node.classList.toggle('error', !!isError);
+}
+
+function showStudentAuthGate() {
+  const gate = document.getElementById('studentAuthGate');
+  if (!gate) return;
+  gate.classList.remove('is-hidden');
+}
+
+function hideStudentAuthGate() {
+  const gate = document.getElementById('studentAuthGate');
+  if (!gate) return;
+  gate.classList.add('is-hidden');
+}
+
+async function waitForGoogleIdentityClient(timeoutMs) {
+  const timeout = Math.max(2000, Number(timeoutMs || 10000));
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeout) {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      return true;
+    }
+    await new Promise(resolve => setTimeout(resolve, 120));
+  }
+  return false;
+}
+
+async function validateHistoricalSeasonAccess(token) {
+  const seasonAlias = normalizeSeasonAlias(requestedSeason);
+  if (!seasonAlias) {
+    throw createStudentApiError('INVALID_SEASON', '과거 시즌 파라미터가 유효하지 않습니다.');
+  }
+  await callStudentApi('session', { season: seasonAlias, adminToken: String(token || '').trim() });
+}
+
+async function restoreHistoricalStudentAdminSession() {
+  const cachedToken = readStudentAdminTokenFromSession();
+  if (!cachedToken) return false;
+
+  try {
+    const authSession = await callStudentApi('authSession', { adminToken: cachedToken });
+    if (!authSession || !authSession.success || !authSession.authenticated) {
+      clearStudentAdminTokenFromSession();
+      return false;
+    }
+
+    await validateHistoricalSeasonAccess(cachedToken);
+    studentAdminToken = cachedToken;
+    return true;
+  } catch (error) {
+    clearStudentAdminTokenFromSession();
+    return false;
+  }
+}
+
+async function handleStudentGoogleCredentialResponse(googleResponse) {
+  if (studentAuthFlowLocked) return;
+  studentAuthFlowLocked = true;
+
+  const credential = String((googleResponse && googleResponse.credential) || '').trim();
+  if (!credential) {
+    setStudentAuthGateMessage('Google 인증 토큰을 받지 못했습니다. 다시 시도해주세요.', true);
+    studentAuthFlowLocked = false;
+    return;
+  }
+
+  try {
+    setStudentAuthGateMessage('Google 토큰을 검증하는 중입니다...');
+    const login = await callStudentApi('authGoogleLogin', { idToken: credential });
+    if (!login || !login.success || !login.token) {
+      throw createStudentApiError('UNAUTHORIZED', 'Google 로그인 검증에 실패했습니다.');
+    }
+
+    await validateHistoricalSeasonAccess(login.token);
+    studentAdminToken = String(login.token || '').trim();
+    writeStudentAdminTokenToSession(studentAdminToken);
+    hideStudentAuthGate();
+    updateSeasonInfoBadge();
+    await initializeStudentPage();
+  } catch (error) {
+    clearStudentAdminTokenFromSession();
+    setStudentAuthGateMessage(getDisplayErrorMessage(error, '과거 시즌 접근 권한이 없습니다. 최신 시즌으로 이동합니다.'), true);
+    redirectToLatestPath('과거 시즌 접근 권한이 없어 최신 시즌으로 이동합니다.');
+  } finally {
+    studentAuthFlowLocked = false;
+  }
+}
+
+async function renderHistoricalAuthGate() {
+  showStudentAuthGate();
+  setStudentAuthGateMessage('과거 시즌 접근을 확인하는 중입니다...');
+
+  try {
+    const config = await callStudentApi('authGoogleConfig');
+    const clientId = String((config && config.googleClientId) || '').trim();
+    if (!clientId) {
+      throw createStudentApiError('AUTH_CLIENT_ID_NOT_CONFIGURED', 'Google OAuth Client ID가 설정되지 않았습니다.');
+    }
+
+    const loaded = await waitForGoogleIdentityClient(12000);
+    if (!loaded) {
+      throw createStudentApiError('GOOGLE_SDK_UNAVAILABLE', 'Google 로그인 SDK를 불러오지 못했습니다.');
+    }
+
+    const loginContainer = document.getElementById('studentGoogleLoginButton');
+    if (!loginContainer) {
+      throw createStudentApiError('AUTH_UI_MISSING', '학생 인증 버튼 컨테이너를 찾을 수 없습니다.');
+    }
+
+    loginContainer.innerHTML = '';
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleStudentGoogleCredentialResponse,
+      auto_select: false,
+      cancel_on_tap_outside: true
+    });
+    window.google.accounts.id.renderButton(loginContainer, {
+      theme: 'outline',
+      size: 'large',
+      text: 'signin_with',
+      shape: 'pill',
+      width: 320,
+      logo_alignment: 'left'
+    });
+
+    setStudentAuthGateMessage('관리자 권한이 있는 Google 계정으로 로그인하세요.');
+    return true;
+  } catch (error) {
+    setStudentAuthGateMessage(getDisplayErrorMessage(error, '인증 화면을 준비하지 못했습니다. 최신 시즌으로 이동합니다.'), true);
+    redirectToLatestPath('과거 시즌 인증 준비에 실패해 최신 시즌으로 이동합니다.');
+    return false;
   }
 }
 
 async function resolveLatestSeasonAlias() {
+  try {
+    const payload = await callStudentApi('latestSeason');
+    const latestAlias = normalizeSeasonAlias(payload && payload.seasonAlias);
+    if (latestAlias) {
+      return latestAlias;
+    }
+  } catch (error) {
+    console.warn('latestSeason API 조회 실패, sheets fallback 사용:', error);
+  }
+
   const sheets = await callStudentApi('sheets');
   const latest = pickLatestSeasonAliasFromSheets(sheets);
   if (!latest) {
@@ -128,40 +339,78 @@ async function resolveLatestSeasonAlias() {
 }
 
 async function ensureInitialSeasonAlias() {
-  const query = new URLSearchParams(window.location.search);
-  const querySeason = normalizeSeasonAlias(query.get('season'));
-  if (querySeason) {
-    currentSeason = querySeason;
-    writeCachedLatestSeasonAlias(querySeason);
-    return { resolved: true, source: 'query' };
+  const cachedLatest = readCachedLatestSeasonAlias();
+  if (cachedLatest) {
+    latestSeason = cachedLatest;
+    currentSeason = cachedLatest;
   }
 
-  const cached = readCachedLatestSeasonAlias();
-  if (cached) {
-    currentSeason = cached;
-    updateUrlSeasonParam(cached);
-  }
+  requestedSeason = getRequestedSeasonAliasFromUrl();
 
   try {
-    const latest = await resolveLatestSeasonAlias();
-    currentSeason = latest;
-    writeCachedLatestSeasonAlias(latest);
-    updateUrlSeasonParam(latest);
-    return { resolved: true, source: 'api' };
+    const latestAlias = await resolveLatestSeasonAlias();
+    latestSeason = latestAlias;
+    currentSeason = latestAlias;
+    writeCachedLatestSeasonAlias(latestAlias);
   } catch (error) {
     console.warn('학생 페이지 최신 시즌 조회 실패:', error);
   }
 
-  if (currentSeason) {
-    return { resolved: true, source: 'cache' };
+  if (!latestSeason) {
+    return { resolved: false, source: 'none' };
   }
 
-  return { resolved: false, source: 'none' };
+  if (!requestedSeason) {
+    requiresHistoricalAdminAuth = false;
+    currentSeason = latestSeason;
+    hideStudentAuthGate();
+    return { resolved: true, source: 'latest' };
+  }
+
+  if (requestedSeason === latestSeason) {
+    requiresHistoricalAdminAuth = false;
+    currentSeason = latestSeason;
+    removeSeasonQueryFromCurrentUrl();
+    hideStudentAuthGate();
+    return { resolved: true, source: 'query_latest' };
+  }
+
+  requiresHistoricalAdminAuth = true;
+  currentSeason = requestedSeason;
+
+  const restored = await restoreHistoricalStudentAdminSession();
+  if (restored) {
+    hideStudentAuthGate();
+    return { resolved: true, source: 'historical_cached_admin' };
+  }
+
+  const gateReady = await renderHistoricalAuthGate();
+  if (!gateReady) {
+    return { resolved: false, source: 'historical_gate_failed' };
+  }
+
+  return { resolved: false, source: 'historical_auth_required' };
 }
 
 function getDisplayErrorMessage(error, fallbackMessage) {
   if (error && error.code === 'NETWORK_ERROR') {
     return 'API 서버 응답 스크립트를 불러오지 못했습니다. (리다이렉트/ORB 가능성) 잠시 후 다시 시도해주세요.';
+  }
+
+  if (error && error.code === 'UNAUTHORIZED') {
+    return '관리자 인증이 필요합니다. 과거 시즌은 관리자 Google 로그인 후 접근할 수 있습니다.';
+  }
+
+  if (error && error.code === 'FORBIDDEN_SEASON') {
+    return '해당 시즌 접근 권한이 없습니다. 최신 시즌으로 이동합니다.';
+  }
+
+  if (error && error.code === 'AUTH_ADMIN_NOT_REGISTERED') {
+    return 'Google 로그인은 성공했지만 관리자 권한이 등록되지 않은 계정입니다.';
+  }
+
+  if (error && error.code === 'AUTH_ADMIN_INACTIVE') {
+    return 'Google 로그인은 성공했지만 비활성화된 관리자 계정입니다.';
   }
 
   return (error && error.message) ? error.message : fallbackMessage;
@@ -241,6 +490,9 @@ function buildSeasonParams(extraParams) {
   const params = Object.assign({}, extraParams || {});
   if (currentSeason) {
     params.season = currentSeason;
+  }
+  if (requiresHistoricalAdminAuth && studentAdminToken) {
+    params.adminToken = studentAdminToken;
   }
   return params;
 }
@@ -350,6 +602,7 @@ async function checkAttendanceSession() {
     const session = await callStudentApi('session', buildSeasonParams());
     renderCountdown(session);
   } catch (error) {
+    if (handleHistoricalAccessError(error)) return;
     renderCountdown({ active: false, message: getDisplayErrorMessage(error, '세션 정보를 불러올 수 없습니다.') });
   }
 }
@@ -359,8 +612,26 @@ async function loadRankings() {
     const response = await callStudentApi('ranking', buildSeasonParams());
     displayRankings(response);
   } catch (error) {
+    if (handleHistoricalAccessError(error)) return;
     handleRankingError(error);
   }
+}
+
+function handleHistoricalAccessError(error) {
+  if (!requiresHistoricalAdminAuth) return false;
+
+  const code = String((error && error.code) || '').trim();
+  const shouldRedirect = code === 'UNAUTHORIZED'
+    || code === 'FORBIDDEN_SEASON'
+    || code === 'AUTH_ADMIN_NOT_REGISTERED'
+    || code === 'AUTH_ADMIN_INACTIVE';
+
+  if (!shouldRedirect) return false;
+
+  clearStudentAdminTokenFromSession();
+  hideStudentAuthGate();
+  redirectToLatestPath(getDisplayErrorMessage(error, '과거 시즌 접근 권한이 만료되어 최신 시즌으로 이동합니다.'));
+  return true;
 }
 
 function normalizeAndSortRankings(items) {
@@ -495,6 +766,7 @@ async function doAttendance(event) {
     const response = await callStudentApi('attendance', buildSeasonParams({ phone: phoneNumber }));
     handleAttendanceResponse(response);
   } catch (error) {
+    if (handleHistoricalAccessError(error)) return;
     handleAttendanceError(error);
   }
 }
@@ -609,6 +881,7 @@ async function checkAttendanceStatus(event) {
     const response = await callStudentApi('status', buildSeasonParams({ phone: phoneNumber }));
     handleStatusResponse(response);
   } catch (error) {
+    if (handleHistoricalAccessError(error)) return;
     handleStatusError(error);
   }
 }
@@ -709,12 +982,33 @@ function showSeasonWarning(message) {
   }, 5000);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  const seasonResult = await ensureInitialSeasonAlias();
-  updateSeasonInfoBadge();
-  if (!seasonResult.resolved) {
-    showSeasonWarning('시즌 정보를 불러오지 못해 기본 시즌 기준으로 동작합니다.');
+function applyBlockedStudentState(message) {
+  clearInterval(countdownInterval);
+  isAttendanceActive = false;
+
+  const countdownTitle = document.getElementById('countdown-title');
+  const countdownDiv = document.getElementById('countdown');
+  const attendBtn = document.getElementById('attendBtn');
+  const rankingBoard = document.getElementById('rankingBoard');
+
+  if (countdownTitle) {
+    countdownTitle.textContent = '시즌 정보를 확인하지 못했습니다.';
   }
+  if (countdownDiv) {
+    countdownDiv.textContent = message || '잠시 후 다시 시도해주세요.';
+  }
+  if (attendBtn) {
+    attendBtn.disabled = true;
+    attendBtn.innerHTML = '<i class="fas fa-ban"></i> <span>출석 불가</span>';
+  }
+  if (rankingBoard) {
+    rankingBoard.innerHTML = `<div class="error">${escapeHtml(message || '최신 시즌을 확인하지 못했습니다.')}</div>`;
+  }
+}
+
+async function initializeStudentPage() {
+  if (studentPageInitialized) return;
+  studentPageInitialized = true;
 
   const savedPhone = localStorage.getItem('lastUsedPhone');
   if (savedPhone) {
@@ -733,4 +1027,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkAttendanceSession(),
     loadRankings()
   ]);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const seasonResult = await ensureInitialSeasonAlias();
+  updateSeasonInfoBadge();
+
+  if (!seasonResult.resolved) {
+    if (seasonResult.source === 'historical_auth_required') {
+      showSeasonWarning('과거 시즌 접근은 관리자 Google 로그인이 필요합니다.');
+      return;
+    }
+
+    applyBlockedStudentState('최신 시즌 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+    showSeasonWarning('최신 시즌 정보를 확인하지 못해 출석 기능이 잠시 중단되었습니다.');
+    return;
+  }
+
+  if (requiresHistoricalAdminAuth) {
+    showSeasonWarning(`${currentSeason} 과거 시즌 접근이 관리자 권한으로 승인되었습니다.`);
+  }
+
+  await initializeStudentPage();
 });

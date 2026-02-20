@@ -2,7 +2,7 @@
   'use strict';
 
   var LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
-  var DEFAULT_STUDENT_PATH = './student/';
+  var DEFAULT_STUDENT_PATH = './student/latest/';
 
   function parseSeasonNo(alias) {
     var match = String(alias || '').trim().toLowerCase().match(/^season_(\d{1,2})$/);
@@ -68,10 +68,8 @@
     }
   }
 
-  function buildStudentUrl(alias) {
-    var normalized = normalizeSeasonAlias(alias);
-    if (!normalized) return DEFAULT_STUDENT_PATH;
-    return DEFAULT_STUDENT_PATH + '?season=' + encodeURIComponent(normalized);
+  function buildStudentUrl() {
+    return DEFAULT_STUDENT_PATH;
   }
 
   function setStatus(message, isError) {
@@ -103,16 +101,16 @@
     if (!link) return;
 
     var normalized = normalizeSeasonAlias(alias);
-    link.href = buildStudentUrl(normalized);
+    link.href = buildStudentUrl();
 
     if (normalized) {
-      link.dataset.season = normalized;
-      link.setAttribute('aria-label', normalized + ' 시즌 출석 페이지로 이동');
+      link.dataset.latestSeason = normalized;
+      link.setAttribute('aria-label', '최신 시즌(' + normalized + ') 출석 페이지로 이동');
       return;
     }
 
-    delete link.dataset.season;
-    link.setAttribute('aria-label', '출석 페이지로 이동');
+    delete link.dataset.latestSeason;
+    link.setAttribute('aria-label', '최신 시즌 출석 페이지로 이동');
   }
 
   function applyLatestSeason(alias, sourceLabel) {
@@ -136,6 +134,16 @@
   async function fetchLatestSeasonAlias() {
     if (!window.CloudClubApi || typeof window.CloudClubApi.call !== 'function') {
       throw new Error('CloudClubApi를 사용할 수 없습니다.');
+    }
+
+    try {
+      var latestPayload = await window.CloudClubApi.call('latestSeason');
+      var latestAlias = normalizeSeasonAlias(latestPayload && latestPayload.seasonAlias);
+      if (latestAlias) {
+        return latestAlias;
+      }
+    } catch (error) {
+      console.warn('latestSeason API 조회 실패, sheets fallback 사용:', error);
     }
 
     var sheets = await window.CloudClubApi.call('sheets');
