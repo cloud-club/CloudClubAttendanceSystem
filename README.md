@@ -6,8 +6,8 @@
 ```mermaid
 flowchart LR
   U[학생/운영진 접속] --> P[GitHub Pages 정적 웹]
-  P --> A[Apps Script API (doGet/handleApiRequest)]
-  A --> S[Google Sheets (시즌/메타 데이터)]
+  P --> A[Apps Script API - doGet/handleApiRequest]
+  A --> S[Google Sheets 시즌/메타 데이터]
   S --> A
   A --> P
 ```
