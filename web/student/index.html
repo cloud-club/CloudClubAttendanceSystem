@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cloud Club 학생 페이지 이동</title>
+</head>
+<body>
+  <p>학생 페이지로 이동 중입니다...</p>
+  <script>
+    (function () {
+      var search = window.location.search || '';
+      var hash = window.location.hash || '';
+      var next = './latest/' + search + hash;
+      window.location.replace(next);
+    })();
+  </script>
+</body>
+</html>

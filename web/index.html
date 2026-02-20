@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cloud Club Attendance Gateway</title>
+  <link rel="icon" href="../images/image.png" type="image/png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #06132e;
+      --bg-hero: #0f234b;
+      --card-bg: rgba(10, 27, 58, 0.78);
+      --card-border: rgba(130, 163, 224, 0.28);
+      --card-border-strong: rgba(123, 179, 255, 0.6);
+      --text-main: #ecf4ff;
+      --text-muted: #a9c0e9;
+      --accent: #7cc4ff;
+      --accent-strong: #31a0ff;
+      --admin-accent: #93a7ca;
+      --focus-ring: rgba(155, 208, 255, 0.95);
+      --shadow-soft: 0 20px 46px rgba(3, 10, 29, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at top left, #183b7a 0%, var(--bg-main) 58%);
+      color: var(--text-main);
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(108, 157, 236, 0.14) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(108, 157, 236, 0.14) 1px, transparent 1px);
+      background-size: 56px 56px;
+      opacity: 0.2;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .ambient {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(8px);
+      opacity: 0.58;
+    }
+
+    .orb-a {
+      width: 280px;
+      height: 280px;
+      top: -80px;
+      left: -60px;
+      background: radial-gradient(circle, rgba(112, 185, 255, 0.72) 0%, rgba(112, 185, 255, 0) 72%);
+    }
+
+    .orb-b {
+      width: 360px;
+      height: 360px;
+      bottom: -120px;
+      right: -90px;
+      background: radial-gradient(circle, rgba(63, 128, 255, 0.58) 0%, rgba(63, 128, 255, 0) 76%);
+    }
+
+    .landing {
+      position: relative;
+      z-index: 1;
+      width: min(1200px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 56px 0 64px;
+    }
+
+    .hero {
+      margin-bottom: 34px;
+      padding: 30px 30px 22px;
+      border: 1px solid rgba(138, 173, 236, 0.36);
+      background: linear-gradient(138deg, rgba(18, 48, 97, 0.74) 0%, rgba(9, 26, 55, 0.72) 84%);
+      border-radius: 26px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      font-family: 'Sora', 'Noto Sans KR', sans-serif;
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #bedbff;
+      font-weight: 700;
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-family: 'Sora', 'Noto Sans KR', sans-serif;
+      font-size: clamp(2rem, 3.9vw, 3rem);
+      letter-spacing: -0.02em;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: clamp(1rem, 1.8vw, 1.15rem);
+    }
+
+    .cta-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .cta-card {
+      border-radius: 26px;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      box-shadow: var(--shadow-soft);
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+
+    .cta-card h2 {
+      margin: 0 0 10px;
+      font-size: clamp(1.42rem, 2.2vw, 1.8rem);
+      font-family: 'Sora', 'Noto Sans KR', sans-serif;
+      letter-spacing: -0.01em;
+    }
+
+    .cta-card p {
+      margin: 0;
+      color: var(--text-muted);
+      line-height: 1.55;
+      font-size: 0.97rem;
+    }
+
+    .cta-card-student {
+      min-height: 320px;
+      padding: 34px 34px 30px;
+      border-color: var(--card-border-strong);
+      background: linear-gradient(140deg, rgba(13, 55, 110, 0.92) 0%, rgba(8, 30, 65, 0.88) 86%);
+    }
+
+    .cta-card-student::after {
+      content: '';
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      right: -120px;
+      bottom: -122px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(89, 194, 255, 0.28) 0%, rgba(89, 194, 255, 0) 74%);
+      pointer-events: none;
+    }
+
+    .cta-card-admin {
+      min-height: 258px;
+      padding: 24px;
+    }
+
+    .card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      align-self: flex-start;
+      margin-bottom: 14px;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: #daf0ff;
+      border: 1px solid rgba(162, 213, 255, 0.5);
+      background: rgba(31, 118, 192, 0.28);
+      font-weight: 700;
+    }
+
+    .season-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      align-self: flex-start;
+      margin-top: 18px;
+      padding: 8px 13px;
+      border-radius: 999px;
+      border: 1px solid rgba(162, 211, 255, 0.52);
+      color: #e4f4ff;
+      font-size: 0.88rem;
+      font-weight: 700;
+      background: rgba(40, 118, 190, 0.24);
+    }
+
+    .status-text {
+      margin-top: 10px;
+      min-height: 22px;
+      color: #bfd7fd;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .status-text.is-error {
+      color: #ffd3b9;
+    }
+
+    .card-actions {
+      margin-top: auto;
+      padding-top: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-decoration: none;
+      border-radius: 14px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.01em;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .cta-button-primary {
+      min-height: 54px;
+      min-width: 190px;
+      font-size: 1.05rem;
+      padding: 0 22px;
+      color: #05101f;
+      background: linear-gradient(135deg, #9cd8ff 0%, #7bbfff 55%, #5eafff 100%);
+      box-shadow: 0 12px 30px rgba(58, 163, 255, 0.36);
+    }
+
+    .cta-button-secondary {
+      min-height: 44px;
+      padding: 0 16px;
+      font-size: 0.92rem;
+      color: #dfe9fc;
+      border-color: rgba(175, 196, 236, 0.45);
+      background: rgba(22, 44, 80, 0.72);
+    }
+
+    .cta-button:hover {
+      transform: translateY(-2px);
+    }
+
+    .cta-button-primary:hover {
+      box-shadow: 0 16px 34px rgba(58, 163, 255, 0.46);
+    }
+
+    .cta-button-secondary:hover {
+      color: #ffffff;
+      border-color: rgba(175, 196, 236, 0.65);
+      background: rgba(32, 61, 107, 0.8);
+    }
+
+    .cta-button:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 3px;
+    }
+
+    .hint-text {
+      margin-top: 10px;
+      color: #abc4e7;
+      font-size: 0.83rem;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 980px) {
+      .landing {
+        width: min(960px, calc(100vw - 28px));
+        padding-top: 30px;
+      }
+
+      .hero {
+        padding: 26px 22px 20px;
+      }
+
+      .cta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .cta-card-student,
+      .cta-card-admin {
+        min-height: 0;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .landing {
+        width: calc(100vw - 20px);
+      }
+
+      .hero h1 {
+        font-size: 1.8rem;
+      }
+
+      .cta-card {
+        border-radius: 22px;
+      }
+
+      .cta-card-student {
+        padding: 28px 20px 24px;
+      }
+
+      .card-actions {
+        width: 100%;
+      }
+
+      .cta-button-primary,
+      .cta-button-secondary {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="ambient" aria-hidden="true">
+    <span class="orb orb-a"></span>
+    <span class="orb orb-b"></span>
+  </div>
+
+  <main class="landing" aria-labelledby="landingTitle">
+    <header class="hero">
+      <p class="eyebrow">Cloud Club</p>
+      <h1 id="landingTitle">Attendance Gateway</h1>
+      <p class="lead">출석과 운영으로 바로 이동하는 메인 허브입니다. 학생 진입은 항상 최신 시즌으로 자동 연결됩니다.</p>
+    </header>
+
+    <section class="cta-grid" aria-label="페이지 이동 메뉴">
+      <article class="cta-card cta-card-student">
+        <span class="card-badge"><i class="fas fa-bolt"></i>Quick Start</span>
+        <h2>출석하기</h2>
+        <p>학생 출석 페이지로 이동합니다. 별도 시즌 입력 없이 최신 시즌으로 자동 연결됩니다.</p>
+        <span id="latestSeasonBadge" class="season-chip" hidden>
+          <i class="fas fa-calendar-check"></i>
+          <span id="latestSeasonLabel">season_--</span>
+        </span>
+        <p id="latestSeasonStatus" class="status-text" role="status" aria-live="polite">최신 시즌 확인 중...</p>
+        <div class="card-actions">
+          <a id="studentLink" class="cta-button cta-button-primary" href="./student/latest/" aria-label="최신 시즌 출석 페이지로 이동">
+            <i class="fas fa-arrow-right"></i>
+            <span>출석하기</span>
+          </a>
+        </div>
+      </article>
+
+      <article class="cta-card cta-card-admin">
+        <h2>관리자 페이지</h2>
+        <p>시즌/일정/유고/수료 정책과 출석 데이터를 관리합니다.</p>
+        <div class="card-actions">
+          <a class="cta-button cta-button-secondary" href="./admin/" aria-label="관리자 페이지로 이동">
+            <i class="fas fa-user-shield"></i>
+            <span>관리자 페이지</span>
+          </a>
+        </div>
+        <p class="hint-text">관리자 기능은 인증 후 접근 가능합니다.</p>
+      </article>
+    </section>
+  </main>
+
+  <script src="./shared/env.js"></script>
+  <script src="./shared/config.js"></script>
+  <script src="./shared/api-jsonp.js"></script>
+  <script src="./index.js"></script>
+</body>
+</html>

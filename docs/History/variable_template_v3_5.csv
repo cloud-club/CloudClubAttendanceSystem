@@ -1,0 +1,11 @@
+key,value,type,description,editable,updated_at,applies_to,applies_when,used_in
+attendance_open_offset_min,-30,number,출석 오픈 오프셋(시작 n분 전),TRUE,,출석 오픈 시각 계산,회차 시작 시각 기준,collectSessionsFromSheet.openTime
+late_threshold_min,50,number,지각 판정 기준(시작 후 n분),TRUE,,정시/지각 경계 계산,회차 시작 이후,collectSessionsFromSheet.onTimeDeadline
+absence_threshold_min,180,number,기본 출석 마감 기준(종료 미입력 시),TRUE,,종료시간 미입력 회차 마감 계산,회차 종료시간이 비어 있을 때,collectSessionsFromSheet.lateDeadline;web/admin.suggestScheduleEndTime
+required_attendance_count,3,number,수료 최소 출석 횟수,TRUE,,수료 최소 출석 조건 계산,수료 판정 계산 시,getGraduationReport.requiredAttendance
+late_to_absence_ratio,3,number,지각 n회 = 결석 1회,TRUE,,결석환산 계산,수료 판정 계산 시,getGraduationReport.absenceEquivalent
+required_session_positions,"first,last",string,필참 회차 위치,TRUE,,필참 회차 충족 여부 계산,수료 판정 계산 시,evaluateRequiredSessions;getGraduationReport.requiredCheck
+max_absence_equivalent,,number,결석환산 상한(빈값이면 자동 계산),TRUE,,결석환산 임계치 계산,수료 판정 계산 시,getGraduationReport.absenceThreshold
+official_session_min_recommended,6,number,권장 최소 공식 행사 수,TRUE,,운영 가이드 표시값,수료 규칙 안내 렌더링 시,getGraduationReport.variables
+official_session_max_recommended,8,number,권장 최대 공식 행사 수,TRUE,,운영 가이드 표시값,수료 규칙 안내 렌더링 시,getGraduationReport.variables
+default_session_start_time,19:00,string,일정 관리 기본 시작시간(HH:mm),TRUE,,신규 일정 시작시간 기본값,일정 관리 탭 신규 회차 입력 시,getScheduleList.defaults;web/admin.getDefaultScheduleStartTime

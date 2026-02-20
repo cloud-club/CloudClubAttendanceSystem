@@ -1,211 +1,93 @@
-# CloudClub 출석체크 시스템
+# CloudClub Attendance Documentation Hub
 
-## 프로젝트 소개
+> 문서 링크: [README.md](./README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/README.md)
 
-CloudClub 출석체크 시스템은 Google Sheets와 Apps Script를 활용한 실시간 출석 관리 웹 애플리케이션입니다. 학생들이 휴대폰 번호를 통해 간편하게 출석 체크를 할 수 있으며, 관리자는 Google Sheets에서 모든 데이터를 실시간으로 확인하고 관리할 수 있습니다.
-
-현재 [Google Sheet](https://docs.google.com/spreadsheets/d/1nEBZz96gm4F5YYnX_7y_9IIt0d3pBqBv6C--goZuJM8/edit?usp=sharing) 에서 실제로 운영 중인 출석 관리 시스템을 확인하실 수 있습니다.
-
-기술문서는 [이곳](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/TECHNICAL_DOCUMENTATION.md)을 참고하실 수 있습니다.
-
-### 주요 특징
-- **실시간 출석 체크**: 30분 제한 시간이 있는 출석 세션
-- **자동 순위 시스템**: 출석률과 평균 체크인 시간 기반 랭킹
-- **시즌별 관리**: 학기별, 기수별 독립적인 출석 관리 지원
-- **학생/관리자 인터페이스 분리**: 보안 강화된 역할별 UI 제공
-- **QR 코드 지원**: 시즌별 동적 QR 코드 생성으로 빠른 접속
-- **운세 기능**: 출석 완료 시 재미있는 메시지 제공
-- **모바일 최적화**: 반응형 웹 디자인으로 모든 기기 지원
-
-## 시스템 동작 로직
-
+## 빠른 흐름도
 ```mermaid
-graph TD
-    A[관리자가 Google Sheets에<br/>새 출석 컬럼 추가] --> B[학생이 웹앱 접속]
-    B --> C{활성 세션 확인<br/>30분 이내 시작된 세션?}
-    C -->|Yes| D[카운트다운 타이머 표시]
-    C -->|No| E[출석 세션이 없습니다]
-    D --> F[학생이 전화번호 입력<br/>및 출석 버튼 클릭]
-    F --> G{전화번호 검증}
-    G -->|유효| H{이미 출석했는지 확인}
-    G -->|무효| I[전화번호를 찾을 수 없습니다]
-    H -->|첫 출석| J[Google Sheets에<br/>출석 시간 기록]
-    H -->|이미 출석| K[이미 출석하였습니다]
-    J --> L[출석 성공 메시지<br/>+ 통계 + 운세 표시]
-    
-    style A fill:#e1f5fe
-    style D fill:#f3e5f5
-    style J fill:#e8f5e8
-    style L fill:#fff3e0
+flowchart LR
+  A["학생/운영진이 웹 진입"] --> B["GitHub Pages 정적 UI"]
+  B --> C["Apps Script API(Appsscript/*)"]
+  C --> D["Google Sheets 데이터 저장/조회"]
+  D --> C
+  C --> B
 ```
 
-## 프로젝트 구동을 위한 사전 설정
+## 문서 네비게이션 흐름도
+```mermaid
+flowchart LR
+  A["처음 온 운영진/기여자"] --> B["docs/Wiki/README"]
+  B --> C["01_User_Side_Guide"]
+  B --> D["02_Admin_Side_Guide"]
+  D --> E["03_Admin_Tab_Change_Map"]
+  D --> F["04_Operations_Runbook"]
+  D --> G["05_Data_And_RBAC_Reference"]
+  B --> H["docs/History/README"]
+```
 
-### 1. Google Sheets 테이블 구조 생성
+## 프로젝트 배경과 전환 이유
+CloudClub 출석 시스템은 8기까지 Google Apps Script가 화면과 데이터 처리를 함께 담당하는 1티어 구조로 운영되었습니다. 이 방식은 시작이 빠르다는 장점이 있었지만, 운영 규모가 커질수록 문제 원인 분리가 어렵고 인수인계 난이도가 높아졌습니다.
 
-Google Sheets에서 다음과 같은 구조로 테이블을 생성하세요:
+특히 2026년 2월 17~18일 전후로 운영 이슈가 반복되면서, 화면 배포와 데이터/인증 로직을 분리해야 한다는 합의가 생겼습니다. 그 결과 현재는 **GitHub Pages(프런트) + Google OAuth 인증 + Apps Script/Google Sheets(API/DB)** 구조로 고도화되었고, 문서도 같은 시점부터 “교체 가능한 운영진”을 전제로 다시 설계되었습니다.
 
-| A열 (이름) | B열 (기수) | C열 (전화번호) | D열 (첫 번째 세션) | E열 (두 번째 세션) | ... |
-|-----------|----------|-------------|-----------------|-----------------|-----|
-| 홍길동 | 1기 | 010-1234-5678 | | | |
-| 김철수 | 2기 | 010-9876-5432 | | | |
-| 이영희 | 1기 | 010-1111-2222 | | | |
+## 시스템 전체 흐름
+현재 구조의 핵심은 기능 추가보다 책임 경계를 명확히 한 데 있습니다. 학생/관리자 화면은 GitHub Pages로 독립 배포하고, 출석 판정·권한 검사·시트 반영은 `Appsscript/*`에서 일관되게 처리합니다. 그래서 장애가 나더라도 UI 문제인지 API/데이터 문제인지 빠르게 분리해서 대응할 수 있습니다.
 
-**중요 사항:**
-- **A열**: 학생 이름
-- **B열**: 기수 (예: "1기", "2기")
-- **C열**: 전화번호 (출석 체크 시 사용되는 고유 식별자)
-- **D열부터**: 각 출석 세션 컬럼 (헤더는 `YYYY-MM-DD-HH:MM` 형식으로 작성)
+운영 관점에서 이 구조는 “누가 이어받아도 같은 기준으로 운영할 수 있는 시스템”을 만드는 데 목적이 있습니다. 문서에서 동일한 용어와 순서를 반복하는 이유도, 코드 지식이 없는 운영진까지 포함해 공통 의사결정 기준을 맞추기 위함입니다.
 
-### 2. Google Apps Script 설정
+## 운영 기준 (SSOT)
+- 이 백엔드 코드는 Google Sheets에 연결된 Google Apps Script 프로젝트에서 운영된다.
+- 레포는 운영 소스를 버전관리/문서화하기 위한 관리 저장소이며, 실제 반영은 Apps Script 배포가 기준이다.
+- 시스템 책임 경계:
+  - `web/*`: GitHub Pages 정적 UI
+  - `Appsscript/*`: API/권한/시트 로직
+- 운영 비밀값 관리:
+  - OAuth/운영 속성은 Script Properties 및 시트에서 관리한다.
+  - 비밀값은 레포에 커밋하지 않는다.
+- 배포 순서 SSOT:
+  - Apps Script 배포
+  - Secret 반영(`APPS_SCRIPT_WEB_APP_URL`)
+  - GitHub Pages 배포
+  - canary/health 검증
+- 무중단/롤백 원칙:
+  - `.../exec` URL을 기준점으로 운영한다.
+  - 이상 시 이전 Apps Script 배포 버전으로 즉시 롤백한다.
+- 코드 분할 원칙:
+  - Apps Script `.gs` 파일 간 `import/export`를 사용하지 않는다.
+  - 외부 API 계약(액션명/파라미터/응답 스키마)은 변경하지 않는다.
 
-0. Google Sheets에서, 아래 형식에 맞춘 테이블을 생성합니다.
-- [Cloud Club User DB](https://docs.google.com/spreadsheets/d/1nEBZz96gm4F5YYnX_7y_9IIt0d3pBqBv6C--goZuJM8/edit?gid=753952759#gid=753952759)
+## 역할별 문서 진입 경로
+각 역할은 필요한 문서가 다르기 때문에, 아래 순서로 읽으면 가장 빠르게 맥락을 잡을 수 있습니다.
 
-1. Google Sheets에서 **확장 프로그램 > Apps Script** 메뉴를 클릭합니다.
-    ![alt text](/images/image.png)
+- 신규 운영진: [docs/Wiki/README.md](./docs/Wiki/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/README.md) → [docs/Wiki/02_Admin_Side_Guide.md](./docs/Wiki/02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md) → [docs/Wiki/04_Operations_Runbook.md](./docs/Wiki/04_Operations_Runbook.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/04_Operations_Runbook.md)
+- 사용자 안내 담당: [docs/Wiki/01_User_Side_Guide.md](./docs/Wiki/01_User_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/01_User_Side_Guide.md)
+- 개발/수정 담당: [docs/Wiki/03_Admin_Tab_Change_Map.md](./docs/Wiki/03_Admin_Tab_Change_Map.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/03_Admin_Tab_Change_Map.md) + [docs/Wiki/05_Data_And_RBAC_Reference.md](./docs/Wiki/05_Data_And_RBAC_Reference.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/05_Data_And_RBAC_Reference.md)
 
-2. 기본 생성된 `Code.gs` 파일의 내용을 모두 삭제하고, 저장소의 [Code.gs](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/Code.gs) 파일 내용을 그대로 붙여넣습니다.
+## 문서를 읽는 순서 (인수인계 기준)
+인수인계 목적이라면 기능 설명만 읽는 것보다 “왜 이 순서인지”를 이해하는 것이 중요합니다. 먼저 위키 메인에서 현재 운영 기준을 잡고, 관리자 가이드로 실제 탭 운영 흐름을 익힌 뒤, 런북으로 복구 절차를 확인하면 운영 공백을 최소화할 수 있습니다.
 
-3. 새 파일을 추가합니다:
-   - **파일 > 새로 만들기 > 스크립트 파일**을 클릭
-   - 파일명을 `fortune`으로 입력
-   - 저장소의 [fortune.gs](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/fortune.gs) 파일 내용을 그대로 붙여넣습니다.
+그 다음에는 필요한 경우에만 History 원문을 열어 의사결정 배경을 추적합니다. 이렇게 하면 현재 운영 기준(SSOT)을 흔들지 않으면서도, 과거 변경 이유를 정확히 역추적할 수 있습니다.
 
-4. 새 파일을 추가합니다:
-   - **파일 > 새로 만들기 > HTML 파일**을 클릭
-   - 파일명을 `Index`로 입력
-   - 저장소의 [Index.html](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/main/Index.html) 파일 내용을 그대로 붙여넣습니다.
-   - 이 과정까지 완료되면 Google Apps Script 편집기에서 `Code.gs`, `fortune.gs`, `Index.html` 파일이 모두 생성되어 있어야 합니다.
-   ![alt text](/images/image-1.png)
+## 시작 경로
+- 위키 메인(현재 운영 기준): [docs/Wiki/README.md](./docs/Wiki/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/README.md)
+- 히스토리 인덱스(과거 기록): [docs/History/README.md](./docs/History/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/README.md)
+- 기술 문서 진입점: [TECH_DOCS.md](./TECH_DOCS.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/TECH_DOCS.md)
 
-5. **배포 > 새 배포**를 클릭합니다:
-   - 유형: **웹 앱**
-   - 실행 권한: **나**
-   - 액세스 권한: **모든 사용자**
-   - **배포** 버튼 클릭
-   ![alt text](/images/image-2.png)
+## 운영 URL
+- 관리자: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/admin/`
+- 학생(Latest): `https://cloud-club.github.io/CloudClubAttendanceSystem/web/student/latest/`
+- 랜딩: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/`
 
-6. 권한 승인:
-   - **권한 검토** 클릭
-   - Google 계정으로 로그인
-   - **고급** > **안전하지 않음으로 이동** 클릭
-   - **허용** 클릭
+## 회귀 더블체크
+- 실행기: [scripts/run_doublecheck.sh](./scripts/run_doublecheck.sh) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/scripts/run_doublecheck.sh)
+- 정적 가드: [scripts/doublecheck_static_guard.js](./scripts/doublecheck_static_guard.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/scripts/doublecheck_static_guard.js)
+- API 비교: [scripts/doublecheck_api_snapshot.js](./scripts/doublecheck_api_snapshot.js), [scripts/doublecheck_api_compare.js](./scripts/doublecheck_api_compare.js)
+- 운영 체크리스트: [docs/Wiki/06_Doublecheck_Regression_Gate.md](./docs/Wiki/06_Doublecheck_Regression_Gate.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/06_Doublecheck_Regression_Gate.md)
 
-7. 배포 완료 후 제공되는 **웹 앱 URL**을 복사해 두세요.
-
-## 사용 방법
-
-### 출석 세션 생성
-
-출석 세션을 생성하는 과정은 Google Sheets에서 새로운 컬럼을 추가하는 것으로 간단히 완료됩니다.
-
-**초기 상태 (세션 생성 전):**
-| A열 (이름) | B열 (기수) | C열 (전화번호) |
-|-----------|----------|-------------|
-| 홍길동 | 1기 | 010-1234-5678 |
-| 김철수 | 2기 | 010-9876-5432 |
-| 이영희 | 1기 | 010-1111-2222 |
-
-**첫 번째 세션 추가 후:**
-| A열 (이름) | B열 (기수) | C열 (전화번호) | D열 (2024-03-15-14:00) |
-|-----------|----------|-------------|-------------------|
-| 홍길동 | 1기 | 010-1234-5678 | |
-| 김철수 | 2기 | 010-9876-5432 | |
-| 이영희 | 1기 | 010-1111-2222 | |
-
-**여러 세션 추가 후:**
-| A열 (이름) | B열 (기수) | C열 (전화번호) | D열 (2024-03-15-14:00) | E열 (2024-03-22-14:00) | F열 (2024-03-29-14:00) |
-|-----------|----------|-------------|-------------------|-------------------|-------------------|
-| 홍길동 | 1기 | 010-1234-5678 | 2024-03-15 14:05:23 | | |
-| 김철수 | 2기 | 010-9876-5432 | | 2024-03-22 14:03:15 | |
-| 이영희 | 1기 | 010-1111-2222 | 2024-03-15 14:02:10 | 2024-03-22 14:01:45 | |
-
-![alt text](/images/image-3.png)
-
-**세션 생성 단계:**
-
-1. **새 컬럼 추가**: Google Sheets에서 D열 오른쪽에 새로운 열을 삽입합니다.
-
-2. **헤더 작성**: 새 컬럼의 첫 번째 행(헤더)에 세션 시작 시간을 `YYYY-MM-DD-HH:MM` 형식으로 입력합니다.
-   - 올바른 형식 예시:
-     - `2024-03-15-14:00` (2024년 3월 15일 오후 2시)
-     - `2024-12-25-09:30` (2024년 12월 25일 오전 9시 30분)
-     - `2025-01-10-13:15` (2025년 1월 10일 오후 1시 15분)
-
-3. **자동 감지**: 저장하면 시스템이 새로운 세션을 자동으로 감지하고, 해당 시간부터 30분간 출석 세션이 활성화됩니다.
-
-4. **출석 기록**: 학생들이 출석하면 해당 셀에 실제 출석 시간이 자동으로 기록됩니다.
-   - 예: `2024-03-15 14:05:23` (2024년 3월 15일 오후 2시 5분 23초에 출석)
-
-**중요 참고사항:**
-- 헤더의 날짜/시간 형식을 정확히 지켜야 시스템이 올바르게 작동합니다.
-- 세션은 지정된 시작 시간부터 정확히 30분간만 활성화됩니다.
-- 과거 시간으로 헤더를 작성해도 되지만, 해당 세션은 이미 종료된 상태로 인식됩니다.
-
-### 학생 출석 체크
-
-1. 배포된 웹앱 URL에 접속합니다.
-2. 출석 세션이 활성화되면 30분 카운트다운이 시작됩니다.
-3. 전화번호를 입력하고 **출석하기** 버튼을 클릭합니다.
-4. 출석 완료 시 개인 통계와 운세가 표시됩니다.
-
-### 출석 현황 확인
-
-1. **출석현황** 탭을 클릭합니다.
-2. 전화번호를 입력하여 개인 출석 기록을 확인할 수 있습니다.
-3. 상위 10명의 출석률 랭킹을 확인할 수 있습니다.
-
-## 관리자 기능
-
-### 기수별 시트 관리
-
-1. **관리자** 탭에서 현재 활성화된 시트를 선택할 수 있습니다.
-2. 여러 기수나 그룹을 위해 다른 시트를 생성하고 전환할 수 있습니다.
-![alt text](/images/image-4.png)
-
-### QR 코드 생성
-
-1. **관리자** 탭에서 QR 코드를 생성할 수 있습니다.
-2. 학생들이 QR 코드를 스캔하여 빠르게 출석 페이지에 접속할 수 있습니다.
-
-## 주요 기능 상세 설명
-
-### 순위 시스템
-
-시스템은 다음 기준으로 학생들의 순위를 매깁니다:
-
-1. **1차 기준**: 출석률 (높은 순)
-   - 출석률 = (출석한 세션 수 / 전체 진행된 세션 수) × 100
-2. **2차 기준**: 평균 체크인 시간 (빠른 순)
-   - 세션 시작 시간부터 실제 체크인까지의 평균 시간
-![alt text](/images/image-5.png)
-
-### 운세 기능
-
-출석 완료 시 다음과 같은 재미있는 메시지 중 하나가 랜덤으로 표시됩니다:
-- 개발자 관련 유머
-- 클라우드 컴퓨팅 농담
-- 동기부여 메시지
-- 일반적인 운세 메시지
-
-### 실시간 출석 제한
-
-- 각 출석 세션은 **30분 제한**이 있습니다.
-- 세션 시작 시간은 Google Sheets의 컬럼 헤더에 정의됩니다.
-- 제한 시간이 지나면 더 이상 출석 체크가 불가능합니다.
-
-### 중복 출석 방지
-
-- 같은 세션에 대해 한 번만 출석 체크가 가능합니다.
-- 이미 출석한 학생이 다시 시도하면 안내 메시지가 표시됩니다.
-
-### 자동 데이터 인식
-
-- 새로운 출석 컬럼을 D열부터 우측으로 추가하면 시스템이 자동으로 감지합니다.
-- 학생을 새로 추가하면 자동으로 출석 대상에 포함됩니다.
-- 별도의 설정 변경 없이 Google Sheets에서 모든 관리가 가능합니다.
-
----
-
-**문의 사항이나 버그 리포트는 저장소의 Issues 탭을 활용해 주세요.**
+## 핵심 코드 경로
+- 백엔드 엔트리: [Appsscript/00_entry_api.gs](./Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
+- 백엔드 권한/상수: [Appsscript/01_constants_access.gs](./Appsscript/01_constants_access.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/01_constants_access.gs)
+- Appsscript 운영 가이드: [Appsscript/README.md](./Appsscript/README.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/README.md)
+- 관리자 화면: [web/admin/index.html](./web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
+- 관리자 스크립트: [web/admin/scripts/](./web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
+- 학생 화면: [web/student/latest/index.html](./web/student/latest/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/latest/index.html)
+- 학생 스크립트: [web/student/student.js](./web/student/student.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/student.js)

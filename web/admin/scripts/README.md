@@ -1,0 +1,46 @@
+# Admin Scripts Split Guide
+
+이 디렉토리는 기존 `web/admin/admin.js` 단일 파일을 동작 불변으로 도메인 분할한 운영 소스입니다.
+
+## 원칙
+- 기능/화면/권한 동작은 기존과 동일하게 유지합니다.
+- 백엔드 API 계약(`action`, 파라미터, 응답 스키마)은 변경하지 않습니다.
+- `type="module"` 없이 클래식 `<script>` 다중 로드 순서를 사용합니다.
+- `index.html` 인라인 이벤트 핸들러와의 호환을 유지합니다.
+
+## 로딩 순서
+1. `00_namespace.js`
+2. `01_state.js`
+3. `02_utils.js`
+4. `03_dom_refs.js`
+5. `04_api_client.js`
+6. `10_auth.js`
+7. `20_attendance.js`
+8. `21_dashboard.js`
+9. `22_schedule.js`
+10. `23_import.js`
+11. `24_variables.js`
+12. `25_graduation_excused.js`
+13. `26_admin_users.js`
+14. `27_qr_links.js`
+15. `90_bootstrap.js`
+16. `99_compat_handlers.js`
+
+## 파일 책임
+- `10_auth.js`: 로그인/세션/권한 게이트
+- `20_attendance.js`: 출석/현황/수동 승인 핵심
+- `21_dashboard.js`: 대시보드 집계/드릴다운/CSV
+- `22_schedule.js`: 일정 CRUD/캘린더/충돌 처리
+- `23_import.js`: 시즌 업로드 분석/실행/중단
+- `24_variables.js`: 변수 조회/저장/호환성 체크
+- `25_graduation_excused.js`: 수료 판정/유고 처리
+- `26_admin_users.js`: 관리자 계정 CRUD
+- `27_qr_links.js`: QR/URL 로딩 및 복사
+
+## 호환성
+- 기존 전역 핸들러 이름(`openTab`, `saveSchedule`, `loadVariables` 등)은 유지됩니다.
+- `99_compat_handlers.js`는 인라인 이벤트 함수 존재 여부를 점검합니다.
+
+## 참고
+- `web/admin/admin.js`는 롤백 대비용 레거시 참조 파일로 남아있습니다.
+- 실제 페이지 로딩은 `web/admin/index.html`의 `scripts/*.js`를 기준으로 합니다.

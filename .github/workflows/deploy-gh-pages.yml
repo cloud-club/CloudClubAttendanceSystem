@@ -69,6 +69,29 @@ jobs:
           echo "$body" | grep -q '"apiVersion"' || { echo "::error::apiInfo 응답에 apiVersion이 없습니다."; exit 1; }
           echo "$body" | grep -q '"variablesResetTemplate"' || { echo "::error::apiInfo 응답에 variablesResetTemplate 지원 정보가 없습니다."; exit 1; }
 
+      - name: Auth scope canary (authGoogleLogin dummy)
+        env:
+          APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+        run: |
+          set -euo pipefail
+          sep='?'
+          if [[ "$APPS_SCRIPT_WEB_APP_URL" == *\?* ]]; then
+            sep='&'
+          fi
+
+          canary_url="${APPS_SCRIPT_WEB_APP_URL}${sep}api=authGoogleLogin&idToken=dummy&callback=cb&_=$(date +%s)"
+          body="$(curl -fsSL "$canary_url")"
+
+          if echo "$body" | grep -q '"code":"AUTH_SERVER_SCOPE_MISSING"'; then
+            echo "::error::AUTH_SERVER_SCOPE_MISSING detected. Apps Script 배포 소유자 권한 승인(UrlFetchApp) 후 동일 배포 재배포가 필요합니다."
+            exit 1
+          fi
+
+          echo "$body" | grep -Eq '"code":"AUTH_ID_TOKEN_(VERIFY_FAILED|PAYLOAD_INVALID|EXPIRED|ISSUER_INVALID|MISSING)"' || {
+            echo "::error::Unexpected auth canary response: $body"
+            exit 1
+          }
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

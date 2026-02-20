@@ -1,0 +1,85 @@
+/* Shared styles for static admin/student pages */
+
+.admin-key-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.admin-key-modal {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 20px;
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: 0 16px 40px rgba(2, 6, 23, 0.5);
+  padding: 24px;
+}
+
+.admin-key-modal h3 {
+  color: #e2e8f0;
+  margin-bottom: 8px;
+  font-size: 20px;
+}
+
+.admin-key-modal p {
+  color: #94a3b8;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.admin-key-modal input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.8);
+  color: #f8fafc;
+  font-size: 16px;
+}
+
+.admin-key-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.admin-key-modal button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: #3b82f6;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.attendance-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+.attendance-badge.on-time {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.attendance-badge.late {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fb923c;
+}
+
+.attendance-status.late {
+  color: #fb923c;
+}
