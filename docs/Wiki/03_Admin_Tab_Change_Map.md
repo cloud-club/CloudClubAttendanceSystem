@@ -41,10 +41,13 @@ flowchart LR
 2. 수정
 - 프런트/백엔드 중 최소 범위 변경 원칙 적용
 - 권한 레벨과 시즌 접근 가드 회귀 여부 점검
+- 출석 경로(`session/ranking/attendance/status`)는 `season + adminToken` 전달을 필수 확인
+- 인증 오류 처리 경로에서 `handleUnauthorizedError` 우선 처리 유지 여부 확인
 
 3. 검증
 - 성공 경로 + 실패 경로 + 권한 경로까지 점검
 - 필요 시 `04_Operations_Runbook` 기준으로 canary 수행
+- `apiInfo.runtimeChecks`로 배포 런타임 무결성 확인
 
 4. 배포
 - Apps Script/Pages 반영 후 운영 URL에서 재검증
@@ -74,6 +77,14 @@ flowchart LR
 - 공통 인증 가드: `authGoogleLogin`, `authSession`, `ACTION_ACCESS_LEVELS`
 - 시즌 접근 가드: `requireSeasonAccess`
 - 호환성 가드: `apiInfo.supportedActions`에 `fortune*` 액션 존재 여부를 탭 진입 전에 확인
+
+## 출석하기/출석현황 추가 회귀 체크
+최근 장애 기준으로 출석 관련 수정 시 아래 항목을 기본 체크리스트로 고정합니다.
+
+1. `session/ranking/attendance/status` 호출에 `season + adminToken`이 모두 포함되는지 확인
+2. `UNAUTHORIZED` 발생 시 일반 에러 렌더보다 `handleUnauthorizedError`가 먼저 실행되는지 확인
+3. `apiInfo.runtimeChecks`에서 필수 함수가 모두 `true`인지 확인
+4. `SERVER_INTEGRITY_MISSING` 분기 시 같은 deployment 재배포 절차로 복구하는지 확인
 
 ## 관련 문서
 - 관리자 가이드: [02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)

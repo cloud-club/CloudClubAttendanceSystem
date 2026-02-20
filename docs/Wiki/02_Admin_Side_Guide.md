@@ -56,6 +56,8 @@ flowchart LR
 2. 탭 동작 실패: 액션 권한(`public/admin/super`)과 시즌 접근 가드 확인
 3. 데이터 반영 실패: 시트 헤더/키(`Phone`) 및 메타 시트 상태 확인
 4. 배포 의심 시: `APPS_SCRIPT_WEB_APP_URL`와 Pages 재배포 이력 확인
+5. 과거 시즌 조회 실패: 관리자 호출은 `season + adminToken` 전달 여부를 우선 확인
+6. 런타임 누락 의심: `apiInfo.runtimeChecks`에서 필수 함수 존재 여부를 확인
 
 ## 관리자 탭 상세 (실제 UI 10개)
 
@@ -78,9 +80,11 @@ flowchart LR
 - 세션 미오픈/마감 상태에서 무리하게 재시도하지 않기
 - 강제 덮어쓰기 사용 시 사유를 운영 기록에 남기기
 - 동일 전화번호 중복 처리는 안내 문구와 함께 확인하기
+- 인증 만료/토큰 이상 시 오류를 반복하지 말고 인증 게이트 복귀 후 재로그인하기
 
 #### 수정 시 확인 파일
 - [web/admin/index.html](../../web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
+- [web/admin/scripts/20_attendance.js](../../web/admin/scripts/20_attendance.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/20_attendance.js)
 - [web/admin/scripts/](../../web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
 - [Appsscript/30_attendance_core.gs](../../Appsscript/30_attendance_core.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/30_attendance_core.gs)
@@ -105,9 +109,11 @@ flowchart LR
 - 필터 조건 바뀐 상태에서 결과를 혼동하지 않기
 - 랭킹 동률 규칙(출석횟수→평균오프셋→이름순) 안내 통일
 - 대시보드 숫자와 원본 시트 불일치 시 즉시 원인 분리
+- 인증 만료 발생 시 `handleUnauthorizedError` 경로로 로그인 게이트 복귀를 우선 확인
 
 #### 수정 시 확인 파일
 - [web/admin/index.html](../../web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
+- [web/admin/scripts/20_attendance.js](../../web/admin/scripts/20_attendance.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/20_attendance.js)
 - [web/admin/scripts/](../../web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
 - [Appsscript/30_attendance_core.gs](../../Appsscript/30_attendance_core.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/30_attendance_core.gs)

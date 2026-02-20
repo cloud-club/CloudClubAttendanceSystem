@@ -30,6 +30,11 @@ flowchart LR
 4. 관리자 페이지 하드 리로드 후 `apiInfo`/로그인 canary 확인
 5. 역할별 계정(Super/Admin/User) 분기 검증
 
+## 최근 운영 변경 참조 (History 023)
+구조분할 배경, 출석 인증 불일치 원인, 런타임 무결성 복구 결정은 아래 History 문서를 기준으로 추적합니다.
+
+- [023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md](../History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/023_%EA%B4%80%EB%A6%AC%EC%9E%90%EB%B0%B1%EC%97%94%EB%93%9C_%EA%B5%AC%EC%A1%B0%EB%B6%84%ED%95%A0_%EB%B0%8F_%EC%B6%9C%EC%84%9D%EC%9D%B8%EC%A6%9D%EB%B6%88%EC%9D%BC%EC%B9%98_%EA%B8%B4%EA%B8%89%EB%B3%B5%EA%B5%AC_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-02-20.md)
+
 ## 운세 탭 배포 후 최소 검증
 운세 탭은 신규 기능이지만 기존 사용자/운영자 사용감 불변 원칙을 유지해야 하므로, 아래 최소 검증을 배포 직후 실행합니다.
 
@@ -61,6 +66,10 @@ flowchart LR
 4. 배포 반영 계열
 - 증상: 설정은 맞는데 웹 반영이 안 됨
 - 우선 조치: Secret 값과 Pages 재배포 이력, 런타임 `env.js` 값 대조
+
+5. 런타임 무결성 계열
+- 증상: `SERVER_INTEGRITY_MISSING`, `collectSessionsFromSheet is not defined`
+- 우선 조치: 필수 함수 존재 확인 후 같은 deployment 재배포, `apiInfo.runtimeChecks` 재확인
 
 ## 시즌 소스 fallback 차단 정책
 관리자 화면에서 시즌 목록(`adminSeasonList`) 로드에 실패하면, `session`/`ranking` 조회를 `season` 없이 호출하지 않고 즉시 중단합니다. 이는 백엔드의 latest 시즌 fallback로 잘못된 시즌 데이터가 노출되는 것을 막기 위한 보호 정책입니다. 운영자는 이 상태에서 임의 재시도보다 새로고침/재로그인 후 시즌 목록 정상 로드를 먼저 확인해야 합니다.
@@ -101,6 +110,7 @@ flowchart LR
 |---|---|---|
 | 장애 시각/환경 | 발생 시각, 운영 URL, 계정 유형 | `2026-02-20 18:40`, admin 계정 |
 | 관측 코드 | API error code, 브라우저 메시지 | `AUTH_SERVER_SCOPE_MISSING` |
+| 무결성 증빙 | `apiInfo.runtimeChecks` 캡처 및 값 | `collectSessionsFromSheet=true` |
 | 수행 조치 | Gate 단계별 실행 내용 | Gate3 승인, Gate4 재배포 |
 | 검증 결과 | canary + 역할별 로그인 결과 | Super/Admin 성공, User 거절 |
 | 후속 조치 | 재발 방지 항목 | OAuth Origin 점검 체크리스트 갱신 |
@@ -117,5 +127,6 @@ flowchart LR
 ## 관련 문서
 - 관리자 가이드: [02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)
 - 회귀 더블체크 게이트: [06_Doublecheck_Regression_Gate.md](./06_Doublecheck_Regression_Gate.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/06_Doublecheck_Regression_Gate.md)
+- History 023: [023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md](../History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/023_%EA%B4%80%EB%A6%AC%EC%9E%90%EB%B0%B1%EC%97%94%EB%93%9C_%EA%B5%AC%EC%A1%B0%EB%B6%84%ED%95%A0_%EB%B0%8F_%EC%B6%9C%EC%84%9D%EC%9D%B8%EC%A6%9D%EB%B6%88%EC%9D%BC%EC%B9%98_%EA%B8%B4%EA%B8%89%EB%B3%B5%EA%B5%AC_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-02-20.md)
 - History 011: [011_배포_Secret_API_URL_주입_트러블슈팅_런북.md](../History/011_배포_Secret_API_URL_주입_트러블슈팅_런북.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/011_%EB%B0%B0%ED%8F%AC_Secret_API_URL_%EC%A3%BC%EC%9E%85_%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85_%EB%9F%B0%EB%B6%81.md)
 - History 019: [019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md](../History/019_구글인증_권한오류_트러블슈팅_검증_배포_런북_2026-02-20.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/019_%EA%B5%AC%EA%B8%80%EC%9D%B8%EC%A6%9D_%EA%B6%8C%ED%95%9C%EC%98%A4%EB%A5%98_%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85_%EA%B2%80%EC%A6%9D_%EB%B0%B0%ED%8F%AC_%EB%9F%B0%EB%B6%81_2026-02-20.md)
