@@ -1627,6 +1627,13 @@
       min-width: 160px;
     }
 
+    .matrix-table.matrix-no-sticky th.sticky-col,
+    .matrix-table.matrix-no-sticky td.sticky-col {
+      position: static;
+      left: auto;
+      z-index: 1;
+    }
+
     .matrix-cell {
       width: 100%;
       min-width: 76px;
@@ -3198,6 +3205,25 @@
     body.lite-mode .site-footer-inner {
       backdrop-filter: none !important;
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    body.perf-ui .tab-button,
+    body.perf-ui .card,
+    body.perf-ui .btn,
+    body.perf-ui .form-input,
+    body.perf-ui .auth-info-btn,
+    body.perf-ui #qrcode,
+    body.perf-ui #seasonQrcode {
+      transition-property: background-color, border-color, color, opacity, transform, box-shadow, filter;
+    }
+
+    body.perf-ui .auth-card,
+    body.perf-ui .season-toolbar-panel,
+    body.perf-ui .tab-nav,
+    body.perf-ui .card,
+    body.perf-ui .modal-panel,
+    body.perf-ui .site-footer-inner {
+      box-shadow: 0 7px 18px rgba(0, 0, 0, 0.2);
     }
 
     @media (prefers-reduced-motion: reduce) {

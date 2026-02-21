@@ -474,12 +474,12 @@ async function initializeDashboard() {
   updateRoleBasedUi();
   redirectToFirstAllowedTab();
 
-  if (isSuperAdmin()) {
-    await loadAdminUsers();
-  } else {
-    const wrap = document.getElementById('adminUsersTableWrap');
-    if (wrap) {
-      wrap.innerHTML = '<div class="info-text">Super Admin 권한에서만 관리자 목록을 확인할 수 있습니다.</div>';
+  const adminUsersWrap = document.getElementById('adminUsersTableWrap');
+  if (adminUsersWrap) {
+    if (isSuperAdmin()) {
+      adminUsersWrap.innerHTML = '<div class="info-text">관리자 관리 탭을 열면 최신 목록을 불러옵니다.</div>';
+    } else {
+      adminUsersWrap.innerHTML = '<div class="info-text">Super Admin 권한에서만 관리자 목록을 확인할 수 있습니다.</div>';
     }
   }
 

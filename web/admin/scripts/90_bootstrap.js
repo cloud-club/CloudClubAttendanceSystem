@@ -12,15 +12,44 @@ if (!scheduleManualMemberListRender && typeof debounce === 'function') {
 
 document.addEventListener('DOMContentLoaded', () => {
   const prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if (isAdminPerfUiEnabled()) {
+    document.body.classList.add('perf-ui');
+  }
   if (isAdminLiteModeEnabled() || prefersReducedMotion) {
     document.body.classList.add('lite-mode');
   }
+  initializeAdminPerfMonitors();
 
-  setTimeout(() => {
-    document.querySelectorAll('.cloud-animation').forEach((node) => {
+  const cloudNodes = Array.from(document.querySelectorAll('.cloud-animation'));
+  let cloudScrollResumeTimer = null;
+  const pauseCloudAnimations = () => {
+    cloudNodes.forEach((node) => {
       node.style.animationPlayState = 'paused';
     });
+  };
+  const resumeCloudAnimations = () => {
+    cloudNodes.forEach((node) => {
+      node.style.animationPlayState = 'running';
+    });
+  };
+
+  setTimeout(() => {
+    pauseCloudAnimations();
   }, 25000);
+
+  if (isAdminPerfUiEnabled() && cloudNodes.length > 0 && !prefersReducedMotion) {
+    window.addEventListener('scroll', () => {
+      pauseCloudAnimations();
+      if (cloudScrollResumeTimer) {
+        clearTimeout(cloudScrollResumeTimer);
+      }
+      cloudScrollResumeTimer = setTimeout(() => {
+        if (!document.hidden) {
+          resumeCloudAnimations();
+        }
+      }, 180);
+    }, { passive: true });
+  }
 
   document.addEventListener('click', (event) => {
     const popover = document.getElementById('authInfoPopover');
@@ -42,7 +71,14 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(countdownInterval);
         countdownInterval = null;
       }
+      if (isAdminPerfUiEnabled()) {
+        pauseCloudAnimations();
+      }
       return;
+    }
+
+    if (isAdminPerfUiEnabled() && !prefersReducedMotion) {
+      resumeCloudAnimations();
     }
 
     if (typeof checkAttendanceSession === 'function' && adminToken && seasonSourceReady) {

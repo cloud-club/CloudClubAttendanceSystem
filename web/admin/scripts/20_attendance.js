@@ -468,6 +468,9 @@ function openTab(tabName, evt) {
 
   if (tabName === 'status') {
     loadAttendanceDashboard({ forceReload: false });
+    if (typeof flushAttendanceDashboardDeferredWork === 'function') {
+      runWhenBrowserIdle(() => flushAttendanceDashboardDeferredWork(), 120);
+    }
   }
 
   if (tabName === 'schedule') {

@@ -34,6 +34,7 @@ let calendarSelectedDateKey = '';
 let scheduleCalendarModalState = null;
 let excusedSearchKeyword = '';
 let excusedAbsentOnly = false;
+let graduationMatrixRenderToken = 0;
 let variableApiInfo = null;
 let variableTabBlocked = false;
 let variableAutoNormalizedOnce = false;
@@ -87,6 +88,7 @@ let attendanceDashboardMemberPickerRenderSignature = '';
 let attendanceDashboardSessionPickerLastOptionsRef = null;
 let attendanceDashboardMemberPickerLastOptionsRef = null;
 let attendanceDashboardLastRenderSignature = '';
+let attendanceDashboardPendingMemberTrendRender = false;
 let attendanceDashboardState = {
   group: 'all',
   dateFrom: '',
@@ -119,6 +121,8 @@ const FRONT_CACHE_TTL_SHEET_LINK_MS = 300000;
 const FRONT_CACHE_TTL_ADMIN_URL_MS = 300000;
 const FRONT_CACHE_TTL_RANKING_MS = 30000;
 const MANUAL_MEMBER_SEARCH_DEBOUNCE_MS = 120;
+const MATRIX_STICKY_ROW_LIMIT = 40;
+const MATRIX_RENDER_CHUNK_SIZE = 24;
 const ATTENDANCE_DASHBOARD_STATUS_LABELS = {
   on_time: '출석',
   late: '지각',

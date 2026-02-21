@@ -684,6 +684,25 @@ async function ensureDashboardChartLibrary() {
   }
 }
 
+function getDashboardChartAnimationOption() {
+  return isAdminPerfUiEnabled() ? false : undefined;
+}
+
+function shouldDeferDashboardMemberTrendRender() {
+  return typeof getActiveTabName === 'function' && getActiveTabName() !== 'status';
+}
+
+function flushAttendanceDashboardDeferredWork() {
+  if (typeof getActiveTabName === 'function' && getActiveTabName() !== 'status') {
+    return;
+  }
+  if (!attendanceDashboardPendingMemberTrendRender) {
+    return;
+  }
+  attendanceDashboardPendingMemberTrendRender = false;
+  renderAttendanceDashboardMemberTrendChart();
+}
+
 function getDashboardDonutChartRef(refName) {
   if (refName === 'status') return attendanceDashboardStatusDonutChart;
   if (refName === 'cohort') return attendanceDashboardCohortDonutChart;
@@ -764,6 +783,7 @@ function renderDashboardDonutChart(chartRefName, canvasId, emptyId, labels, valu
       }]
     },
     options: {
+      animation: getDashboardChartAnimationOption(),
       maintainAspectRatio: false,
       cutout: '58%',
       plugins: {
@@ -984,6 +1004,7 @@ function renderAttendanceDashboardEventRateChart(payload) {
       }]
     },
     options: {
+      animation: getDashboardChartAnimationOption(),
       maintainAspectRatio: false,
       responsive: true,
       scales: {
@@ -1067,6 +1088,7 @@ function renderAttendanceDashboardEventStatusChart(payload) {
       datasets: datasets
     },
     options: {
+      animation: getDashboardChartAnimationOption(),
       maintainAspectRatio: false,
       responsive: true,
       scales: {
@@ -1283,6 +1305,11 @@ async function loadAttendanceDashboardMemberSeries(memberKey) {
 
 async function renderAttendanceDashboardMemberTrendChart() {
   if (!ensureChartLibraryAvailable()) return;
+  if (shouldDeferDashboardMemberTrendRender()) {
+    attendanceDashboardPendingMemberTrendRender = true;
+    return;
+  }
+  attendanceDashboardPendingMemberTrendRender = false;
   const canvas = document.getElementById('dashboardMemberTrendChart');
   if (!canvas) return;
 
@@ -1380,6 +1407,7 @@ async function renderAttendanceDashboardMemberTrendChart() {
     type: 'line',
     data: { labels: labels, datasets: datasets },
     options: {
+      animation: getDashboardChartAnimationOption(),
       maintainAspectRatio: false,
       responsive: true,
       scales: {

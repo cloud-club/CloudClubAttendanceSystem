@@ -32,7 +32,16 @@ function debounce(fn, waitMs) {
 const adminPageQueryParams = new URLSearchParams(window.location.search || '');
 const adminPerfModeEnabled = adminPageQueryParams.get('perf') === '1';
 const adminLiteModeEnabled = adminPageQueryParams.get('lite') === '1';
+const adminPerfUiModeEnabled = adminPageQueryParams.get('perf_ui') === '1';
 let adminPerfSequence = 0;
+let adminPerfMonitorsInitialized = false;
+let adminPerfLongTaskObserver = null;
+const adminPerfLongTaskState = {
+  supported: typeof window.PerformanceObserver !== 'undefined',
+  count: 0,
+  totalMs: 0,
+  maxMs: 0
+};
 
 function isAdminPerfEnabled() {
   return adminPerfModeEnabled;
@@ -40,6 +49,10 @@ function isAdminPerfEnabled() {
 
 function isAdminLiteModeEnabled() {
   return adminLiteModeEnabled;
+}
+
+function isAdminPerfUiEnabled() {
+  return adminPerfUiModeEnabled;
 }
 
 function startPerfMark(name, meta) {
@@ -112,6 +125,155 @@ async function withPerfMark(name, task, meta) {
     });
     throw error;
   }
+}
+
+function runWhenBrowserIdle(task, timeoutMs) {
+  if (typeof task !== 'function') return;
+  const timeout = Math.max(0, Number(timeoutMs || 250));
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => task(), { timeout: timeout });
+    return;
+  }
+  setTimeout(() => task(), Math.min(timeout, 250));
+}
+
+function getAdminLongTaskSnapshot() {
+  return {
+    supported: !!adminPerfLongTaskState.supported,
+    count: Number(adminPerfLongTaskState.count || 0),
+    totalMs: Number(adminPerfLongTaskState.totalMs || 0),
+    maxMs: Number(adminPerfLongTaskState.maxMs || 0)
+  };
+}
+
+function initializeAdminLongTaskObserver() {
+  if (!isAdminPerfEnabled() || !adminPerfLongTaskState.supported || adminPerfLongTaskObserver) {
+    return;
+  }
+  try {
+    adminPerfLongTaskObserver = new PerformanceObserver((list) => {
+      const entries = list && typeof list.getEntries === 'function'
+        ? list.getEntries()
+        : [];
+      entries.forEach((entry) => {
+        const duration = Number(entry && entry.duration || 0);
+        if (!duration || duration < 50) return;
+        adminPerfLongTaskState.count += 1;
+        adminPerfLongTaskState.totalMs += duration;
+        adminPerfLongTaskState.maxMs = Math.max(adminPerfLongTaskState.maxMs, duration);
+      });
+    });
+    adminPerfLongTaskObserver.observe({ entryTypes: ['longtask'] });
+  } catch (error) {
+    adminPerfLongTaskState.supported = false;
+  }
+}
+
+function getPercentile(values, percentile) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const ratio = Math.max(0, Math.min(1, Number(percentile || 0)));
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
+  return Number(sorted[index] || 0);
+}
+
+function initializeAdminScrollFrameMonitor() {
+  if (!isAdminPerfEnabled() || !window.performance || typeof window.performance.now !== 'function') {
+    return;
+  }
+  const state = {
+    activeUntil: 0,
+    collecting: false,
+    burstStartedAt: 0,
+    lastFrameAt: 0,
+    frameDeltas: [],
+    rafId: 0,
+    burstSeq: 0,
+    longTaskCountAtLastFlush: 0,
+    longTaskTotalMsAtLastFlush: 0
+  };
+
+  function flushScrollBurst() {
+    if (!state.collecting) return;
+
+    state.collecting = false;
+    state.lastFrameAt = 0;
+    if (state.rafId) {
+      cancelAnimationFrame(state.rafId);
+      state.rafId = 0;
+    }
+
+    const deltas = state.frameDeltas.slice();
+    state.frameDeltas = [];
+    if (deltas.length === 0) return;
+
+    const sum = deltas.reduce((acc, value) => acc + value, 0);
+    const avg = sum / deltas.length;
+    const p95 = getPercentile(deltas, 0.95);
+    const dropFrames = deltas.filter(value => value > 20).length;
+    const heavyFrames = deltas.filter(value => value > 50).length;
+    const longTaskSnapshot = getAdminLongTaskSnapshot();
+    const longTaskDeltaCount = Math.max(0, longTaskSnapshot.count - state.longTaskCountAtLastFlush);
+    const longTaskDeltaMs = Math.max(0, longTaskSnapshot.totalMs - state.longTaskTotalMsAtLastFlush);
+    state.longTaskCountAtLastFlush = longTaskSnapshot.count;
+    state.longTaskTotalMsAtLastFlush = longTaskSnapshot.totalMs;
+    const activeTab = typeof getActiveTabName === 'function' ? getActiveTabName() : '';
+
+    console.debug('[perf] ui:scroll-frame', {
+      burst: state.burstSeq,
+      tab: activeTab || 'unknown',
+      frameCount: deltas.length,
+      avgFrameMs: Number(avg.toFixed(2)),
+      p95FrameMs: Number(p95.toFixed(2)),
+      dropFrameRatePct: Number(((dropFrames / Math.max(1, deltas.length)) * 100).toFixed(2)),
+      heavyFrameCount: heavyFrames,
+      burstDurationMs: Number((window.performance.now() - state.burstStartedAt).toFixed(2)),
+      longTaskCountDelta: longTaskDeltaCount,
+      longTaskTotalMsDelta: Number(longTaskDeltaMs.toFixed(2))
+    });
+  }
+
+  function onAnimationFrame(timestamp) {
+    state.rafId = 0;
+    if (!state.collecting) return;
+
+    if (state.lastFrameAt > 0) {
+      state.frameDeltas.push(Math.max(0, timestamp - state.lastFrameAt));
+    }
+    state.lastFrameAt = timestamp;
+
+    if (timestamp <= state.activeUntil + 32) {
+      state.rafId = requestAnimationFrame(onAnimationFrame);
+      return;
+    }
+    flushScrollBurst();
+  }
+
+  function onScroll() {
+    const now = window.performance.now();
+    state.activeUntil = now + 180;
+    if (!state.collecting) {
+      state.collecting = true;
+      state.burstSeq += 1;
+      state.burstStartedAt = now;
+      state.lastFrameAt = 0;
+      state.frameDeltas = [];
+    }
+    if (!state.rafId) {
+      state.rafId = requestAnimationFrame(onAnimationFrame);
+    }
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+}
+
+function initializeAdminPerfMonitors() {
+  if (!isAdminPerfEnabled() || adminPerfMonitorsInitialized) {
+    return;
+  }
+  adminPerfMonitorsInitialized = true;
+  initializeAdminLongTaskObserver();
+  initializeAdminScrollFrameMonitor();
 }
 
 function getFrontCache() {

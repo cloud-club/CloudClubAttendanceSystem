@@ -288,10 +288,54 @@ function syncExcusedFilterUi() {
   }
 }
 
+function buildGraduationMatrixRowHtml(member, sessions) {
+  const detailMap = {};
+  (member.details || []).forEach(detail => {
+    detailMap[detail.sessionKey] = detail;
+  });
+
+  const cells = sessions.map(session => {
+    const detail = detailMap[session.sessionKey] || { status: 'future', note: '' };
+    const status = detail.status || 'future';
+    const label = getMatrixCellLabel(status);
+    const disabled = status === 'future' ? 'disabled' : '';
+
+    return `
+      <td>
+        <button
+          type="button"
+          class="matrix-cell ${status}"
+          data-phone="${escapeHtml(member.phone)}"
+          data-name="${escapeHtml(member.name)}"
+          data-session-key="${escapeHtml(session.sessionKey)}"
+          data-session-date="${escapeHtml(session.date)}"
+          data-status="${escapeHtml(status)}"
+          data-note="${escapeHtml(detail.note || '')}"
+          onclick="onMatrixCellClick(event)"
+          ${disabled}
+        >${label}</button>
+      </td>
+    `;
+  }).join('');
+
+  return `
+    <tr>
+      <td class="sticky-col">
+        <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>${escapeHtml(member.name)}<br>
+        <span style="color:#93bbfc; font-size:11px;">${escapeHtml(member.phone)}</span>
+      </td>
+      ${cells}
+    </tr>
+  `;
+}
+
 function renderGraduationMatrix(report) {
   const wrap = document.getElementById('excusedMatrixWrap');
   const meta = document.getElementById('excusedFilterMeta');
   if (!wrap) return;
+
+  graduationMatrixRenderToken += 1;
+  const renderToken = graduationMatrixRenderToken;
 
   const sessions = report.sessions || [];
   const allMembers = getSortedGraduationMembers(report);
@@ -311,61 +355,44 @@ function renderGraduationMatrix(report) {
     const requiredMark = session.isRequired ? ' *' : '';
     return `<th>${escapeHtml(session.sessionKey)}${requiredMark}</th>`;
   }).join('');
-
-  const bodyRows = members.map(member => {
-    const detailMap = {};
-    (member.details || []).forEach(detail => {
-      detailMap[detail.sessionKey] = detail;
-    });
-
-    const cells = sessions.map(session => {
-      const detail = detailMap[session.sessionKey] || { status: 'future', note: '' };
-      const status = detail.status || 'future';
-      const label = getMatrixCellLabel(status);
-      const disabled = status === 'future' ? 'disabled' : '';
-
-      return `
-        <td>
-          <button
-            type="button"
-            class="matrix-cell ${status}"
-            data-phone="${escapeHtml(member.phone)}"
-            data-name="${escapeHtml(member.name)}"
-            data-session-key="${escapeHtml(session.sessionKey)}"
-            data-session-date="${escapeHtml(session.date)}"
-            data-status="${escapeHtml(status)}"
-            data-note="${escapeHtml(detail.note || '')}"
-            onclick="onMatrixCellClick(event)"
-            ${disabled}
-          >${label}</button>
-        </td>
-      `;
-    }).join('');
-
-    return `
-      <tr>
-        <td class="sticky-col">
-          <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>${escapeHtml(member.name)}<br>
-          <span style="color:#93bbfc; font-size:11px;">${escapeHtml(member.phone)}</span>
-        </td>
-        ${cells}
-      </tr>
-    `;
-  }).join('');
+  const useStickyColumn = members.length <= MATRIX_STICKY_ROW_LIMIT;
+  const tableClass = useStickyColumn ? 'matrix-table' : 'matrix-table matrix-no-sticky';
 
   wrap.innerHTML = `
-    <table class="matrix-table">
+    <table class="${tableClass}">
       <thead>
         <tr>
           <th class="sticky-col">회원/연락처</th>
           ${headCells}
         </tr>
       </thead>
-      <tbody>
-        ${bodyRows}
-      </tbody>
+      <tbody></tbody>
     </table>
   `;
+
+  const tbody = wrap.querySelector('tbody');
+  if (!tbody) return;
+
+  const chunkSize = Math.max(1, Number(MATRIX_RENDER_CHUNK_SIZE || 24));
+  let index = 0;
+
+  const renderChunk = () => {
+    if (renderToken !== graduationMatrixRenderToken) {
+      return;
+    }
+    const end = Math.min(index + chunkSize, members.length);
+    let rowsHtml = '';
+    for (let i = index; i < end; i += 1) {
+      rowsHtml += buildGraduationMatrixRowHtml(members[i], sessions);
+    }
+    tbody.insertAdjacentHTML('beforeend', rowsHtml);
+    index = end;
+    if (index < members.length) {
+      requestAnimationFrame(renderChunk);
+    }
+  };
+
+  renderChunk();
 }
 
 const scheduleExcusedMatrixRender = debounce(() => {
