@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   handleAdminRoleChange();
-  resetAdminAuthState({ silent: true });
+  resetAdminAuthState({ silent: true, preserveSessionToken: true });
   bootstrapAdminAuth().catch((error) => {
     setAuthGateMessage(getDisplayErrorMessage(error, '초기 인증 처리 중 오류가 발생했습니다.'), true);
     console.error(error);

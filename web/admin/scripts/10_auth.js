@@ -101,7 +101,9 @@ function resetAdminAuthState(options) {
   seasonSourceBlockMessage = '';
   adminUsersCache = [];
   adminUsersEditingEmail = '';
-  sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+  if (!opts.preserveSessionToken) {
+    sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+  }
   showAuthGate();
   updateRoleBasedUi();
 
