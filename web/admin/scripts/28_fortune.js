@@ -592,6 +592,9 @@ function readFortuneFileAsArrayBuffer(file) {
 
 function parseFortuneDelimitedMatrix(text) {
   const normalized = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (!window.Papa || typeof window.Papa.parse !== 'function') {
+    return normalized.split('\n').map(line => [line]);
+  }
   const parseWith = (delimiter) => {
     const parsed = window.Papa.parse(normalized, {
       delimiter: delimiter,
@@ -647,6 +650,7 @@ function fortuneMatrixToRows(matrix) {
 async function parseFortuneRowsFromFile(file) {
   const name = String((file && file.name) || '').toLowerCase();
   if (/\.xlsx?$/.test(name)) {
+    await ensureRuntimeDeps(['xlsx']);
     const buffer = await readFortuneFileAsArrayBuffer(file);
     const workbook = window.XLSX.read(buffer, { type: 'array' });
     const firstSheetName = (workbook.SheetNames && workbook.SheetNames[0]) ? workbook.SheetNames[0] : '';
@@ -704,8 +708,10 @@ async function loadFortuneFromFile() {
     alert('업로드할 파일을 선택해주세요.');
     return;
   }
-  if (!window.Papa || !window.XLSX) {
-    alert('CSV/XLSX 파서 라이브러리가 로드되지 않았습니다.');
+  try {
+    await ensureRuntimeDeps(['papa', 'xlsx']);
+  } catch (error) {
+    alert('CSV/XLSX 파서 라이브러리를 불러오지 못했습니다.');
     return;
   }
 
@@ -867,10 +873,6 @@ function downloadFortuneRowsAsCsv(fileName, rows) {
 }
 
 function downloadFortuneRowsAsXlsx(fileName, rows) {
-  if (!window.XLSX) {
-    alert('XLSX 라이브러리를 불러오지 못했습니다.');
-    return;
-  }
   const aoa = [['row_no', 'fortune_text']];
   (rows || []).forEach((row, idx) => {
     aoa.push([idx + 1, row.fortune]);
@@ -895,6 +897,7 @@ async function downloadCurrentFortuneCsv() {
 
 async function downloadCurrentFortuneXlsx() {
   try {
+    await ensureRuntimeDeps(['xlsx']);
     const response = await fetchFortuneVersion('');
     const rows = Array.isArray(response.rows) ? response.rows : [];
     const token = getFortuneVersionToken(response.version);
@@ -919,6 +922,7 @@ async function downloadFortuneVersionCsv(versionId) {
 
 async function downloadFortuneVersionXlsx(versionId) {
   try {
+    await ensureRuntimeDeps(['xlsx']);
     const response = await fetchFortuneVersion(versionId);
     const rows = Array.isArray(response.rows) ? response.rows : [];
     const token = getFortuneVersionToken(response.version);
@@ -1131,6 +1135,9 @@ async function refreshFortuneManagement() {
   }
 
   ensureFortuneEventsBound();
+  ensureRuntimeDeps(['papa']).catch(() => {
+    // no-op: 텍스트 기반 편집은 fallback parser로 동작합니다.
+  });
   fortuneRefreshInFlight = (async () => {
     const compatible = await ensureFortuneApiCompatibility();
     if (!compatible) {

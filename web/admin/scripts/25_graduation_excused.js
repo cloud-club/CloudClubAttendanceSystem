@@ -244,9 +244,11 @@ function getMatrixCellLabel(status) {
 
 function setExcusedSearchKeyword(value) {
   excusedSearchKeyword = String(value || '').trim().toLowerCase();
-  if (graduationReportCache) {
-    renderGraduationMatrix(graduationReportCache);
+  if (typeof scheduleExcusedMatrixRender === 'function') {
+    scheduleExcusedMatrixRender();
+    return;
   }
+  if (graduationReportCache) renderGraduationMatrix(graduationReportCache);
 }
 
 function setExcusedAbsentOnly(value) {
@@ -366,9 +368,49 @@ function renderGraduationMatrix(report) {
   `;
 }
 
-async function loadGraduationReport() {
+const scheduleExcusedMatrixRender = debounce(() => {
+  if (graduationReportCache) {
+    renderGraduationMatrix(graduationReportCache);
+  }
+}, 250);
+
+async function loadGraduationReport(options) {
+  const opts = options || {};
   const season = getSelectedSeasonAlias();
   if (!season) return;
+  const perfToken = startPerfMark('data:load-graduation-report', {
+    season: season,
+    forceReload: !!opts.forceReload
+  });
+  const normalizedSeasonAlias = normalizeSeasonAlias(season);
+  const cachedSeasonAlias = normalizeSeasonAlias(
+    graduationReportCache && (
+      graduationReportCache.seasonAlias
+      || graduationReportCache.currentSheet
+      || graduationReportCache.sheetName
+      || graduationReportCache.season
+    )
+  );
+  if (!opts.forceReload && graduationReportCache && cachedSeasonAlias && cachedSeasonAlias === normalizedSeasonAlias) {
+    renderGraduationSummary(graduationReportCache);
+    renderGraduationTable(graduationReportCache);
+    renderGraduationMatrix(graduationReportCache);
+    endPerfMark(perfToken, { status: 'memory-cache' });
+    return;
+  }
+
+  const cacheKey = buildFrontCacheKey('graduation:report', season);
+  const frontCache = getFrontCache();
+  const frontCached = !opts.forceReload && frontCache ? frontCache.get(cacheKey) : null;
+  if (frontCached && frontCached.success) {
+    graduationReportCache = frontCached;
+    graduationVisibleCount = 20;
+    renderGraduationSummary(frontCached);
+    renderGraduationTable(frontCached);
+    renderGraduationMatrix(frontCached);
+    endPerfMark(perfToken, { status: 'front-cache' });
+    return;
+  }
 
   const tableWrap = document.getElementById('graduationTableWrap');
   const matrixWrap = document.getElementById('excusedMatrixWrap');
@@ -381,16 +423,27 @@ async function loadGraduationReport() {
   if (matrixMeta) matrixMeta.textContent = '불러오는 중...';
 
   try {
-    const response = await CloudClubApi.call('graduationReport', {
-      season,
-      adminToken
-    });
+    const response = frontCache
+      ? await frontCache.remember(
+        cacheKey,
+        FRONT_CACHE_TTL_GRADUATION_MS,
+        () => CloudClubApi.call('graduationReport', {
+          season,
+          adminToken
+        }),
+        { force: !!opts.forceReload }
+      )
+      : await CloudClubApi.call('graduationReport', {
+        season,
+        adminToken
+      });
 
     if (!response.success) {
       if (tableWrap) tableWrap.innerHTML = `<div class="error">${escapeHtml(response.message || '수료 판정 조회 실패')}</div>`;
       if (matrixWrap) matrixWrap.innerHTML = '';
       if (loadMoreWrap) loadMoreWrap.innerHTML = '';
       if (matrixMeta) matrixMeta.textContent = '표시 0명 / 전체 0명';
+      endPerfMark(perfToken, { status: 'error-response' });
       return;
     }
 
@@ -400,12 +453,20 @@ async function loadGraduationReport() {
     renderGraduationSummary(response);
     renderGraduationTable(response);
     renderGraduationMatrix(response);
+    endPerfMark(perfToken, {
+      status: 'ok',
+      memberCount: Array.isArray(response.members) ? response.members.length : 0
+    });
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     if (tableWrap) tableWrap.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '수료 판정 조회 중 오류'))}</div>`;
     if (matrixWrap) matrixWrap.innerHTML = '';
     if (loadMoreWrap) loadMoreWrap.innerHTML = '';
     if (matrixMeta) matrixMeta.textContent = '표시 0명 / 전체 0명';
+    endPerfMark(perfToken, {
+      status: 'exception',
+      code: error && error.code ? error.code : ''
+    });
   }
 }
 
@@ -608,10 +669,11 @@ async function applyExcusedChange(payload) {
     }
 
     showToast(`<i class="fas fa-check-circle"></i> ${escapeHtml(response.message || '유고 반영 완료')}`, true);
+    invalidateSeasonOperationalCaches(season);
 
     await Promise.all([
-      loadGraduationReport(),
-      loadRankings()
+      loadGraduationReport({ forceReload: true }),
+      loadRankings({ forceReload: true })
     ]);
     await refreshStatusDashboardIfVisible();
     return response;

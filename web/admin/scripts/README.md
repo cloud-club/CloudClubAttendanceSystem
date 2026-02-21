@@ -14,17 +14,19 @@
 3. `02_utils.js`
 4. `03_dom_refs.js`
 5. `04_api_client.js`
-6. `10_auth.js`
-7. `20_attendance.js`
-8. `21_dashboard.js`
-9. `22_schedule.js`
-10. `23_import.js`
-11. `24_variables.js`
-12. `25_graduation_excused.js`
-13. `26_admin_users.js`
-14. `27_qr_links.js`
-15. `90_bootstrap.js`
-16. `99_compat_handlers.js`
+6. `05_runtime_deps.js`
+7. `06_front_cache.js`
+8. `10_auth.js`
+9. `20_attendance.js`
+10. `21_dashboard.js`
+11. `22_schedule.js`
+12. `23_import.js`
+13. `24_variables.js`
+14. `25_graduation_excused.js`
+15. `26_admin_users.js`
+16. `27_qr_links.js`
+17. `90_bootstrap.js`
+18. `99_compat_handlers.js`
 
 ## 파일 책임
 - `10_auth.js`: 로그인/세션/권한 게이트

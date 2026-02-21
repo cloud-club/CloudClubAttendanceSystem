@@ -11,6 +11,17 @@ if (!scheduleManualMemberListRender && typeof debounce === 'function') {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if (isAdminLiteModeEnabled() || prefersReducedMotion) {
+    document.body.classList.add('lite-mode');
+  }
+
+  setTimeout(() => {
+    document.querySelectorAll('.cloud-animation').forEach((node) => {
+      node.style.animationPlayState = 'paused';
+    });
+  }, 25000);
+
   document.addEventListener('click', (event) => {
     const popover = document.getElementById('authInfoPopover');
     const button = document.getElementById('authInfoButton');
@@ -22,6 +33,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeAuthInfoPopover();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+      return;
+    }
+
+    if (typeof checkAttendanceSession === 'function' && adminToken && seasonSourceReady) {
+      checkAttendanceSession();
+    }
+
+    if (typeof refreshStatusDashboardIfVisible === 'function' && adminToken && seasonSourceReady) {
+      refreshStatusDashboardIfVisible();
     }
   });
 

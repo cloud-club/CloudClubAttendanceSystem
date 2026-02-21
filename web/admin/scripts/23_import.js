@@ -25,6 +25,10 @@ function normalizeImportMatrix(matrix) {
     .filter(row => !isImportRowEmpty(row));
 }
 
+async function ensureImportParsersReady() {
+  await ensureRuntimeDeps(['papa', 'xlsx']);
+}
+
 function readFileAsText(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1381,8 +1385,10 @@ async function analyzeImportFile() {
     return;
   }
 
-  if (!window.Papa || !window.XLSX) {
-    alert('파서 라이브러리를 불러오지 못했습니다. 페이지를 새로고침 후 다시 시도해주세요.');
+  try {
+    await ensureImportParsersReady();
+  } catch (error) {
+    alert('파서 라이브러리를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
     return;
   }
 

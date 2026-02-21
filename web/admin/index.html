@@ -6,10 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="../../images/image.png" type="image/png">
   <title>Cloud Club 출석체크 관리자</title>
-  <!-- 라이브러리 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@2.5.0/fonts/remixicon.css">
@@ -3188,6 +3184,33 @@
         transform: translateX(50px) translateY(-10px);
       }
     }
+
+    body.lite-mode .cloud-animation {
+      animation: none !important;
+      opacity: 0.02;
+    }
+
+    body.lite-mode .auth-card,
+    body.lite-mode .season-toolbar-panel,
+    body.lite-mode .tab-nav,
+    body.lite-mode .card,
+    body.lite-mode .modal-panel,
+    body.lite-mode .site-footer-inner {
+      backdrop-filter: none !important;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+
+      .cloud-animation {
+        display: none !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -4338,12 +4361,13 @@
   <script src="../shared/config.js"></script>
   <script src="../shared/api-jsonp.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <script src="./scripts/00_namespace.js"></script>
   <script src="./scripts/01_state.js"></script>
   <script src="./scripts/02_utils.js"></script>
   <script src="./scripts/03_dom_refs.js"></script>
   <script src="./scripts/04_api_client.js"></script>
+  <script src="./scripts/05_runtime_deps.js"></script>
+  <script src="./scripts/06_front_cache.js"></script>
   <script src="./scripts/10_auth.js"></script>
   <script src="./scripts/20_attendance.js"></script>
   <script src="./scripts/21_dashboard.js"></script>

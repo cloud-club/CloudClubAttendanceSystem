@@ -1,6 +1,7 @@
 let countdownInterval;
 let isAttendanceActive = false;
 let currentSeasonUrl = '';
+let adminQrCodeLoaded = false;
 let adminToken = '';
 let currentAdminUser = null;
 let currentSheetName = '';
@@ -85,6 +86,7 @@ let attendanceDashboardSessionPickerRenderSignature = '';
 let attendanceDashboardMemberPickerRenderSignature = '';
 let attendanceDashboardSessionPickerLastOptionsRef = null;
 let attendanceDashboardMemberPickerLastOptionsRef = null;
+let attendanceDashboardLastRenderSignature = '';
 let attendanceDashboardState = {
   group: 'all',
   dateFrom: '',
@@ -109,7 +111,13 @@ const SUPER_ONLY_TABS = {
 };
 const ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION = 5;
 const ATTENDANCE_DASHBOARD_SEARCH_DEBOUNCE_MS = 120;
-const ATTENDANCE_DASHBOARD_FRONT_CACHE_TTL_MS = 15000;
+const ATTENDANCE_DASHBOARD_FRONT_CACHE_TTL_MS = 60000;
+const FRONT_CACHE_TTL_SCHEDULE_MS = 45000;
+const FRONT_CACHE_TTL_GRADUATION_MS = 45000;
+const FRONT_CACHE_TTL_ADMIN_USERS_MS = 120000;
+const FRONT_CACHE_TTL_SHEET_LINK_MS = 300000;
+const FRONT_CACHE_TTL_ADMIN_URL_MS = 300000;
+const FRONT_CACHE_TTL_RANKING_MS = 30000;
 const MANUAL_MEMBER_SEARCH_DEBOUNCE_MS = 120;
 const ATTENDANCE_DASHBOARD_STATUS_LABELS = {
   on_time: '출석',

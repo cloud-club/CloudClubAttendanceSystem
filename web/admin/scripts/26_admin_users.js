@@ -103,17 +103,39 @@ function renderAdminUsers(items) {
   `;
 }
 
-async function loadAdminUsers() {
+async function loadAdminUsers(options) {
+  const opts = options || {};
   if (!isSuperAdmin()) return;
+
+  const cache = getFrontCache();
+  const cacheKey = 'adminUsers:list';
+  if (!opts.forceReload && cache) {
+    const cached = cache.get(cacheKey);
+    if (Array.isArray(cached && cached.items)) {
+      adminUsersCache = cached.items;
+      renderAdminUsers(cached.items);
+      return;
+    }
+  }
+
   const wrap = document.getElementById('adminUsersTableWrap');
   if (wrap) {
     wrap.innerHTML = '<div class="loader" style="margin: 24px auto;"></div>';
   }
 
   try {
-    const response = await CloudClubApi.call('adminUsersList', {
-      adminToken: adminToken
-    });
+    const response = cache
+      ? await cache.remember(
+        cacheKey,
+        FRONT_CACHE_TTL_ADMIN_USERS_MS,
+        () => CloudClubApi.call('adminUsersList', {
+          adminToken: adminToken
+        }),
+        { force: !!opts.forceReload }
+      )
+      : await CloudClubApi.call('adminUsersList', {
+        adminToken: adminToken
+      });
 
     const items = Array.isArray(response && response.items) ? response.items : [];
     adminUsersCache = items;
@@ -207,7 +229,8 @@ async function saveAdminUser(event) {
     const response = await CloudClubApi.call('adminUsersUpsert', payload);
     const successMessage = (response && response.message) ? response.message : '관리자 정보가 저장되었습니다.';
     showBoxMessage('adminUsersResult', `✅ ${escapeHtml(successMessage)}`, true);
-    await loadAdminUsers();
+    invalidateAdminUsersCache();
+    await loadAdminUsers({ forceReload: true });
     resetAdminUserForm();
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
@@ -238,7 +261,8 @@ async function deleteAdminUser(encodedEmail) {
     }
 
     showToast('<i class="fas fa-check-circle"></i> 관리자 계정이 삭제되었습니다.', true);
-    await loadAdminUsers();
+    invalidateAdminUsersCache();
+    await loadAdminUsers({ forceReload: true });
     if (adminUsersEditingEmail === email) {
       resetAdminUserForm();
     }

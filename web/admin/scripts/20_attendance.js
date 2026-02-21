@@ -61,6 +61,39 @@ function buildSeasonScopedAdminParams(extraParams) {
   return params;
 }
 
+function invalidateAttendanceDashboardLocalState() {
+  attendanceDashboardPayload = null;
+  attendanceDashboardDrilldownPayload = null;
+  attendanceDashboardMemberSeriesCache = {};
+  attendanceDashboardLastFetchKey = '';
+  attendanceDashboardLastFetchedAt = 0;
+  attendanceDashboardLastRenderSignature = '';
+}
+
+function invalidateSeasonOperationalCaches(seasonAlias) {
+  const season = normalizeSeasonAlias(seasonAlias || getSelectedSeasonAlias());
+  if (season) {
+    invalidateFrontCachePrefixes([
+      buildFrontCacheKey('ranking', season),
+      buildFrontCacheKey('schedule:list', season),
+      buildFrontCacheKey('graduation:report', season),
+      buildFrontCacheKey('dashboard:summary', season),
+      buildFrontCacheKey('dashboard:drilldown', season),
+      buildFrontCacheKey('sheetLink', season)
+    ]);
+  }
+  invalidateAttendanceDashboardLocalState();
+}
+
+function invalidateAdminUsersCache() {
+  invalidateFrontCachePrefixes('adminUsers:list');
+}
+
+function invalidateAdminUrlCache() {
+  invalidateFrontCachePrefixes('adminUrl');
+  adminQrCodeLoaded = false;
+}
+
 async function loadRankings(options) {
   const opts = options || {};
   if (Array.isArray(opts.data)) {
@@ -80,7 +113,16 @@ async function loadRankings(options) {
   }
 
   try {
-    const response = await CloudClubApi.call('ranking', buildSeasonScopedAdminParams());
+    const cache = getFrontCache();
+    const cacheKey = buildFrontCacheKey('ranking', season);
+    const response = cache
+      ? await cache.remember(
+        cacheKey,
+        FRONT_CACHE_TTL_RANKING_MS,
+        () => CloudClubApi.call('ranking', buildSeasonScopedAdminParams()),
+        { force: !!opts.forceReload }
+      )
+      : await CloudClubApi.call('ranking', buildSeasonScopedAdminParams());
     displayRankings(response);
   } catch (error) {
     handleRankingError(error);
@@ -254,6 +296,8 @@ async function changeSheet() {
       currentSeasonAlias = getSelectedSeasonAlias();
       syncImportSeasonInputByCurrentSelection();
       updateImportModeHintFromInput();
+      invalidateSeasonOperationalCaches(currentSeasonAlias);
+      invalidateAdminUrlCache();
       showToast(`<i class="fas fa-check-circle"></i> ${escapeHtml(response.message)}`, true);
 
       await refreshSeasonData();
@@ -397,13 +441,16 @@ async function checkAttendanceSession() {
 }
 
 function openTab(tabName, evt) {
+  const perfToken = startPerfMark('ui:open-tab', { tabName: tabName });
   if (SUPER_ONLY_TABS[tabName] && !isSuperAdmin()) {
     alert('해당 탭은 Super Admin 권한에서만 접근할 수 있습니다.');
+    endPerfMark(perfToken, { status: 'blocked' });
     return;
   }
 
   const targetTab = document.getElementById(tabName);
   if (!targetTab || targetTab.classList.contains('is-hidden')) {
+    endPerfMark(perfToken, { status: 'missing-target' });
     return;
   }
 
@@ -457,13 +504,21 @@ function openTab(tabName, evt) {
   if (tabName === 'adminUsers') {
     loadAdminUsers();
   }
+
+  if (tabName === 'generate' && !adminQrCodeLoaded) {
+    loadAdminQrCode();
+  }
+
+  endPerfMark(perfToken, { status: 'ok' });
 }
 
 async function refreshSessionAndRanking() {
-  await Promise.all([
-    checkAttendanceSession(),
-    loadRankings()
-  ]);
+  await withPerfMark('data:refresh-session-and-ranking', async () => {
+    await Promise.all([
+      checkAttendanceSession(),
+      loadRankings()
+    ]);
+  });
 }
 
 async function doAttendance(event) {
@@ -557,11 +612,12 @@ function handleAttendanceResponse(response) {
     resultDiv.innerHTML = message;
     resultDiv.className = 'success';
     attendBtn.innerHTML = '<i class="fas fa-check-circle"></i> <span>출석 완료</span>';
+    invalidateSeasonOperationalCaches(getSelectedSeasonAlias());
 
     if (getActiveTabName() === 'status') {
       refreshStatusDashboardIfVisible();
     } else {
-      loadRankings();
+      loadRankings({ forceReload: true });
     }
   } else {
     resultDiv.innerHTML = `❌ ${escapeHtml(response.message || '출석 실패')}`;
@@ -1005,8 +1061,12 @@ function syncManualApproveSubmitState() {
 }
 
 function renderManualMemberList() {
+  const perfToken = startPerfMark('render:manual-member-list');
   const wrap = document.getElementById('manualMemberListWrap');
-  if (!wrap) return;
+  if (!wrap) {
+    endPerfMark(perfToken, { status: 'missing-wrap' });
+    return;
+  }
 
   const sessionKey = String(manualApproveState.sessionKey || '').trim();
   const members = Array.isArray(manualApproveState.members) ? manualApproveState.members : [];
@@ -1018,16 +1078,19 @@ function renderManualMemberList() {
 
   if (!sessionKey) {
     wrap.innerHTML = '<p class="info-text" style="padding: 12px;">승인할 회차를 먼저 선택해주세요.</p>';
+    endPerfMark(perfToken, { status: 'no-session' });
     return;
   }
 
   if (members.length === 0) {
     wrap.innerHTML = '<p class="info-text" style="padding: 12px;">회원 목록이 없습니다.</p>';
+    endPerfMark(perfToken, { status: 'no-members' });
     return;
   }
 
   if (filtered.length === 0) {
     wrap.innerHTML = '<p class="info-text" style="padding: 12px;">조건에 맞는 회원이 없습니다.</p>';
+    endPerfMark(perfToken, { status: 'no-filtered' });
     return;
   }
 
@@ -1090,6 +1153,10 @@ function renderManualMemberList() {
   }).join('');
 
   wrap.innerHTML = rows;
+  endPerfMark(perfToken, {
+    status: 'ok',
+    visibleMembers: filtered.length
+  });
 }
 
 function renderManualApproveDetailTable(results, summary) {
@@ -1372,10 +1439,11 @@ async function submitManualApproveBatch(event) {
     }
     manualApproveState.statusLoadedSessionKey = '';
     manualApproveState.statusLoadedSeasonAlias = '';
+    invalidateSeasonOperationalCaches(getSelectedSeasonAlias());
 
     await Promise.all([
       refreshSessionAndRanking(),
-      loadGraduationReport()
+      loadGraduationReport({ forceReload: true })
     ]);
     await refreshStatusDashboardIfVisible();
     await refreshManualApproveData({ forceMembers: false, forceStatuses: true });

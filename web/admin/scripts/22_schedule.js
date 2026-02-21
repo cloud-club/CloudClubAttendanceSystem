@@ -155,15 +155,32 @@ function selectScheduleForEdit(encodedSessionKey) {
   }
 }
 
-async function loadScheduleList() {
+async function loadScheduleList(options) {
+  const opts = options || {};
   const season = getSelectedSeasonAlias();
   if (!season) return;
+  const perfToken = startPerfMark('data:load-schedule-list', {
+    season: season,
+    forceReload: !!opts.forceReload
+  });
 
   try {
-    const response = await CloudClubApi.call('scheduleList', {
-      season,
-      adminToken
-    });
+    const cache = getFrontCache();
+    const cacheKey = buildFrontCacheKey('schedule:list', season);
+    const response = cache
+      ? await cache.remember(
+        cacheKey,
+        FRONT_CACHE_TTL_SCHEDULE_MS,
+        () => CloudClubApi.call('scheduleList', {
+          season,
+          adminToken
+        }),
+        { force: !!opts.forceReload }
+      )
+      : await CloudClubApi.call('scheduleList', {
+        season,
+        adminToken
+      });
 
     if (!response.success) {
       document.getElementById('scheduleTableWrap').innerHTML = `<div class="error">${escapeHtml(response.message || '일정 조회 실패')}</div>`;
@@ -171,6 +188,7 @@ async function loadScheduleList() {
       if (calendarGrid) {
         calendarGrid.innerHTML = `<div class="error">${escapeHtml(response.message || '캘린더 조회 실패')}</div>`;
       }
+      endPerfMark(perfToken, { status: 'error-response' });
       return;
     }
 
@@ -199,6 +217,10 @@ async function loadScheduleList() {
         showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 대상 정보 조회 중 오류'))}`, false);
       }
     }
+    endPerfMark(perfToken, {
+      status: 'ok',
+      scheduleCount: Array.isArray(scheduleItems) ? scheduleItems.length : 0
+    });
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     const wrap = document.getElementById('scheduleTableWrap');
@@ -209,6 +231,10 @@ async function loadScheduleList() {
     if (calendarGrid) {
       calendarGrid.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '캘린더 조회 중 오류'))}</div>`;
     }
+    endPerfMark(perfToken, {
+      status: 'exception',
+      code: error && error.code ? error.code : ''
+    });
   }
 }
 
@@ -535,11 +561,12 @@ async function saveSchedule(event) {
 
     showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || `일정 ${actionNoun} 완료`)}`, true);
     showToast(`<i class="fas fa-check-circle"></i> 일정 ${actionNoun} 완료`, true);
+    invalidateSeasonOperationalCaches(season);
 
     await Promise.all([
-      loadScheduleList(),
+      loadScheduleList({ forceReload: true }),
       checkAttendanceSession(),
-      loadGraduationReport()
+      loadGraduationReport({ forceReload: true })
     ]);
 
     resetScheduleForm();
@@ -591,10 +618,11 @@ async function submitScheduleCalendarModal() {
 
     showToast(`<i class="fas fa-check-circle"></i> 일정 ${actionNoun} 완료`, true);
     closeScheduleCalendarModal();
+    invalidateSeasonOperationalCaches(season);
     await Promise.all([
-      loadScheduleList(),
+      loadScheduleList({ forceReload: true }),
       checkAttendanceSession(),
-      loadGraduationReport()
+      loadGraduationReport({ forceReload: true })
     ]);
     resetScheduleForm();
   } catch (error) {
@@ -770,11 +798,12 @@ async function requestScheduleDelete(options) {
     closeScheduleCalendarModal();
     showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || '일정 삭제 완료')}`, true);
     closeScheduleDeleteForceModal();
+    invalidateSeasonOperationalCaches(options.season);
 
     await Promise.all([
-      loadScheduleList(),
+      loadScheduleList({ forceReload: true }),
       checkAttendanceSession(),
-      loadGraduationReport()
+      loadGraduationReport({ forceReload: true })
     ]);
 
     resetScheduleForm();

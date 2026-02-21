@@ -29,6 +29,133 @@ function debounce(fn, waitMs) {
   };
 }
 
+const adminPageQueryParams = new URLSearchParams(window.location.search || '');
+const adminPerfModeEnabled = adminPageQueryParams.get('perf') === '1';
+const adminLiteModeEnabled = adminPageQueryParams.get('lite') === '1';
+let adminPerfSequence = 0;
+
+function isAdminPerfEnabled() {
+  return adminPerfModeEnabled;
+}
+
+function isAdminLiteModeEnabled() {
+  return adminLiteModeEnabled;
+}
+
+function startPerfMark(name, meta) {
+  if (!adminPerfModeEnabled || !window.performance || typeof window.performance.now !== 'function') {
+    return null;
+  }
+  const perf = window.performance;
+  const safeName = String(name || 'unknown');
+  const seq = ++adminPerfSequence;
+  const markStart = `cc-perf:${safeName}:start:${seq}`;
+  const markEnd = `cc-perf:${safeName}:end:${seq}`;
+  const measureName = `cc-perf:${safeName}:measure:${seq}`;
+  if (typeof perf.mark === 'function') {
+    perf.mark(markStart);
+  }
+  return {
+    name: safeName,
+    meta: meta || {},
+    startedAt: perf.now(),
+    markStart: markStart,
+    markEnd: markEnd,
+    measureName: measureName
+  };
+}
+
+function endPerfMark(token, meta) {
+  if (!token || !adminPerfModeEnabled || !window.performance || typeof window.performance.now !== 'function') {
+    return 0;
+  }
+  const perf = window.performance;
+  if (typeof perf.mark === 'function') {
+    perf.mark(token.markEnd);
+  }
+  if (typeof perf.measure === 'function') {
+    try {
+      perf.measure(token.measureName, token.markStart, token.markEnd);
+    } catch (error) {
+      // mark/measure 미지원 환경에서는 duration fallback만 사용합니다.
+    }
+  }
+
+  const finishedAt = perf.now();
+  const durationMs = Math.max(0, finishedAt - Number(token.startedAt || finishedAt));
+  const payload = Object.assign({}, token.meta || {}, meta || {}, {
+    durationMs: Number(durationMs.toFixed(2))
+  });
+  console.debug(`[perf] ${token.name}`, payload);
+
+  if (typeof perf.clearMarks === 'function') {
+    perf.clearMarks(token.markStart);
+    perf.clearMarks(token.markEnd);
+  }
+  if (typeof perf.clearMeasures === 'function') {
+    perf.clearMeasures(token.measureName);
+  }
+  return durationMs;
+}
+
+async function withPerfMark(name, task, meta) {
+  const token = startPerfMark(name, meta);
+  try {
+    const result = await task();
+    endPerfMark(token, { status: 'ok' });
+    return result;
+  } catch (error) {
+    endPerfMark(token, {
+      status: 'error',
+      code: error && error.code ? error.code : '',
+      message: error && error.message ? error.message : ''
+    });
+    throw error;
+  }
+}
+
+function getFrontCache() {
+  return window.AdminFrontCache || null;
+}
+
+function buildFrontCacheKey(prefix, suffix) {
+  const safePrefix = String(prefix || '').trim();
+  const safeSuffix = String(suffix || '').trim();
+  if (!safePrefix) return safeSuffix;
+  if (!safeSuffix) return safePrefix;
+  return `${safePrefix}:${safeSuffix}`;
+}
+
+function invalidateFrontCachePrefixes(prefixes) {
+  const cache = getFrontCache();
+  if (!cache) return;
+  const list = Array.isArray(prefixes) ? prefixes : [prefixes];
+  list.forEach((prefix) => {
+    const value = String(prefix || '').trim();
+    if (!value) return;
+    cache.invalidateStartsWith(value);
+  });
+}
+
+function invalidateFrontCacheKeys(keys) {
+  const cache = getFrontCache();
+  if (!cache) return;
+  const list = Array.isArray(keys) ? keys : [keys];
+  list.forEach((key) => {
+    const value = String(key || '').trim();
+    if (!value) return;
+    cache.invalidate(value);
+  });
+}
+
+async function ensureRuntimeDeps(deps) {
+  const runtimeDeps = window.AdminRuntimeDeps;
+  if (!runtimeDeps || typeof runtimeDeps.ensureMany !== 'function') {
+    throw new Error('런타임 의존성 로더를 찾을 수 없습니다.');
+  }
+  return runtimeDeps.ensureMany(deps);
+}
+
 function getDisplayErrorMessage(error, fallbackMessage) {
   if (error && error.code === 'NETWORK_ERROR') {
     return 'API 서버 응답 스크립트를 불러오지 못했습니다. (리다이렉트/ORB 가능성) 잠시 후 다시 시도해주세요.';

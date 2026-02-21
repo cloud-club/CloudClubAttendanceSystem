@@ -5,16 +5,56 @@ function renderAdminQrLoadError(message) {
   qrContainer.innerHTML = `<div class="error" style="margin: 12px;">${escapeHtml(message)}</div>`;
 }
 
-async function loadAdminQrCode() {
-  try {
-    const response = await CloudClubApi.call('adminUrl', {
+async function ensureQrCodeDependency() {
+  await ensureRuntimeDeps(['qrcode']);
+}
+
+async function fetchSheetLink(alias, options) {
+  const seasonAlias = String(alias || '').trim();
+  if (!seasonAlias) return null;
+  const opts = options || {};
+  const cache = getFrontCache();
+  const cacheKey = buildFrontCacheKey('sheetLink', seasonAlias);
+  if (!cache) {
+    return CloudClubApi.call('sheetLink', {
+      season: seasonAlias,
       adminToken: adminToken
     });
+  }
+  return cache.remember(
+    cacheKey,
+    FRONT_CACHE_TTL_SHEET_LINK_MS,
+    () => CloudClubApi.call('sheetLink', {
+      season: seasonAlias,
+      adminToken: adminToken
+    }),
+    { force: !!opts.forceReload }
+  );
+}
+
+async function loadAdminQrCode(options) {
+  const opts = options || {};
+  try {
+    await ensureQrCodeDependency();
+    const cache = getFrontCache();
+    const response = cache
+      ? await cache.remember(
+        'adminUrl',
+        FRONT_CACHE_TTL_ADMIN_URL_MS,
+        () => CloudClubApi.call('adminUrl', {
+          adminToken: adminToken
+        }),
+        { force: !!opts.forceReload }
+      )
+      : await CloudClubApi.call('adminUrl', {
+        adminToken: adminToken
+      });
     if (!response || response.success === false || !response.url) {
       renderAdminQrLoadError((response && response.message) ? response.message : '관리자 URL을 불러오지 못했습니다.');
       return;
     }
     createQrCode(response.url);
+    adminQrCodeLoaded = true;
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     renderAdminQrLoadError(getDisplayErrorMessage(error, '관리자 URL을 불러오지 못했습니다.'));
@@ -27,10 +67,7 @@ async function loadSheetLinkInfo() {
   if (!alias) return;
 
   try {
-    const response = await CloudClubApi.call('sheetLink', {
-      season: alias,
-      adminToken: adminToken
-    });
+    const response = await fetchSheetLink(alias);
 
     const info = document.getElementById('sheetLinkInfo');
     if (!info) return;
@@ -55,10 +92,7 @@ async function openCurrentSheet() {
   }
 
   try {
-    const response = await CloudClubApi.call('sheetLink', {
-      season: alias,
-      adminToken: adminToken
-    });
+    const response = await fetchSheetLink(alias);
 
     if (!response.success || !response.sheetUrl) {
       alert(response.message || '시트 링크를 열 수 없습니다.');
@@ -74,6 +108,7 @@ async function openCurrentSheet() {
 
 async function generateSeasonQRCode() {
   try {
+    await ensureQrCodeDependency();
     const response = await CloudClubApi.call('studentUrl', {
       adminToken: adminToken
     });
@@ -141,6 +176,9 @@ function copyUrl() {
 }
 
 function createQrCode(url) {
+  if (typeof QRCode === 'undefined') {
+    throw new Error('QRCode 라이브러리를 불러오지 못했습니다.');
+  }
   const qrContainer = document.getElementById('qrcode');
   const existingQR = qrContainer.querySelector('canvas, img');
   if (existingQR) {

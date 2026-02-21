@@ -96,6 +96,7 @@ function resetAdminAuthState(options) {
   const opts = options || {};
   adminToken = '';
   currentAdminUser = null;
+  adminQrCodeLoaded = false;
   seasonSourceReady = false;
   seasonSourceBlockMessage = '';
   adminUsersCache = [];
@@ -359,10 +360,7 @@ async function initializeDashboard() {
 
   const firstInit = !dashboardInitialized;
 
-  await Promise.all([
-    loadAdminQrCode(),
-    loadSheets()
-  ]);
+  await loadSheets();
 
   const seasonSourceOk = ensureSeasonSourceReady({
     renderCountdown: true,
@@ -433,14 +431,17 @@ async function initializeDashboard() {
 
   if (firstInit) {
     const importSeasonNoInput = document.getElementById('importSeasonNoInput');
+    const debouncedImportSeasonPreview = debounce(() => {
+      updateImportModeHintFromInput();
+      if (importInference) {
+        rebuildImportPreview();
+      }
+    }, 300);
     if (importSeasonNoInput) {
       importSeasonNoInput.addEventListener('input', () => {
         invalidatePendingImportPreparation('season-input-typing');
         importManualConfirmed = false;
-        updateImportModeHintFromInput();
-        if (importInference) {
-          rebuildImportPreview();
-        }
+        debouncedImportSeasonPreview();
       });
       importSeasonNoInput.addEventListener('blur', () => {
         invalidatePendingImportPreparation('season-input-blur');
