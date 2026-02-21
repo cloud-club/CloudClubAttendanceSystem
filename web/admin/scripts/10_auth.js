@@ -476,9 +476,7 @@ async function initializeDashboard() {
 
   const adminUsersWrap = document.getElementById('adminUsersTableWrap');
   if (adminUsersWrap) {
-    if (isSuperAdmin()) {
-      adminUsersWrap.innerHTML = '<div class="info-text">관리자 관리 탭을 열면 최신 목록을 불러옵니다.</div>';
-    } else {
+    if (!isSuperAdmin()) {
       adminUsersWrap.innerHTML = '<div class="info-text">Super Admin 권한에서만 관리자 목록을 확인할 수 있습니다.</div>';
     }
   }
