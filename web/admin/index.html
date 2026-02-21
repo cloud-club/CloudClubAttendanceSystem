@@ -165,7 +165,7 @@
       justify-content: center;
       font-size: 11px;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
     }
 
     .auth-info-btn:hover {
@@ -374,7 +374,7 @@
       font-weight: 600;
       color: #94a3b8;
       border-radius: 14px;
-      transition: all 0.3s ease;
+      transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -413,7 +413,7 @@
       margin-bottom: 32px;
       position: relative;
       overflow: visible;
-      transition: all 0.3s ease;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
       z-index: 1;
     }
     
@@ -478,7 +478,7 @@
       width: 100%;
       position: relative;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
     }
 
     /* QR Code Blur Effect */
@@ -549,7 +549,7 @@
       border-radius: 16px;
       color: #fff;
       font-size: 18px;
-      transition: all 0.3s ease;
+      transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
       text-align: center;
       letter-spacing: 2px;
       font-weight: 500;
@@ -585,7 +585,7 @@
       border-radius: 16px;
       color: #fff;
       font-size: 16px;
-      transition: all 0.3s ease;
+      transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
       cursor: pointer;
       appearance: none;
       background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
@@ -617,7 +617,7 @@
       cursor: pointer;
       font-size: 18px;
       font-weight: 700;
-      transition: all 0.3s ease;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease, color 0.3s ease;
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
       display: inline-flex;
       align-items: center;
@@ -760,7 +760,7 @@
       background: rgba(255, 255, 255, 0.05);
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.1);
-      transition: all 0.3s ease;
+      transition: background-color 0.3s ease, border-color 0.3s ease;
     }
     
     .attendance-item:hover {
@@ -943,6 +943,11 @@
       gap: 10px;
       padding: 12px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .manual-member-list.manual-member-list-cv .manual-member-row {
+      content-visibility: auto;
+      contain-intrinsic-size: 88px;
     }
 
     .manual-member-row:last-child {
@@ -1328,7 +1333,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s ease;
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
     }
 
     .schedule-calendar-plus-btn:hover {
@@ -3224,6 +3229,35 @@
     body.perf-ui .modal-panel,
     body.perf-ui .site-footer-inner {
       box-shadow: 0 7px 18px rgba(0, 0, 0, 0.2);
+    }
+
+    body.perf-toggle-no-blur .auth-card,
+    body.perf-toggle-no-blur .season-toolbar-panel,
+    body.perf-toggle-no-blur .tab-nav,
+    body.perf-toggle-no-blur .card,
+    body.perf-toggle-no-blur .countdown-card,
+    body.perf-toggle-no-blur .modal-panel,
+    body.perf-toggle-no-blur .site-footer-inner {
+      backdrop-filter: none !important;
+    }
+
+    body.perf-toggle-no-bg-pattern .bg-pattern {
+      display: none !important;
+    }
+
+    body.perf-toggle-no-sticky .season-toolbar {
+      position: static !important;
+      top: auto !important;
+    }
+
+    body.perf-toggle-no-sticky .matrix-table th.sticky-col,
+    body.perf-toggle-no-sticky .matrix-table td.sticky-col {
+      position: static !important;
+      left: auto !important;
+    }
+
+    body.perf-toggle-no-cloud .cloud-animation {
+      display: none !important;
     }
 
     @media (prefers-reduced-motion: reduce) {

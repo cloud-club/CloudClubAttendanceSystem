@@ -1063,6 +1063,64 @@ function syncManualApproveSubmitState() {
   }
 }
 
+function buildManualMemberRowHtml(member) {
+  const phone = String(member.phone || '').trim();
+  const encodedPhone = encodeURIComponent(phone);
+  const statusInfo = getManualMemberStatusInfo(phone);
+  const isSelected = !!manualApproveState.selectedPhones[phone];
+  const comment = String(manualApproveState.memberComments[phone] || '');
+  const commentOpened = !!manualApproveState.openCommentPhones[phone];
+  const rowClass = [
+    'manual-member-row',
+    isSelected ? 'is-selected' : ''
+  ].filter(Boolean).join(' ');
+  const statusClass = escapeHtml(statusInfo.status || 'none');
+  const statusLabel = escapeHtml(statusInfo.label || MANUAL_MEMBER_STATUS_LABELS.none);
+  const noteLine = statusInfo.note
+    ? `<span class="manual-member-sub" title="${escapeHtml(statusInfo.note)}">기존 메모: ${escapeHtml(statusInfo.note)}</span>`
+    : '';
+  const timeLine = statusInfo.attendTime
+    ? `<span class="manual-member-sub">기존 기록 시각: ${escapeHtml(statusInfo.attendTime)}</span>`
+    : '';
+  const commentToggleLabel = commentOpened ? '개별 멘트 닫기' : (comment ? '개별 멘트 수정' : '개별 멘트');
+
+  return `
+    <div class="${rowClass}" role="listitem">
+      <label class="manual-member-check">
+        <input type="checkbox"
+               ${isSelected ? 'checked' : ''}
+               onchange="toggleManualMemberSelection('${encodedPhone}', this.checked)"
+               aria-label="${escapeHtml(member.name)} 선택">
+      </label>
+      <div class="manual-member-main">
+        <div class="manual-member-name-line">
+          <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>
+          <span>${escapeHtml(member.name || '-')}</span>
+          <span class="manual-status-badge ${statusClass}">${statusLabel}</span>
+        </div>
+        <span class="manual-member-sub">${escapeHtml(phone)}</span>
+        ${timeLine}
+        ${noteLine}
+        <div class="manual-member-comment ${commentOpened ? 'is-open' : ''}">
+          <input type="text"
+                 class="form-input"
+                 value="${escapeHtml(comment)}"
+                 placeholder="이 회원에게만 남길 개별 멘트"
+                 oninput="onManualMemberCommentInput('${encodedPhone}', this.value)">
+        </div>
+      </div>
+      <div class="manual-member-actions">
+        <button type="button"
+                class="manual-member-comment-toggle"
+                onclick="toggleManualMemberComment('${encodedPhone}')"
+                aria-label="${escapeHtml(member.name)} 개별 멘트 입력 토글">
+          ${commentToggleLabel}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function renderManualMemberList() {
   const perfToken = startPerfMark('render:manual-member-list');
   const wrap = document.getElementById('manualMemberListWrap');
@@ -1070,6 +1128,9 @@ function renderManualMemberList() {
     endPerfMark(perfToken, { status: 'missing-wrap' });
     return;
   }
+
+  manualMemberListRenderToken += 1;
+  const renderToken = manualMemberListRenderToken;
 
   const sessionKey = String(manualApproveState.sessionKey || '').trim();
   const members = Array.isArray(manualApproveState.members) ? manualApproveState.members : [];
@@ -1080,86 +1141,61 @@ function renderManualMemberList() {
   syncManualApproveSubmitState();
 
   if (!sessionKey) {
+    wrap.classList.remove('manual-member-list-cv');
     wrap.innerHTML = '<p class="info-text" style="padding: 12px;">승인할 회차를 먼저 선택해주세요.</p>';
     endPerfMark(perfToken, { status: 'no-session' });
     return;
   }
 
   if (members.length === 0) {
+    wrap.classList.remove('manual-member-list-cv');
     wrap.innerHTML = '<p class="info-text" style="padding: 12px;">회원 목록이 없습니다.</p>';
     endPerfMark(perfToken, { status: 'no-members' });
     return;
   }
 
   if (filtered.length === 0) {
+    wrap.classList.remove('manual-member-list-cv');
     wrap.innerHTML = '<p class="info-text" style="padding: 12px;">조건에 맞는 회원이 없습니다.</p>';
     endPerfMark(perfToken, { status: 'no-filtered' });
     return;
   }
 
-  const rows = filtered.map(member => {
-    const phone = String(member.phone || '').trim();
-    const encodedPhone = encodeURIComponent(phone);
-    const statusInfo = getManualMemberStatusInfo(phone);
-    const isSelected = !!manualApproveState.selectedPhones[phone];
-    const comment = String(manualApproveState.memberComments[phone] || '');
-    const commentOpened = !!manualApproveState.openCommentPhones[phone];
-    const rowClass = [
-      'manual-member-row',
-      isSelected ? 'is-selected' : ''
-    ].filter(Boolean).join(' ');
-    const statusClass = escapeHtml(statusInfo.status || 'none');
-    const statusLabel = escapeHtml(statusInfo.label || MANUAL_MEMBER_STATUS_LABELS.none);
-    const noteLine = statusInfo.note
-      ? `<span class="manual-member-sub" title="${escapeHtml(statusInfo.note)}">기존 메모: ${escapeHtml(statusInfo.note)}</span>`
-      : '';
-    const timeLine = statusInfo.attendTime
-      ? `<span class="manual-member-sub">기존 기록 시각: ${escapeHtml(statusInfo.attendTime)}</span>`
-      : '';
-    const commentToggleLabel = commentOpened ? '개별 멘트 닫기' : (comment ? '개별 멘트 수정' : '개별 멘트');
+  const useContentVisibility = isAdminPerfUiEnabled()
+    && filtered.length >= MANUAL_MEMBER_CONTENT_VISIBILITY_THRESHOLD;
+  wrap.classList.toggle('manual-member-list-cv', useContentVisibility);
+  wrap.innerHTML = '';
 
-    return `
-      <div class="${rowClass}" role="listitem">
-        <label class="manual-member-check">
-          <input type="checkbox"
-                 ${isSelected ? 'checked' : ''}
-                 onchange="toggleManualMemberSelection('${encodedPhone}', this.checked)"
-                 aria-label="${escapeHtml(member.name)} 선택">
-        </label>
-        <div class="manual-member-main">
-          <div class="manual-member-name-line">
-            <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>
-            <span>${escapeHtml(member.name || '-')}</span>
-            <span class="manual-status-badge ${statusClass}">${statusLabel}</span>
-          </div>
-          <span class="manual-member-sub">${escapeHtml(phone)}</span>
-          ${timeLine}
-          ${noteLine}
-          <div class="manual-member-comment ${commentOpened ? 'is-open' : ''}">
-            <input type="text"
-                   class="form-input"
-                   value="${escapeHtml(comment)}"
-                   placeholder="이 회원에게만 남길 개별 멘트"
-                   oninput="onManualMemberCommentInput('${encodedPhone}', this.value)">
-          </div>
-        </div>
-        <div class="manual-member-actions">
-          <button type="button"
-                  class="manual-member-comment-toggle"
-                  onclick="toggleManualMemberComment('${encodedPhone}')"
-                  aria-label="${escapeHtml(member.name)} 개별 멘트 입력 토글">
-            ${commentToggleLabel}
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
+  const chunkSize = Math.max(1, Number(MANUAL_MEMBER_RENDER_CHUNK_SIZE || 24));
+  let cursor = 0;
 
-  wrap.innerHTML = rows;
-  endPerfMark(perfToken, {
-    status: 'ok',
-    visibleMembers: filtered.length
-  });
+  const renderChunk = () => {
+    if (renderToken !== manualMemberListRenderToken) {
+      return;
+    }
+
+    const end = Math.min(cursor + chunkSize, filtered.length);
+    let rows = '';
+    for (let i = cursor; i < end; i += 1) {
+      rows += buildManualMemberRowHtml(filtered[i]);
+    }
+    wrap.insertAdjacentHTML('beforeend', rows);
+    cursor = end;
+
+    if (cursor < filtered.length) {
+      requestAnimationFrame(renderChunk);
+      return;
+    }
+
+    endPerfMark(perfToken, {
+      status: 'ok',
+      visibleMembers: filtered.length,
+      chunkSize: chunkSize,
+      contentVisibility: useContentVisibility
+    });
+  };
+
+  renderChunk();
 }
 
 function renderManualApproveDetailTable(results, summary) {

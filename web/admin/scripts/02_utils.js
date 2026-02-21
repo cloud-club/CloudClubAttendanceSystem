@@ -274,6 +274,60 @@ function initializeAdminPerfMonitors() {
   adminPerfMonitorsInitialized = true;
   initializeAdminLongTaskObserver();
   initializeAdminScrollFrameMonitor();
+  initializeAdminPerfToggleHelpers();
+}
+
+function setAdminPerfToggle(toggleName, enabled) {
+  const classMap = {
+    blur: 'perf-toggle-no-blur',
+    bg_pattern: 'perf-toggle-no-bg-pattern',
+    sticky: 'perf-toggle-no-sticky',
+    cloud: 'perf-toggle-no-cloud'
+  };
+  const key = String(toggleName || '').trim().toLowerCase();
+  const className = classMap[key];
+  if (!className || !document.body) {
+    return {
+      ok: false,
+      toggle: key,
+      enabled: !!enabled
+    };
+  }
+  document.body.classList.toggle(className, !!enabled);
+  const isEnabled = document.body.classList.contains(className);
+  console.debug('[perf] ui:toggle', {
+    toggle: key,
+    className: className,
+    enabled: isEnabled
+  });
+  return {
+    ok: true,
+    toggle: key,
+    className: className,
+    enabled: isEnabled
+  };
+}
+
+function initializeAdminPerfToggleHelpers() {
+  if (!isAdminPerfEnabled() || !document.body || window.__ccPerfToggle) {
+    return;
+  }
+
+  window.__ccPerfToggle = (toggleName, enabled) => setAdminPerfToggle(toggleName, enabled);
+  window.__ccPerfToggleBatch = (options) => {
+    const opts = options || {};
+    const entries = Object.keys(opts);
+    return entries.map((key) => setAdminPerfToggle(key, !!opts[key]));
+  };
+
+  console.debug('[perf] ui:toggle-helper-ready', {
+    usage: [
+      "__ccPerfToggle('blur', true)",
+      "__ccPerfToggle('bg_pattern', true)",
+      "__ccPerfToggle('sticky', true)",
+      "__ccPerfToggle('cloud', true)"
+    ]
+  });
 }
 
 function getFrontCache() {
