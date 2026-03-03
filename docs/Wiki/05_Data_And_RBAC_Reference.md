@@ -24,9 +24,12 @@ flowchart LR
 ## 시트 스키마 v2
 회원 데이터는 출석 판정과 수료 계산의 원천입니다. 헤더 규칙이 흔들리면 API는 정상이어도 결과가 왜곡될 수 있으므로, 스키마는 운영 정책의 일부로 취급합니다.
 
-- 회원 헤더(A~L):
+- 표준 회원 헤더(권장 SSOT):
   `Name`, `Season`, `Phone`, `Email`, `Github ID`, `Github Email`, `Notion Email`, `Discord ID`, `Slack Email`, `회비 체크`, `수료 여부`, `운영진 여부`
-- 세션 컬럼: `M+` (`YYYY-MM-DD-HH:MM` 또는 `YYYY-MM-DD-HH:MM~HH:MM`)
+- 런타임 해석 방식:
+  - 회원 프로필 필드는 헤더명 기반으로 매핑합니다.
+  - 출석 세션은 열 위치 고정보다 헤더 패턴(`YYYY-MM-DD-HH:MM` 또는 `YYYY-MM-DD-HH:MM~HH:MM`)으로 탐지합니다.
+  - 운영 중 커스텀 프로필 칼럼 삽입/순서 변경이 있어도, 필수 헤더(Name/Season/Phone/Email)와 세션 헤더 패턴이 유지되면 핵심 동작은 유지됩니다.
 - 슈퍼키: `Phone` only
 
 ## 핵심 보조 시트

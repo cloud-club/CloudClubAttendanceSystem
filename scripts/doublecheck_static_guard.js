@@ -16,6 +16,12 @@ function assertRegex(content, regex, message) {
   }
 }
 
+function assertNotRegex(content, regex, message) {
+  if (regex.test(content)) {
+    throw new Error(message);
+  }
+}
+
 function parseObjectKeys(objectLiteralText) {
   const keys = [];
   const keyRegex = /([A-Za-z_][A-Za-z0-9_]*)\s*:/g;
@@ -153,11 +159,57 @@ function checkStudentFortuneEscape() {
   }
 }
 
+function checkImportUpdateColumnFlexibility() {
+  const content = readFile('Appsscript/34_season_import.gs');
+
+  assertRegex(
+    content,
+    /missingRequired\s*=\s*\['name',\s*'season',\s*'phone',\s*'email'\]\.filter\(field\s*=>\s*!hasSchemaFieldIndex\(schema,\s*field\)\)/,
+    'season_import update 경로가 필수 헤더 기반 검증을 사용하지 않습니다.'
+  );
+  assertRegex(
+    content,
+    /const changedCells = collectTargetSheetChangedCells\(currentRow,\s*member,\s*targetSchema\);/,
+    'season_import update 경로가 필드 매핑 기반 변경 셀 계산을 사용하지 않습니다.'
+  );
+  assertRegex(
+    content,
+    /const appendRow = buildTargetSheetRowFromMember\(member,\s*targetSchema,\s*lastCol\);/,
+    'season_import update 신규행 추가가 대상 시트 매핑 기반으로 구성되지 않습니다.'
+  );
+
+  assertNotRegex(
+    content,
+    /targetSheet\.getRange\(existing\.rowIndex,\s*1,\s*1,\s*MEMBER_V2_SHEET_HEADERS\.length\)\.getValues\(\)\[0\]/,
+    'season_import update 경로에 고정 12열 읽기 결합이 남아 있습니다.'
+  );
+  assertNotRegex(
+    content,
+    /targetSheet\.getRange\(existing\.rowIndex,\s*1,\s*1,\s*MEMBER_V2_SHEET_HEADERS\.length\)\.setValues\(\[rowValues\]\)/,
+    'season_import update 경로에 고정 12열 일괄쓰기 결합이 남아 있습니다.'
+  );
+}
+
+function checkSessionHeaderDynamicParsing() {
+  const content = readFile('Appsscript/21_variables_sessionmeta.gs');
+  assertRegex(
+    content,
+    /for \(let j = Math\.max\(0,\s*memberSchema\.sessionStartColIndex\); j < headers\.length; j\+\+\)/,
+    'collectSessionsFromSheet가 sessionStartColIndex 기반 순회를 사용하지 않습니다.'
+  );
+  assertRegex(
+    content,
+    /const parsed = parseSessionHeader\(headers\[j\]\);/,
+    'collectSessionsFromSheet가 날짜 헤더 패턴 파싱을 사용하지 않습니다.'
+  );
+}
+
 function checkSyntax() {
   const jsFiles = [
     'web/admin/scripts/01_state.js',
     'web/admin/scripts/10_auth.js',
     'web/admin/scripts/20_attendance.js',
+    'web/admin/scripts/23_import.js',
     'web/admin/scripts/28_fortune.js',
     'web/admin/scripts/99_compat_handlers.js',
     'web/student/student.js'
@@ -167,6 +219,9 @@ function checkSyntax() {
   });
 
   const gsFiles = [
+    'Appsscript/30_attendance_core.gs',
+    'Appsscript/32_schedule.gs',
+    'Appsscript/34_season_import.gs',
     'Appsscript/35_fortune_admin.gs',
     'Appsscript/91_fortune.gs',
     'Appsscript/00_entry_api.gs',
@@ -192,6 +247,8 @@ const checks = [
   ['호환 핸들러 등록', checkCompatHandlers],
   ['액션 접근 레벨', checkActionAccessLevels],
   ['학생 운세 escape', checkStudentFortuneEscape],
+  ['세션 헤더 동적 파싱 가드', checkSessionHeaderDynamicParsing],
+  ['시즌업로드 컬럼 유연성 가드', checkImportUpdateColumnFlexibility],
   ['수정 파일 문법 체크', checkSyntax]
 ];
 

@@ -64,7 +64,14 @@ function buildSheetSchemaAuditReport(sheet, seasonAlias) {
     headerMap: schema.fieldMap,
     headerRow: headers,
     mode: schema.isV2 ? 'v2' : 'v1_or_custom',
+    modeDetail: schema.mode || (schema.isV2 ? 'v2_strict' : 'custom'),
     sessionStartColIndex: schema.sessionStartColIndex,
+    profileEndColIndex: schema.profileEndColIndex,
+    customProfileColumns: (schema.customProfileColumns || []).map(item => ({
+      colIndex: item.colIndex,
+      col: item.colIndex + 1,
+      header: item.header
+    })),
     sessionDetectedCount: schema.sessionColumns.length,
     requiredMissingCounts: requiredMissingCounts,
     duplicatePhones: duplicatePhones,

@@ -1946,12 +1946,15 @@ function renderSheetSchemaAudit(response) {
   const required = report.requiredMissingCounts || {};
   const duplicatePhones = Array.isArray(report.duplicatePhones) ? report.duplicatePhones : [];
   const fieldMap = report.headerMap || {};
-  const strictBannerHtml = report.mode === 'v2'
+  const modeLabel = report.modeDetail || report.mode || '-';
+  const schemaCompatible = report.mode === 'v2' || report.modeDetail === 'v2_extended';
+  const customProfileColumns = Array.isArray(report.customProfileColumns) ? report.customProfileColumns : [];
+  const strictBannerHtml = schemaCompatible
     ? ''
     : `
       <div class="import-debug-item warning" style="margin-bottom:12px;">
         <strong>[WARNING] LEGACY_SCHEMA_DETECTED</strong><br>
-        <span>현재 시즌이 v2 표준 헤더가 아닙니다. 운영 전 스키마 마이그레이션 체크리스트를 따라 전환하세요.</span>
+        <span>현재 시즌에서 필수 헤더 매핑이 불완전합니다. 운영 전 스키마 점검을 먼저 진행하세요.</span>
       </div>
     `;
 
@@ -1977,9 +1980,10 @@ function renderSheetSchemaAudit(response) {
   wrap.innerHTML = `
     ${strictBannerHtml}
     <div class="import-summary">
-      <span class="import-chip ${report.mode === 'v2' ? 'pass' : 'warn'}">MODE ${escapeHtml(report.mode || '-')}</span>
+      <span class="import-chip ${schemaCompatible ? 'pass' : 'warn'}">MODE ${escapeHtml(modeLabel)}</span>
       <span class="import-chip">SESSION_START_COL ${Number(report.sessionStartColIndex || 0) + 1}</span>
       <span class="import-chip">SESSIONS ${Number(report.sessionDetectedCount || 0)}</span>
+      <span class="import-chip ${customProfileColumns.length > 0 ? 'warn' : ''}">CUSTOM_PROFILE ${customProfileColumns.length}</span>
       <span class="import-chip ${duplicatePhones.length > 0 ? 'fail' : 'pass'}">PHONE_DUP ${duplicatePhones.length}</span>
     </div>
 

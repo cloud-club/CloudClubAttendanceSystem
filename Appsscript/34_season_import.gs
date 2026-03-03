@@ -649,19 +649,25 @@ function getExistingMemberPackForUpdate(targetSheet) {
   const headers = values[0] || [];
   const schema = resolveMemberSchemaFromHeaders(headers);
 
-  if (!schema.isV2) {
+  const missingRequired = ['name', 'season', 'phone', 'email'].filter(field => !hasSchemaFieldIndex(schema, field));
+  if (missingRequired.length > 0) {
     return {
       error: {
         success: false,
         errorCode: 'UPDATE_TARGET_NOT_V2',
-        message: '업데이트 대상 시즌 시트가 v2 스키마가 아닙니다. 먼저 v2 마이그레이션을 진행해주세요.'
+        message: `업데이트 대상 시즌 시트에서 필수 헤더(${missingRequired.join(', ')})를 찾지 못했습니다.`
       }
     };
   }
 
   const byPhone = {};
   const duplicates = [];
-  const sessionStartColIndex = Math.max(MEMBER_V2_SHEET_HEADERS.length, schema.sessionStartColIndex || MEMBER_V2_SHEET_HEADERS.length);
+  const sessionColumns = Array.isArray(schema.sessionColumns)
+    ? schema.sessionColumns.slice().sort((a, b) => a - b)
+    : [];
+  const sessionStartColIndex = sessionColumns.length > 0
+    ? sessionColumns[0]
+    : Math.max(0, schema.sessionStartColIndex || 0);
 
   for (let i = 1; i < values.length; i++) {
     const member = readMemberFromRow(values[i], schema);
@@ -674,7 +680,8 @@ function getExistingMemberPackForUpdate(targetSheet) {
     }
 
     let hasAttendanceData = false;
-    for (let col = sessionStartColIndex; col < values[i].length; col++) {
+    for (let j = 0; j < sessionColumns.length; j++) {
+      const col = sessionColumns[j];
       const text = String(values[i][col] || '').trim();
       if (!text) continue;
       hasAttendanceData = true;
@@ -713,7 +720,9 @@ function getExistingMemberPackForUpdate(targetSheet) {
 
   return {
     byPhone: byPhone,
-    sessionStartColIndex: sessionStartColIndex
+    sessionStartColIndex: sessionStartColIndex,
+    sessionColumns: sessionColumns,
+    schema: schema
   };
 }
 
@@ -730,6 +739,7 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
   const existingPack = getExistingMemberPackForUpdate(targetSheet);
   if (existingPack.error) return existingPack.error;
 
+  const targetSchema = existingPack.schema || { fieldMap: {} };
   const comparedFields = [
     'name',
     'season',
@@ -742,7 +752,7 @@ function buildImportDiffSnapshot(record, stagingSheet, targetSheet) {
     'feeChecked',
     'completed',
     'isStaff'
-  ];
+  ].filter(field => hasSchemaFieldIndex(targetSchema, field));
   const rowFieldOrder = [
     'name',
     'season',
@@ -1084,42 +1094,79 @@ function buildImportRowValuesFromMember(member) {
   ];
 }
 
+function buildImportMemberFieldMap(member) {
+  const rowValues = buildImportRowValuesFromMember(member);
+  const map = {};
+  for (let i = 0; i < MEMBER_FIELD_ORDER.length; i++) {
+    map[MEMBER_FIELD_ORDER[i]] = rowValues[i];
+  }
+  return map;
+}
+
+function buildTargetSheetRowFromMember(member, targetSchema, lastCol) {
+  const row = [];
+  for (let i = 0; i < lastCol; i++) row.push('');
+
+  const memberFieldMap = buildImportMemberFieldMap(member);
+  MEMBER_FIELD_ORDER.forEach(field => {
+    if (!hasSchemaFieldIndex(targetSchema, field)) return;
+    const colIndex = targetSchema.fieldMap[field];
+    if (colIndex < 0 || colIndex >= lastCol) return;
+    row[colIndex] = memberFieldMap[field];
+  });
+
+  return row;
+}
+
+function collectTargetSheetChangedCells(currentRow, member, targetSchema) {
+  const memberFieldMap = buildImportMemberFieldMap(member);
+  const changedCells = [];
+
+  MEMBER_FIELD_ORDER.forEach(field => {
+    if (!hasSchemaFieldIndex(targetSchema, field)) return;
+    const colIndex = targetSchema.fieldMap[field];
+    if (colIndex === null || colIndex === undefined || colIndex < 0 || colIndex >= currentRow.length) return;
+
+    const beforeNorm = normalizeImportDiffValue(field, currentRow[colIndex]);
+    const afterNorm = normalizeImportDiffValue(field, memberFieldMap[field]);
+    if (beforeNorm === afterNorm) return;
+
+    changedCells.push({
+      colIndex: colIndex,
+      value: memberFieldMap[field]
+    });
+  });
+
+  return changedCells;
+}
+
 function applyImportUpdateToExistingSheet(targetSheet, snapshot) {
   const stagingMembers = snapshot.stagingPack.members || [];
   const existingByPhone = snapshot.existingPack.byPhone || {};
-  const sessionColCount = Math.max(0, targetSheet.getLastColumn() - MEMBER_V2_SHEET_HEADERS.length);
-  const blankSessions = [];
-  for (let i = 0; i < sessionColCount; i++) blankSessions.push('');
+  const targetSchema = snapshot.existingPack.schema || resolveMemberSchema(targetSheet);
+  const lastCol = Math.max(1, targetSheet.getLastColumn());
 
   let addedCount = 0;
   let updatedRowCount = 0;
 
   stagingMembers.forEach(member => {
     const existing = existingByPhone[member.phone];
-    const rowValues = buildImportRowValuesFromMember(member);
 
     if (!existing) {
-      const appendRow = rowValues.concat(blankSessions);
+      const appendRow = buildTargetSheetRowFromMember(member, targetSchema, lastCol);
       const startRow = targetSheet.getLastRow() + 1;
-      targetSheet.getRange(startRow, 1, 1, appendRow.length).setValues([appendRow]);
+      targetSheet.getRange(startRow, 1, 1, lastCol).setValues([appendRow]);
       addedCount++;
       return;
     }
 
-    const current = targetSheet.getRange(existing.rowIndex, 1, 1, MEMBER_V2_SHEET_HEADERS.length).getValues()[0];
-    let changed = false;
-    for (let col = 0; col < MEMBER_V2_SHEET_HEADERS.length; col++) {
-      const field = MEMBER_FIELD_ORDER[col];
-      const beforeNorm = normalizeImportDiffValue(field, current[col]);
-      const afterNorm = normalizeImportDiffValue(field, rowValues[col]);
-      if (beforeNorm !== afterNorm) {
-        changed = true;
-        break;
-      }
-    }
-    if (!changed) return;
+    const currentRow = targetSheet.getRange(existing.rowIndex, 1, 1, lastCol).getValues()[0];
+    const changedCells = collectTargetSheetChangedCells(currentRow, member, targetSchema);
+    if (changedCells.length === 0) return;
 
-    targetSheet.getRange(existing.rowIndex, 1, 1, MEMBER_V2_SHEET_HEADERS.length).setValues([rowValues]);
+    changedCells.forEach(item => {
+      targetSheet.getRange(existing.rowIndex, item.colIndex + 1).setValue(item.value);
+    });
     updatedRowCount++;
   });
 
@@ -1526,4 +1573,3 @@ function abortSeasonImport(params) {
     lock.releaseLock();
   }
 }
-

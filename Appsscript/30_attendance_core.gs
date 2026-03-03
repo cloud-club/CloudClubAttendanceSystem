@@ -260,15 +260,48 @@ function resolveMemberSchemaFromHeaders(headers) {
   const strictMissingRequired = ['name', 'season', 'phone', 'email'].filter(field => fieldMap[field] === null || fieldMap[field] === undefined);
 
   const isV2 = MEMBER_V2_SHEET_HEADERS.every((header, idx) => normalizeMemberHeaderToken(values[idx]) === normalizeMemberHeaderToken(header));
+  const hasAllV2Fields = MEMBER_FIELD_ORDER.every(field => fieldMap[field] !== null && fieldMap[field] !== undefined && fieldMap[field] >= 0);
+  const mappedFieldIndexes = {};
+  MEMBER_FIELD_ORDER.forEach(field => {
+    const idx = fieldMap[field];
+    if (idx === null || idx === undefined || idx < 0) return;
+    mappedFieldIndexes[idx] = field;
+  });
+
+  const profileEndColIndex = sessionColumns.length > 0
+    ? Math.max(0, sessionStartColIndex - 1)
+    : Math.max(values.length - 1, profileMax - 1);
+  const customProfileColumns = [];
+  for (let i = 0; i <= profileEndColIndex && i < values.length; i++) {
+    if (sessionColumns.indexOf(i) !== -1) continue;
+    if (mappedFieldIndexes[i] !== undefined) continue;
+    const headerText = String(values[i] || '').trim();
+    if (!headerText) continue;
+    customProfileColumns.push({
+      colIndex: i,
+      header: headerText,
+      token: tokens[i] || ''
+    });
+  }
+
+  let mode = 'custom';
+  if (isV2) {
+    mode = 'v2_strict';
+  } else if (hasAllV2Fields) {
+    mode = 'v2_extended';
+  }
 
   return {
     headers: values,
     fieldMap: fieldMap,
     sessionStartColIndex: sessionStartColIndex,
     sessionColumns: sessionColumns,
+    profileEndColIndex: profileEndColIndex,
+    customProfileColumns: customProfileColumns,
     missingRequired: missingRequired,
     strictMissingRequired: strictMissingRequired,
-    isV2: isV2
+    isV2: isV2,
+    mode: mode
   };
 }
 
@@ -283,6 +316,12 @@ function getMemberFieldValue(row, schema, field) {
   const idx = map[field];
   if (idx === null || idx === undefined || idx < 0) return '';
   return row[idx];
+}
+
+function hasSchemaFieldIndex(schema, field) {
+  if (!schema || !schema.fieldMap) return false;
+  const idx = schema.fieldMap[field];
+  return idx !== null && idx !== undefined && idx >= 0;
 }
 
 function normalizeSeasonNumber(value) {
@@ -916,4 +955,3 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
     data: rankings.slice(0, 10)
   };
 }
-
