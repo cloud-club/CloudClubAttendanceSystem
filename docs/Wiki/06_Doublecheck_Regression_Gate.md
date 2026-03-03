@@ -3,7 +3,8 @@
 > 문서 링크: [docs/Wiki/06_Doublecheck_Regression_Gate.md](./06_Doublecheck_Regression_Gate.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/06_Doublecheck_Regression_Gate.md)
 
 ## 목적
-운세 기능 추가 이후에도 기존 사용자(학생)와 운영자(Admin/Super)의 체감 사용감이 변하지 않았음을 배포 전/후에 증빙하는 실행 문서입니다.  
+운세 기능 추가 이후에도 기존 사용자(학생)와 운영자(Admin/Super)의 체감 사용감이 변하지 않았음을 배포 전/후에 증빙하는 실행 문서입니다.
+핵심 원칙은 **공개 API 불변과 시즌업데이트 리스크 분리**입니다.
 이 문서는 아래 게이트 순서만 따릅니다.
 
 1. 정적 영향 분석(static guard)
@@ -11,6 +12,11 @@
 3. 역할별 UX 스모크
 4. 구버전 백엔드 호환성 확인
 5. 성능/운영 canary 확인
+
+## 범위 선언(중요)
+- 이 문서의 게이트는 공개 API 계약/기존 UX 불변 증빙을 위한 절차입니다.
+- 시즌 import(update) 경로 검증은 별도 리스크 트랙이며, 이 문서 통과만으로 안전성을 대체할 수 없습니다.
+- 시즌 update 리스크는 [05_Data_And_RBAC_Reference.md](./05_Data_And_RBAC_Reference.md)의 `sheetSchemaAudit` + `seasonImport*` 기준으로 분리 점검합니다.
 
 ## Gate 0: 사전 고정(Baseline Freeze)
 배포 전 아래 값을 고정하고 증빙 파일에 기록합니다.
@@ -46,8 +52,15 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_static_guard.j
 5. 학생 운세 escape 적용
 6. 핵심 수정 파일 문법 체크
 
+### 컬럼 가변 회귀 시나리오(필수)
+1. [ ] 프로필 커스텀 칼럼(예: `클둥대백과 작성`)을 중간 삽입해도 필수 헤더 매핑이 유지되는지 확인
+2. [ ] 날짜 세션 칼럼을 오른쪽으로 이동/재배치해도 세션 탐지(헤더 패턴 기반)가 유지되는지 확인
+3. [ ] 위 두 변경 후에도 출석 체크/출석현황/랭킹 계산 결과가 기존과 동일한지 확인
+
 ## Gate 2: API 계약 회귀 비교(자동)
 baseline/candidate를 동일 파라미터로 호출해 정규화 응답을 비교합니다.
+
+> 주의: Gate 2 통과는 공개 API 계약 불변을 증빙하는 절차입니다. `seasonImport*` 업데이트 리스크는 별도 점검 대상입니다.
 
 ### 권장 일괄 실행
 ```bash
@@ -133,6 +146,13 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 ```bash
 /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/auth_canary_snapshot.sh "https://script.google.com/macros/s/CANDIDATE_EXEC/exec"
 ```
+
+## 별도 리스크 트랙: 시즌업데이트
+공개 API 회귀 게이트와 분리하여 아래를 별도로 검토합니다.
+
+1. `sheetSchemaAudit` 결과(필수 헤더/세션 헤더 패턴) 정상
+2. `seasonImport*`의 diff/finalize 단계별 차단/복구 동작 정상
+3. 운영 공지/체크리스트 보고 시 “회귀 통과”와 “시즌업데이트 안전성”을 분리 기록
 
 ## 배포 게이트
 1. Gate A(API 계약) 통과 전 배포 금지

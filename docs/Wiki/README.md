@@ -39,15 +39,25 @@ flowchart LR
 - 데이터/RBAC 레퍼런스: [05_Data_And_RBAC_Reference.md](./05_Data_And_RBAC_Reference.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/05_Data_And_RBAC_Reference.md)
 - 회귀 더블체크 게이트: [06_Doublecheck_Regression_Gate.md](./06_Doublecheck_Regression_Gate.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/06_Doublecheck_Regression_Gate.md)
 
+## 운영 원칙 고정: 공개 API 불변과 시즌업데이트 리스크 분리
+이 위키의 운영 판단 기준은 아래 한 줄로 고정합니다.
+
+- 공개 API(`session`, `attendance`, `status`, `ranking`, `latestSeason` 등) 계약은 기능 확장 중에도 불변을 우선 보장합니다.
+- 시즌 import(update) 경로는 별도 리스크 트랙으로 분리해 관리하며, 회귀 게이트 통과 여부와 혼동하지 않습니다.
+- 컬럼이 중간 삽입/이동되어도 필수 헤더 매핑과 날짜 헤더 패턴이 유지되면 출석 파싱/핵심 조회 동작은 동일하게 유지됩니다.
+- 상세 기준은 [05_Data_And_RBAC_Reference.md](./05_Data_And_RBAC_Reference.md)와 [06_Doublecheck_Regression_Gate.md](./06_Doublecheck_Regression_Gate.md)에서 함께 확인합니다.
+
 ## 운영 URL
 - 관리자: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/admin/`
 - 학생(Latest): `https://cloud-club.github.io/CloudClubAttendanceSystem/web/student/latest/`
 - 랜딩: `https://cloud-club.github.io/CloudClubAttendanceSystem/web/`
 
 ## 최근 운영 변경 (History)
-최근 리팩터링/긴급복구의 배경과 결정 근거는 History 023을 기준으로 확인합니다. 이 문서는 구조분할 배경, 출석 인증 불일치 원인, `apiInfo.runtimeChecks` 기반 재배포 점검 포인트를 한 번에 정리한 기록입니다.
+최근 리팩터링/긴급복구의 배경과 결정 근거는 History 023/024를 함께 확인합니다.
+023은 구조분할/긴급복구 기준을, 024는 컬럼 유연화 이후에도 **공개 API 불변과 시즌업데이트 리스크 분리** 원칙을 명시한 최신 기준입니다.
 
 - [docs/History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md](../History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/023_%EA%B4%80%EB%A6%AC%EC%9E%90%EB%B0%B1%EC%97%94%EB%93%9C_%EA%B5%AC%EC%A1%B0%EB%B6%84%ED%95%A0_%EB%B0%8F_%EC%B6%9C%EC%84%9D%EC%9D%B8%EC%A6%9D%EB%B6%88%EC%9D%BC%EC%B9%98_%EA%B8%B4%EA%B8%89%EB%B3%B5%EA%B5%AC_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-02-20.md)
+- [docs/History/024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md](../History/024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/024_%EC%BB%AC%EB%9F%BC%EC%9C%A0%EC%97%B0%ED%99%94_%ED%97%A4%EB%8D%94%EA%B8%B0%EB%B0%98%EC%8A%A4%ED%82%A4%EB%A7%88_%EB%AC%B4%EC%B2%B4%EA%B0%90%EC%95%88%EC%A0%95%ED%99%94_2026-03-03.md)
 
 ## 원문 이력
 현재 위키가 “무엇을 어떻게 운영하는지”를 정의한다면, History는 “왜 이런 결정을 했는지”를 보여줍니다. 운영 판단이 필요할 때는 위키를 기준으로 하고, 의사결정 배경이 필요할 때만 History를 참조합니다.

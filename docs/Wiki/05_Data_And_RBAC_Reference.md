@@ -21,6 +21,13 @@ flowchart LR
 
 이 프로젝트는 권한 판정을 `Appsscript/01_constants_access.gs`의 `ACTION_ACCESS_LEVELS`를 단일 정본으로 삼아 처리합니다. 따라서 문서와 코드가 어긋나지 않도록, 정책 설명도 이 상수를 기준으로 유지합니다.
 
+## 운영 원칙: 공개 API 불변과 시즌업데이트 리스크 분리
+운영 정책을 해석할 때는 아래 원칙을 먼저 적용합니다.
+
+1. 공개 API 계약(액션/파라미터/응답)은 기능 추가 중에도 불변을 기본값으로 둡니다.
+2. 시즌 import(update)는 별도 리스크 영역으로 분리하며, `sheetSchemaAudit` + `seasonImport*` 게이트로 따로 검증합니다.
+3. 따라서 “기존 기능 회귀 없음”과 “시즌 업데이트 안전성 확보”는 같은 문장으로 합치지 않고 분리 보고합니다.
+
 ## 시트 스키마 v2
 회원 데이터는 출석 판정과 수료 계산의 원천입니다. 헤더 규칙이 흔들리면 API는 정상이어도 결과가 왜곡될 수 있으므로, 스키마는 운영 정책의 일부로 취급합니다.
 
@@ -29,6 +36,7 @@ flowchart LR
 - 런타임 해석 방식:
   - 회원 프로필 필드는 헤더명 기반으로 매핑합니다.
   - 출석 세션은 열 위치 고정보다 헤더 패턴(`YYYY-MM-DD-HH:MM` 또는 `YYYY-MM-DD-HH:MM~HH:MM`)으로 탐지합니다.
+  - 필수 헤더(`Name`, `Season`, `Phone`, `Email`) 중 하나라도 누락되면 시즌 update는 차단되는 것이 정상 동작입니다.
   - 운영 중 커스텀 프로필 칼럼 삽입/순서 변경이 있어도, 필수 헤더(Name/Season/Phone/Email)와 세션 헤더 패턴이 유지되면 핵심 동작은 유지됩니다.
 - 슈퍼키: `Phone` only
 
@@ -56,18 +64,22 @@ flowchart LR
 - Admin: `attendanceDashboardSummary`, `schedule*`, `manualApprove*`, `excusedSet`, `graduationReport`, `sheetSchemaAudit`, `fortuneVersionList`, `fortuneVersionGet`, `fortuneUploadBegin`, `fortuneUploadChunk`, `fortuneUploadFinalize`, `fortuneUploadAbort`
 - Super: `adminUsers*`, `variables*`, `seasonImport*`, `setActiveSheet`
 
-## 변경 영향도 (스키마/권한/업로드)
+## 변경 영향도 (공개 API 불변 영역 vs 시즌업데이트 리스크 영역)
 정책 변경은 단일 파일 수정처럼 보여도 여러 경로에 파급됩니다. 아래 영향도를 먼저 보고 변경 범위를 확정합니다.
 
-1. 스키마 변경
+1. 공개 API 계약(불변 영역)
+- 영향: 학생/관리자 기본 동선, 외부 호출 호환성
+- 필수 점검: 기존 액션의 필수 키/타입/성공-실패 판정 불변, `06_Doublecheck_Regression_Gate.md` Gate 2 통과
+
+2. 스키마 변경
 - 영향: 출석 판정, 대시보드, 업로드 파싱
 - 필수 점검: 헤더 일치, 키 컬럼(`Phone`) 무결성
 
-2. 권한 변경
+3. 권한 변경
 - 영향: 관리자 로그인, 탭 접근, 액션 차단
 - 필수 점검: `ACTION_ACCESS_LEVELS`, `_admins`, 시즌 접근 가드
 
-3. 업로드 정책 변경
+4. 업로드 정책 변경(시즌업데이트 리스크 영역)
 - 영향: 시즌 생성/업데이트, diff/finalize 안전장치
 - 필수 점검: `sheetSchemaAudit`, `seasonImport*` 게이트 통과
 
@@ -100,3 +112,4 @@ flowchart LR
 - Admin Guide: [02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)
 - Tab Change Map: [03_Admin_Tab_Change_Map.md](./03_Admin_Tab_Change_Map.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/03_Admin_Tab_Change_Map.md)
 - History 020: [020_권한관리체계_user_admin_super_운영정책.md](../History/020_권한관리체계_user_admin_super_운영정책.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/020_%EA%B6%8C%ED%95%9C%EA%B4%80%EB%A6%AC%EC%B2%B4%EA%B3%84_user_admin_super_%EC%9A%B4%EC%98%81%EC%A0%95%EC%B1%85.md)
+- History 024: [024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md](../History/024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/024_%EC%BB%AC%EB%9F%BC%EC%9C%A0%EC%97%B0%ED%99%94_%ED%97%A4%EB%8D%94%EA%B8%B0%EB%B0%98%EC%8A%A4%ED%82%A4%EB%A7%88_%EB%AC%B4%EC%B2%B4%EA%B0%90%EC%95%88%EC%A0%95%ED%99%94_2026-03-03.md)
