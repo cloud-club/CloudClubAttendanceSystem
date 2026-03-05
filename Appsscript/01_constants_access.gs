@@ -19,7 +19,7 @@ const ADMINS_SHEET_HEADERS = ['name', 'season', 'phone', 'email', 'role', 'is_ac
 const ADMIN_SEASON_SYNC_CACHE_KEY = 'admin_season_sync_latest_v1';
 const ADMIN_SEASON_SYNC_CACHE_TTL_SECONDS = 60;
 const GOOGLE_TOKENINFO_ENDPOINT = 'https://oauth2.googleapis.com/tokeninfo?id_token=';
-const API_VERSION = '2026.02.20-v5.2';
+const API_VERSION = '2026.03.05-v5.4';
 const ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS = 90;
 const ATTENDANCE_DASHBOARD_CACHE_MAX_BYTES = 90000;
 
@@ -30,6 +30,16 @@ const VARIABLE_TABLE_HEADERS = ['key', 'value', 'type', 'description', 'editable
 
 const SESSION_META_SHEET_NAME = '_session_meta';
 const SESSION_META_HEADERS = ['seasonSheet', 'sessionKey', 'openOffsetMin', 'lateThresholdMin', 'absenceThresholdMin', 'explicitEndAt', 'createdAt'];
+const CHECKOUT_META_SHEET_NAME = '_checkout_meta';
+const CHECKOUT_META_HEADERS = ['seasonSheet', 'sessionKey', 'enabled', 'code', 'codeDigits', 'issuedAt', 'issuedByEmail', 'finalizedAt', 'updatedAt'];
+const CHECKOUT_EVENT_SHEET_NAME = '_checkout_events';
+const CHECKOUT_EVENT_HEADERS = ['seasonSheet', 'sessionKey', 'phone', 'method', 'submittedAt', 'codeInput', 'status', 'undoToken', 'undoneAt', 'meta'];
+const CHECKOUT_DEFAULT_WINDOW_MINUTES = 30;
+const CHECKOUT_DEFAULT_CODE_DIGITS = 3;
+const CHECKOUT_UNDO_WINDOW_SECONDS = 30;
+const CHECKOUT_ATTENDANCE_TICKET_TTL_SECONDS = 12 * 60 * 60;
+const CHECKOUT_ATTENDANCE_TICKET_CACHE_PREFIX = 'checkout_att_ticket_';
+const CHECKOUT_UNDO_CACHE_PREFIX = 'checkout_undo_';
 const IMPORT_META_SHEET_NAME = '_import_meta';
 const IMPORT_META_HEADERS = [
   'importId',
@@ -130,6 +140,8 @@ const SUPPORTED_API_ACTIONS = [
   'adminUsersDelete',
   'session',
   'attendance',
+  'checkoutSubmit',
+  'checkoutUndo',
   'status',
   'ranking',
   'latestSeason',
@@ -151,6 +163,9 @@ const SUPPORTED_API_ACTIONS = [
   'members',
   'manualApprove',
   'manualApproveBatch',
+  'checkoutChallengeIssue',
+  'checkoutPendingList',
+  'checkoutManualCompleteBatch',
   'excusedSet',
   'graduationReport',
   'sheetSchemaAudit',
@@ -176,6 +191,8 @@ const ACTION_ACCESS_LEVELS = Object.freeze({
   authGoogleLogin: ACTION_ACCESS_PUBLIC,
   session: ACTION_ACCESS_PUBLIC,
   attendance: ACTION_ACCESS_PUBLIC,
+  checkoutSubmit: ACTION_ACCESS_PUBLIC,
+  checkoutUndo: ACTION_ACCESS_PUBLIC,
   status: ACTION_ACCESS_PUBLIC,
   ranking: ACTION_ACCESS_PUBLIC,
   latestSeason: ACTION_ACCESS_PUBLIC,
@@ -195,6 +212,9 @@ const ACTION_ACCESS_LEVELS = Object.freeze({
   members: ACTION_ACCESS_ADMIN,
   manualApprove: ACTION_ACCESS_ADMIN,
   manualApproveBatch: ACTION_ACCESS_ADMIN,
+  checkoutChallengeIssue: ACTION_ACCESS_ADMIN,
+  checkoutPendingList: ACTION_ACCESS_ADMIN,
+  checkoutManualCompleteBatch: ACTION_ACCESS_ADMIN,
   excusedSet: ACTION_ACCESS_ADMIN,
   graduationReport: ACTION_ACCESS_ADMIN,
   sheetSchemaAudit: ACTION_ACCESS_ADMIN,
@@ -237,6 +257,12 @@ const VARIABLE_CATALOG = {
     formula: 'lateDeadline = startTime + absence_threshold_min',
     example: '180 이면 시작 3시간 후 마감',
     validation: { kind: 'number', min: 1, max: 600, required: true }
+  },
+  checkout_open_offset_min: {
+    labelKo: '퇴실 오픈 오프셋',
+    formula: 'checkoutOpen = endTime + checkout_open_offset_min',
+    example: '-30 이면 종료 30분 전 퇴실 오픈',
+    validation: { kind: 'number', min: -180, max: 0, required: true }
   },
   required_attendance_count: {
     labelKo: '수료 최소 출석 횟수',
@@ -311,6 +337,15 @@ const REQUIRED_VARIABLE_SPECS = [
     usedIn: 'collectSessionsFromSheet.lateDeadline;web/admin.suggestScheduleEndTime'
   },
   {
+    key: 'checkout_open_offset_min',
+    value: -30,
+    type: 'number',
+    description: '퇴실 오픈 오프셋(종료 n분 전)',
+    appliesTo: '퇴실 인증 오픈 시각 계산',
+    appliesWhen: '퇴실 인증 코드 발급/검증 시',
+    usedIn: 'getCheckoutWindowBounds;getAttendanceSessionFromSheet;checkoutChallengeIssue'
+  },
+  {
     key: 'required_attendance_count',
     value: 3,
     type: 'number',
@@ -379,6 +414,7 @@ const VARIABLE_DEFAULTS = {
   attendance_open_offset_min: -30,
   late_threshold_min: 50,
   absence_threshold_min: 180,
+  checkout_open_offset_min: -30,
   required_attendance_count: 3,
   late_to_absence_ratio: 3,
   required_session_positions: 'first,last',
@@ -391,12 +427,13 @@ const VARIABLE_DEFAULTS = {
 const MINUTE_VARIABLE_KEYS = {
   attendance_open_offset_min: true,
   late_threshold_min: true,
-  absence_threshold_min: true
+  absence_threshold_min: true,
+  checkout_open_offset_min: true
 };
 
 const VARIABLE_USAGE_TAB_ORDER = [
   'QR코드 관리',
-  '출석하기',
+  '출석 관리',
   '출석현황',
   '일정 관리',
   '변수명 관리',
@@ -405,9 +442,10 @@ const VARIABLE_USAGE_TAB_ORDER = [
 ];
 
 const VARIABLE_KEY_TAB_MAP = {
-  attendance_open_offset_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
-  late_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
-  absence_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  attendance_open_offset_min: ['출석 관리', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  late_threshold_min: ['출석 관리', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  absence_threshold_min: ['출석 관리', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  checkout_open_offset_min: ['출석 관리', '출석현황', '변수명 관리'],
   required_attendance_count: ['유고 처리', '수료 판정'],
   late_to_absence_ratio: ['유고 처리', '수료 판정'],
   required_session_positions: ['유고 처리', '수료 판정'],

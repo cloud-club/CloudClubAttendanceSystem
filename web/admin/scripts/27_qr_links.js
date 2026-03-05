@@ -1,7 +1,6 @@
 function renderAdminQrLoadError(message) {
   const qrContainer = document.getElementById('qrcode');
   if (!qrContainer) return;
-  qrContainer.classList.remove('blurred');
   qrContainer.innerHTML = `<div class="error" style="margin: 12px;">${escapeHtml(message)}</div>`;
 }
 
@@ -124,19 +123,12 @@ function handleSeasonQRCode(studentUrl) {
   const qrContainer = document.getElementById('seasonQrcode');
   qrContainer.innerHTML = '';
 
-  const overlay = document.createElement('div');
-  overlay.className = 'qr-overlay';
-  overlay.innerHTML = '<span><i class="fas fa-eye"></i> 클릭하여 QR코드 보기</span>';
-  qrContainer.appendChild(overlay);
-
   new QRCode(qrContainer, {
     text: studentUrl,
     width: 300,
     height: 300
   });
 
-  qrContainer.onclick = () => toggleQRBlur('seasonQrcode');
-  qrContainer.classList.add('blurred');
   qrContainer.style.display = 'flex';
 
   document.getElementById('urlText').textContent = studentUrl;
@@ -186,22 +178,9 @@ function createQrCode(url) {
   }
 
   new QRCode(qrContainer, { text: url, width: 300, height: 300 });
-  qrContainer.classList.add('blurred');
 }
 
 function toggleQRBlur(qrId) {
-  const qrContainer = document.getElementById(qrId);
-  const overlay = qrContainer.querySelector('.qr-overlay span');
-
-  if (qrContainer.classList.contains('blurred')) {
-    qrContainer.classList.remove('blurred');
-    if (overlay) {
-      overlay.innerHTML = '<i class="fas fa-eye-slash"></i> 클릭하여 QR코드 숨기기';
-    }
-  } else {
-    qrContainer.classList.add('blurred');
-    if (overlay) {
-      overlay.innerHTML = '<i class="fas fa-eye"></i> 클릭하여 QR코드 보기';
-    }
-  }
+  // QR 블러 기능은 제거되었지만, 기존 inline 핸들러 호환을 위해 no-op 유지
+  return qrId;
 }

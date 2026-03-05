@@ -173,6 +173,22 @@ function handleApiRequest(params) {
         break;
       }
 
+      case 'checkoutSubmit': {
+        assertRuntimeIntegrity();
+        data = checkoutSubmit(Object.assign({}, params, {
+          season: resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias
+        }));
+        break;
+      }
+
+      case 'checkoutUndo': {
+        assertRuntimeIntegrity();
+        data = checkoutUndo(Object.assign({}, params, {
+          season: resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias
+        }));
+        break;
+      }
+
       case 'status': {
         assertRuntimeIntegrity();
         const phone = (params.phone || '').trim();
@@ -297,6 +313,26 @@ function handleApiRequest(params) {
       case 'manualApproveBatch': {
         const seasonAlias = ensureSeasonAlias(params.season || '');
         data = manualApproveBatchAttendance(Object.assign({}, params, { season: seasonAlias }));
+        break;
+      }
+
+      case 'checkoutChallengeIssue': {
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        const ctx = ensureAdmin();
+        data = checkoutChallengeIssue(Object.assign({}, params, { season: seasonAlias }), ctx);
+        break;
+      }
+
+      case 'checkoutPendingList': {
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = checkoutPendingList(Object.assign({}, params, { season: seasonAlias }));
+        break;
+      }
+
+      case 'checkoutManualCompleteBatch': {
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        const ctx = ensureAdmin();
+        data = checkoutManualCompleteBatch(Object.assign({}, params, { season: seasonAlias }), ctx);
         break;
       }
 

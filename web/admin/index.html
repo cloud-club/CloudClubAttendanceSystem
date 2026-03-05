@@ -465,7 +465,7 @@
     }
     
     /* QR Code */
-    #qrcode, #seasonQrcode {
+    #qrcode, #seasonQrcode, #checkoutQrcode {
       display: flex;
       justify-content: center;
       align-items: center;
@@ -477,51 +477,8 @@
       max-width: 340px;
       width: 100%;
       position: relative;
-      cursor: pointer;
+      cursor: default;
       transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
-    }
-
-    /* QR Code Blur Effect */
-    #qrcode.blurred > *,
-    #seasonQrcode.blurred > * {
-      filter: blur(8px);
-      transition: filter 0.3s ease;
-    }
-
-    #qrcode:not(.blurred) > *,
-    #seasonQrcode:not(.blurred) > * {
-      filter: blur(0px);
-      transition: filter 0.3s ease;
-    }
-
-    /* QR Code Click Overlay */
-    .qr-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(59, 130, 246, 0.1);
-      border-radius: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-      pointer-events: none;
-      color: #3b82f6;
-      font-weight: 600;
-      font-size: 16px;
-    }
-
-    #qrcode.blurred .qr-overlay,
-    #seasonQrcode.blurred .qr-overlay {
-      opacity: 1;
-    }
-
-    #qrcode:hover .qr-overlay,
-    #seasonQrcode:hover .qr-overlay {
-      opacity: 0.8;
     }
     
     /* Forms */
@@ -3218,7 +3175,8 @@
     body.perf-ui .form-input,
     body.perf-ui .auth-info-btn,
     body.perf-ui #qrcode,
-    body.perf-ui #seasonQrcode {
+    body.perf-ui #seasonQrcode,
+    body.perf-ui #checkoutQrcode {
       transition-property: background-color, border-color, color, opacity, transform, box-shadow, filter;
     }
 
@@ -3377,7 +3335,7 @@
     <nav class="tab-nav">
       <button class="tab-button active" onclick="openTab('attend', event)">
         <i class="fas fa-check-circle"></i>
-        <span>출석하기</span>
+        <span>출석 관리</span>
       </button>
       <button class="tab-button" onclick="openTab('status', event)">
         <i class="fas fa-chart-line"></i>
@@ -3433,11 +3391,7 @@
           </button>
         </div>
         
-        <div id="seasonQrcode" class="blurred" style="display: none;">
-          <div class="qr-overlay">
-            <span><i class="fas fa-eye"></i> 클릭하여 QR코드 보기</span>
-          </div>
-        </div>
+        <div id="seasonQrcode" style="display: none;"></div>
         <div id="studentUrl" style="display: none;">
           <h4 style="color: #60a5fa; margin: 16px 0;">학생 접속 URL:</h4>
           <div class="url-display" id="urlText"></div>
@@ -3457,22 +3411,56 @@
           <h2 class="card-title">관리자용 QR코드</h2>
         </div>
         <p class="info-text">관리자 페이지로 접속하는 QR코드입니다.</p>
-        <div id="qrcode" class="blurred" onclick="toggleQRBlur('qrcode')">
-          <div class="qr-overlay">
-            <span><i class="fas fa-eye"></i> 클릭하여 QR코드 보기</span>
-          </div>
-        </div>
+        <div id="qrcode"></div>
         <p class="info-text" style="margin-top: 24px;">
           <i class="fas fa-info-circle"></i> 이 QR코드를 스캔하면 관리자 페이지로 접속됩니다.
         </p>
       </div>
     </div>
     
-    <!-- 출석하기 탭 -->
+    <!-- 출석 관리 탭 -->
     <div id="attend" class="tab-content active">
       <div class="countdown-card">
         <h2 id="countdown-title" class="card-title">출석 가능 시간 확인 중...</h2>
         <div id="countdown"><span class="loader"></span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-door-open card-icon"></i>
+          <h2 class="card-title">퇴실 인증 관리</h2>
+        </div>
+        <p class="info-text">퇴실 시간대(기본: 행사 종료 30분 전~종료, 변수명 관리 탭에서 조정 가능)에는 아래 인증코드 또는 QR로 퇴실을 처리합니다. 코드를 재생성하면 즉시 최신 코드로 교체됩니다.</p>
+
+        <div class="manual-approve-top-grid">
+          <div class="form-group">
+            <label for="checkoutCodeDigits" class="form-label">인증 코드 길이</label>
+            <select id="checkoutCodeDigits" class="sheet-select">
+              <option value="3">3자리 (권장)</option>
+              <option value="6">6자리</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="checkoutSessionHint" class="form-label">대상 회차</label>
+            <input id="checkoutSessionHint" class="form-input" type="text" value="회차 자동 선택" readonly>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <button type="button" class="btn" onclick="issueCheckoutChallenge()">
+            <i class="fas fa-random"></i>
+            <span>퇴실 인증코드 생성</span>
+          </button>
+          <p id="checkoutChallengeMeta" class="info-text" style="margin-top: 10px;">코드를 생성하면 이 영역에 유효 시간과 대상 회차가 표시됩니다.</p>
+        </div>
+
+        <div id="checkoutChallengeResult" style="display:none;">
+          <div class="attendance-info" style="margin-bottom: 16px;">
+            <h3>현재 퇴실 인증코드</h3>
+            <div style="font-size: 42px; font-weight: 900; color: #93bbfc; letter-spacing: 8px; margin-top: 8px;" id="checkoutCodeValue">---</div>
+          </div>
+          <div id="checkoutQrcode"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -3553,6 +3541,72 @@
         </form>
         <div id="manualApproveResult" style="display:none;" role="status" aria-live="polite"></div>
         <div id="manualApproveDetailWrap" class="table-wrap"></div>
+
+        <div style="margin-top:22px; padding-top:18px; border-top:1px dashed rgba(147,197,253,0.35);">
+          <div class="card-header" style="margin-bottom: 14px; padding-bottom: 14px;">
+            <i class="fas fa-door-closed card-icon"></i>
+            <h2 class="card-title">퇴실 미완료 수동 처리</h2>
+          </div>
+          <p class="info-text">선택한 회차에서 퇴실 미완료(보라색) 인원을 조회해 일괄 완료할 수 있습니다. 자동결석 처리된 인원은 복구 가능한 입실 기록이 있으면 복구 후 퇴실 완료됩니다.</p>
+
+          <div class="manual-approve-top-grid" style="margin-top: 10px;">
+            <div class="form-group">
+              <label for="manualCheckoutSessionHint" class="form-label">대상 회차</label>
+              <input id="manualCheckoutSessionHint" class="form-input" type="text" value="수동 출석 승인 회차 선택값을 따릅니다." readonly>
+            </div>
+            <div class="form-group">
+              <label for="manualCheckoutSearchInput" class="form-label">회원 검색</label>
+              <input id="manualCheckoutSearchInput"
+                     type="text"
+                     class="form-input"
+                     placeholder="이름/기수/전화번호"
+                     oninput="onManualCheckoutSearchInput(this.value)"
+                     autocomplete="off">
+            </div>
+          </div>
+
+          <div class="manual-approve-filter-row">
+            <label class="manual-filter-checkbox">
+              <input id="manualCheckoutAutoOnly" type="checkbox" onchange="setManualCheckoutAutoOnly(this.checked)">
+              자동결석 처리 대상만 보기
+            </label>
+            <label class="manual-filter-checkbox">
+              <input id="manualCheckoutSelectedOnly" type="checkbox" onchange="setManualCheckoutSelectedOnly(this.checked)">
+              선택된 항목만 보기
+            </label>
+            <span id="manualCheckoutMeta" class="manual-filter-meta">표시 0명 / 전체 0명 / 선택 0명</span>
+          </div>
+
+          <div class="manual-approve-bulk-actions">
+            <button type="button" class="btn btn-secondary" onclick="toggleManualCheckoutSelectFiltered(true)">
+              <i class="fas fa-check-square"></i>
+              <span>표시 항목 전체 선택</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="toggleManualCheckoutSelectFiltered(false)">
+              <i class="fas fa-square"></i>
+              <span>표시 항목 전체 해제</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="refreshManualCheckoutData({ forceReload: true })">
+              <i class="fas fa-sync-alt"></i>
+              <span>퇴실 미완료 목록 새로고침</span>
+            </button>
+          </div>
+
+          <div id="manualCheckoutListWrap" class="manual-member-list" role="list" aria-live="polite">
+            <p class="info-text" style="padding: 12px;">회차를 선택하면 퇴실 미완료 목록이 표시됩니다.</p>
+          </div>
+
+          <div class="manual-submit-row">
+            <button type="button" class="btn" id="manualCheckoutBtn" onclick="submitManualCheckoutCompleteBatch(event)" disabled>
+              <i class="fas fa-door-open"></i>
+              <span>0명 퇴실 완료 처리</span>
+            </button>
+            <span id="manualCheckoutSelectionSummary" class="manual-summary-chip">선택 0명</span>
+          </div>
+
+          <div id="manualCheckoutResult" style="display:none;" role="status" aria-live="polite"></div>
+          <div id="manualCheckoutDetailWrap" class="table-wrap"></div>
+        </div>
       </div>
     </div>
     

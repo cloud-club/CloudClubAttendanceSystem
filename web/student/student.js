@@ -1,5 +1,6 @@
 let countdownInterval;
 let isAttendanceActive = false;
+let attendanceFlowMode = 'closed';
 let currentSeason = '';
 let latestSeason = '';
 let requestedSeason = '';
@@ -12,8 +13,17 @@ let studentRankingCache = {
   loadedAt: 0,
   response: null
 };
+let currentSessionPayload = null;
+let autoCheckoutAttemptedSessionKey = '';
+let checkoutUndoInterval = null;
+let activeCheckoutUndoToken = '';
+let activeCheckoutUndoUntil = 0;
+let checkoutScannerStream = null;
+let checkoutScannerRunning = false;
+let checkoutScannerAnimationFrame = 0;
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
 const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
+const STUDENT_CHECKOUT_TICKET_STORAGE_KEY = 'cc_checkout_ticket_v1';
 const STUDENT_RANKING_CACHE_TTL_MS = 10000;
 const STUDENT_ALLOWED_ACTIONS = {
   sheets: true,
@@ -21,6 +31,8 @@ const STUDENT_ALLOWED_ACTIONS = {
   session: true,
   ranking: true,
   attendance: true,
+  checkoutSubmit: true,
+  checkoutUndo: true,
   status: true,
   authGoogleConfig: true,
   authGoogleLogin: true,
@@ -503,6 +515,348 @@ function buildSeasonParams(extraParams) {
   return params;
 }
 
+function readCheckoutTicketFromStorage() {
+  try {
+    const raw = localStorage.getItem(STUDENT_CHECKOUT_TICKET_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      ticket: String(parsed.ticket || '').trim(),
+      sessionKey: String(parsed.sessionKey || '').trim(),
+      seasonAlias: normalizeSeasonAlias(parsed.seasonAlias),
+      issuedAt: Number(parsed.issuedAt || 0)
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeCheckoutTicketToStorage(ticketInfo) {
+  const ticket = String(ticketInfo && ticketInfo.ticket || '').trim();
+  const sessionKey = String(ticketInfo && ticketInfo.sessionKey || '').trim();
+  if (!ticket || !sessionKey) return;
+  try {
+    localStorage.setItem(STUDENT_CHECKOUT_TICKET_STORAGE_KEY, JSON.stringify({
+      ticket: ticket,
+      sessionKey: sessionKey,
+      seasonAlias: normalizeSeasonAlias(ticketInfo.seasonAlias || currentSeason),
+      issuedAt: Date.now()
+    }));
+  } catch (error) {
+    // Ignore storage failures.
+  }
+}
+
+function clearCheckoutTicketFromStorage() {
+  try {
+    localStorage.removeItem(STUDENT_CHECKOUT_TICKET_STORAGE_KEY);
+  } catch (error) {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function setAttendButtonContent(iconClass, text) {
+  const attendBtn = document.getElementById('attendBtn');
+  if (!attendBtn) return;
+  attendBtn.innerHTML = `<i class="${iconClass}"></i> <span>${text}</span>`;
+}
+
+function setCheckoutModeUi(session) {
+  const flow = String(session && session.flow || '').trim();
+  attendanceFlowMode = flow || 'closed';
+
+  const checkoutCodeGroup = document.getElementById('checkoutCodeGroup');
+  const checkoutScanRow = document.getElementById('checkoutScanRow');
+  const checkoutHintText = document.getElementById('checkoutHintText');
+  const attendHelperText = document.getElementById('attendHelperText');
+
+  const checkoutActive = flow === 'checkout' || !!(session && session.checkoutActive);
+  if (checkoutCodeGroup) {
+    checkoutCodeGroup.style.display = checkoutActive ? 'block' : 'none';
+  }
+  if (checkoutScanRow) {
+    checkoutScanRow.style.display = checkoutActive ? 'flex' : 'none';
+  }
+
+  if (attendHelperText) {
+    if (checkoutActive) {
+      attendHelperText.textContent = '퇴실 시간대입니다. 전화번호와 인증코드(또는 QR 스캔)로 퇴실을 완료해주세요.';
+    } else {
+      attendHelperText.textContent = '하이픈(-) 없이 숫자만 입력해주세요';
+    }
+  }
+
+  if (checkoutHintText) {
+    if (!checkoutActive) {
+      checkoutHintText.textContent = '';
+    } else if (session && session.checkoutCloseTime) {
+      const closeDate = new Date(Number(session.checkoutCloseTime));
+      checkoutHintText.textContent = `퇴실 인증 마감: ${closeDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
+    } else {
+      checkoutHintText.textContent = '퇴실 인증 코드 3자리를 입력해 주세요.';
+    }
+  }
+
+  if (!checkoutActive) {
+    stopCheckoutScanner();
+    const checkoutCodeInput = document.getElementById('checkoutCodeInput');
+    if (checkoutCodeInput) {
+      checkoutCodeInput.value = '';
+    }
+  }
+}
+
+function clearCheckoutUndoState() {
+  if (checkoutUndoInterval) {
+    clearInterval(checkoutUndoInterval);
+    checkoutUndoInterval = null;
+  }
+  activeCheckoutUndoToken = '';
+  activeCheckoutUndoUntil = 0;
+}
+
+function renderCheckoutUndoUi() {
+  const container = document.getElementById('checkoutUndoWrap');
+  const timerLabel = document.getElementById('checkoutUndoTimer');
+  if (!container || !timerLabel) return;
+
+  if (!activeCheckoutUndoToken || !activeCheckoutUndoUntil) {
+    container.style.display = 'none';
+    timerLabel.textContent = '';
+    return;
+  }
+
+  const remainSec = Math.max(0, Math.ceil((activeCheckoutUndoUntil - Date.now()) / 1000));
+  if (remainSec <= 0) {
+    clearCheckoutUndoState();
+    container.style.display = 'none';
+    timerLabel.textContent = '';
+    return;
+  }
+
+  container.style.display = 'flex';
+  timerLabel.textContent = `${remainSec}초`;
+}
+
+function startCheckoutUndoCountdown(token, undoUntil) {
+  clearCheckoutUndoState();
+  activeCheckoutUndoToken = String(token || '').trim();
+  activeCheckoutUndoUntil = Number(undoUntil || 0);
+  if (!activeCheckoutUndoToken || !activeCheckoutUndoUntil) {
+    renderCheckoutUndoUi();
+    return;
+  }
+
+  renderCheckoutUndoUi();
+  checkoutUndoInterval = setInterval(renderCheckoutUndoUi, 250);
+}
+
+async function undoCheckout() {
+  if (!activeCheckoutUndoToken) return;
+  const token = activeCheckoutUndoToken;
+
+  try {
+    const response = await callStudentApi('checkoutUndo', buildSeasonParams({
+      undoToken: token
+    }));
+    const resultDiv = document.getElementById('result');
+    if (response && response.success) {
+      clearCheckoutUndoState();
+      renderCheckoutUndoUi();
+      resultDiv.innerHTML = `ℹ️ ${escapeHtml(response.message || '퇴실 취소 완료')}`;
+      resultDiv.className = 'success';
+      resultDiv.style.display = 'block';
+      setTimeout(() => {
+        resultDiv.style.display = 'none';
+      }, 5000);
+    } else {
+      throw new Error((response && response.message) || '퇴실 취소에 실패했습니다.');
+    }
+  } catch (error) {
+    const resultDiv = document.getElementById('result');
+    resultDiv.innerHTML = `❌ ${escapeHtml(getDisplayErrorMessage(error, '퇴실 취소 중 오류가 발생했습니다.'))}`;
+    resultDiv.className = 'error';
+    resultDiv.style.display = 'block';
+  }
+}
+
+function parseCheckoutScanPayload(rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return null;
+
+  const directCode = raw.replace(/\D/g, '');
+  if (directCode.length === 3 || directCode.length === 6) {
+    return {
+      code: directCode
+    };
+  }
+
+  if (raw.indexOf('CC_CHECKOUT|') === 0) {
+    const parts = raw.split('|');
+    if (parts.length >= 4) {
+      return {
+        seasonAlias: normalizeSeasonAlias(parts[1]),
+        sessionKey: String(parts[2] || '').trim(),
+        code: String(parts[3] || '').replace(/\D/g, '')
+      };
+    }
+  }
+
+  try {
+    const url = new URL(raw);
+    const code = String(url.searchParams.get('checkoutCode') || url.searchParams.get('code') || '').replace(/\D/g, '');
+    const sessionKey = String(url.searchParams.get('sessionKey') || '').trim();
+    const seasonAlias = normalizeSeasonAlias(url.searchParams.get('season'));
+    if (code) {
+      return {
+        seasonAlias: seasonAlias,
+        sessionKey: sessionKey,
+        code: code
+      };
+    }
+  } catch (error) {
+    // no-op
+  }
+
+  return null;
+}
+
+function applyCheckoutScanPayload(payload) {
+  if (!payload || !payload.code) return false;
+  const checkoutCodeInput = document.getElementById('checkoutCodeInput');
+  if (!checkoutCodeInput) return false;
+  checkoutCodeInput.value = String(payload.code || '').slice(0, 6);
+  checkoutCodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+  if (payload.seasonAlias && normalizeSeasonAlias(payload.seasonAlias) && normalizeSeasonAlias(payload.seasonAlias) !== normalizeSeasonAlias(currentSeason)) {
+    showSeasonWarning('스캔한 QR의 시즌 정보가 현재 페이지와 다릅니다. 현재 시즌 기준으로 제출합니다.');
+  }
+
+  if (payload.sessionKey) {
+    currentSessionPayload = Object.assign({}, currentSessionPayload || {}, {
+      checkoutSessionKey: payload.sessionKey
+    });
+  }
+
+  return true;
+}
+
+function supportsCheckoutScanner() {
+  return !!(window.BarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+function stopCheckoutScanner() {
+  if (checkoutScannerAnimationFrame) {
+    cancelAnimationFrame(checkoutScannerAnimationFrame);
+    checkoutScannerAnimationFrame = 0;
+  }
+
+  if (checkoutScannerStream) {
+    checkoutScannerStream.getTracks().forEach(track => track.stop());
+    checkoutScannerStream = null;
+  }
+
+  checkoutScannerRunning = false;
+  const wrap = document.getElementById('checkoutScannerWrap');
+  if (wrap) {
+    wrap.style.display = 'none';
+  }
+}
+
+async function scanCheckoutVideoFrame(detector, video) {
+  if (!checkoutScannerRunning) return;
+  try {
+    const barcodes = await detector.detect(video);
+    if (Array.isArray(barcodes) && barcodes.length > 0) {
+      const payload = parseCheckoutScanPayload(barcodes[0] && barcodes[0].rawValue);
+      if (applyCheckoutScanPayload(payload)) {
+        stopCheckoutScanner();
+        showSeasonWarning('QR 코드가 인식되었습니다. 퇴실 제출 버튼을 눌러 완료하세요.');
+        return;
+      }
+    }
+  } catch (error) {
+    // Ignore intermittent camera decode errors.
+  }
+
+  checkoutScannerAnimationFrame = requestAnimationFrame(() => scanCheckoutVideoFrame(detector, video));
+}
+
+async function startCheckoutScanner() {
+  if (!supportsCheckoutScanner()) {
+    const manual = prompt('브라우저에서 QR 스캔을 지원하지 않습니다. 퇴실 코드를 직접 입력해 주세요.');
+    if (manual) {
+      applyCheckoutScanPayload(parseCheckoutScanPayload(manual));
+    }
+    return;
+  }
+
+  try {
+    const wrap = document.getElementById('checkoutScannerWrap');
+    const video = document.getElementById('checkoutScannerVideo');
+    if (!wrap || !video) return;
+
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    checkoutScannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+    video.srcObject = checkoutScannerStream;
+    await video.play();
+    wrap.style.display = 'block';
+    checkoutScannerRunning = true;
+    scanCheckoutVideoFrame(detector, video);
+  } catch (error) {
+    stopCheckoutScanner();
+    const message = getDisplayErrorMessage(error, '카메라를 사용할 수 없습니다.');
+    showSeasonWarning(message);
+  }
+}
+
+function toggleCheckoutScanner() {
+  if (checkoutScannerRunning) {
+    stopCheckoutScanner();
+    return;
+  }
+  startCheckoutScanner();
+}
+
+async function tryAutoCheckoutIfPossible(session) {
+  const checkoutSessionKey = String(session && (session.checkoutSessionKey || session.sessionKey) || '').trim();
+  if (!checkoutSessionKey) return;
+  if (autoCheckoutAttemptedSessionKey === checkoutSessionKey) return;
+
+  const ticketInfo = readCheckoutTicketFromStorage();
+  if (!ticketInfo || !ticketInfo.ticket) return;
+  if (ticketInfo.sessionKey && ticketInfo.sessionKey !== checkoutSessionKey) return;
+  if (ticketInfo.seasonAlias && ticketInfo.seasonAlias !== normalizeSeasonAlias(currentSeason)) return;
+
+  autoCheckoutAttemptedSessionKey = checkoutSessionKey;
+
+  const resultDiv = document.getElementById('result');
+  resultDiv.innerHTML = '🔄 캐시된 입실 기록을 확인해 자동 퇴실을 시도합니다...';
+  resultDiv.className = 'success';
+  resultDiv.style.display = 'block';
+
+  try {
+    const response = await callStudentApi('checkoutSubmit', buildSeasonParams({
+      ticket: ticketInfo.ticket,
+      sessionKey: checkoutSessionKey,
+      method: 'auto_cache'
+    }));
+
+    if (!response || !response.success) {
+      throw new Error((response && response.message) || '자동 퇴실 처리에 실패했습니다.');
+    }
+    handleCheckoutResponse(response, { auto: true });
+  } catch (error) {
+    autoCheckoutAttemptedSessionKey = '';
+    resultDiv.innerHTML = `ℹ️ 자동 퇴실을 완료하지 못했습니다. ${escapeHtml(getDisplayErrorMessage(error, '전화번호와 코드를 직접 입력해 주세요.'))}`;
+    resultDiv.className = 'error';
+    resultDiv.style.display = 'block';
+  }
+}
+
 function formatDurationKorean(ms) {
   const totalSec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
   const days = Math.floor(totalSec / 86400);
@@ -520,11 +874,62 @@ function formatDurationKorean(ms) {
 }
 
 function renderCountdown(session) {
+  currentSessionPayload = session || {};
   const countdownTitle = document.getElementById('countdown-title');
   const countdownDiv = document.getElementById('countdown');
   const attendBtn = document.getElementById('attendBtn');
+  const flow = String(session && session.flow || '').trim();
+  const checkoutActive = flow === 'checkout' || !!(session && session.checkoutActive);
+  const checkinActive = !!(session && (session.checkinActive || (session.active && !checkoutActive)));
+  if (!checkoutActive) {
+    autoCheckoutAttemptedSessionKey = '';
+  }
 
   clearInterval(countdownInterval);
+  setCheckoutModeUi(session || {});
+
+  const disableAttend = (iconClass, labelText) => {
+    isAttendanceActive = false;
+    if (!attendBtn) return;
+    attendBtn.disabled = true;
+    setAttendButtonContent(iconClass, labelText);
+  };
+
+  const enableAttend = (iconClass, labelText) => {
+    isAttendanceActive = true;
+    if (!attendBtn) return;
+    attendBtn.disabled = false;
+    setAttendButtonContent(iconClass, labelText);
+  };
+
+  if (checkoutActive) {
+    const checkoutCloseTime = Number(session.checkoutCloseTime || session.lateDeadline || 0);
+    const checkoutSessionKey = String(session.checkoutSessionKey || session.sessionKey || '').trim();
+
+    const updateCheckoutCountdown = () => {
+      const now = Date.now();
+      if (checkoutCloseTime && now > checkoutCloseTime) {
+        clearInterval(countdownInterval);
+        countdownTitle.textContent = '퇴실 인증 시간 종료';
+        countdownDiv.textContent = '00분 00초';
+        disableAttend('fas fa-times', '퇴실 마감');
+        stopCheckoutScanner();
+        return;
+      }
+
+      countdownTitle.textContent = '퇴실 인증 마감까지 남은 시간';
+      const remaining = Math.max(0, checkoutCloseTime - now);
+      countdownDiv.textContent = formatDurationKorean(remaining);
+    };
+
+    updateCheckoutCountdown();
+    countdownInterval = setInterval(updateCheckoutCountdown, 1000);
+    enableAttend('fas fa-door-open', '퇴실 완료하기');
+    if (checkoutSessionKey) {
+      tryAutoCheckoutIfPossible(session);
+    }
+    return;
+  }
 
   if (!session.active) {
     if (session.nextOpenTime) {
@@ -538,9 +943,7 @@ function renderCountdown(session) {
           clearInterval(countdownInterval);
           countdownTitle.textContent = '출석 가능 시간 확인 중...';
           countdownDiv.textContent = '잠시 후 자동 갱신됩니다.';
-          isAttendanceActive = false;
-          attendBtn.disabled = true;
-          attendBtn.innerHTML = '<i class="fas fa-clock"></i> <span>오픈 대기</span>';
+          disableAttend('fas fa-clock', '오픈 대기');
           setTimeout(() => {
             checkAttendanceSession();
           }, 1000);
@@ -553,22 +956,24 @@ function renderCountdown(session) {
 
       updateOpenCountdown();
       countdownInterval = setInterval(updateOpenCountdown, 1000);
-      isAttendanceActive = false;
-      attendBtn.disabled = true;
-      attendBtn.innerHTML = '<i class="fas fa-clock"></i> <span>오픈 대기</span>';
+      disableAttend('fas fa-clock', '오픈 대기');
       return;
     }
 
     countdownTitle.textContent = '출석 대기 중';
     countdownDiv.textContent = session.message || '지금은 출석 가능한 시간이 아닙니다.';
-    isAttendanceActive = false;
-    attendBtn.disabled = true;
-    attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 불가</span>';
+    disableAttend('fas fa-times', flow === 'closed' ? '출석 불가' : '대기 중');
     return;
   }
 
-  isAttendanceActive = true;
-  attendBtn.disabled = false;
+  if (!checkinActive) {
+    countdownTitle.textContent = '출석 대기 중';
+    countdownDiv.textContent = session.message || '현재는 입실 가능 시간이 아닙니다.';
+    disableAttend('fas fa-times', '출석 불가');
+    return;
+  }
+
+  enableAttend('fas fa-hand-point-up', '지금 출석하기');
 
   const onTimeDeadline = Number(session.onTimeDeadline || session.endTime || 0);
   const lateDeadline = Number(session.lateDeadline || session.endTime || 0);
@@ -580,9 +985,7 @@ function renderCountdown(session) {
       clearInterval(countdownInterval);
       countdownTitle.textContent = '출석 시간 종료';
       countdownDiv.textContent = '00분 00초';
-      isAttendanceActive = false;
-      attendBtn.disabled = true;
-      attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 마감</span>';
+      disableAttend('fas fa-times', '출석 마감');
       return;
     }
 
@@ -757,6 +1160,7 @@ function openTab(tabName, evt) {
 
   if (tabName === 'status') {
     loadRankings();
+    loadCachedStatusIfPossible();
   }
 }
 
@@ -777,7 +1181,7 @@ async function doAttendance(event) {
   }
 
   if (!isAttendanceActive) {
-    alert('현재는 출석 가능한 시간이 아닙니다.');
+    alert(attendanceFlowMode === 'checkout' ? '현재는 퇴실 인증 가능한 시간이 아닙니다.' : '현재는 출석 가능한 시간이 아닙니다.');
     return;
   }
 
@@ -788,11 +1192,31 @@ async function doAttendance(event) {
   localStorage.setItem('lastUsedPhone', phoneNumber);
 
   try {
-    const response = await callStudentApi('attendance', buildSeasonParams({ phone: phoneNumber }));
-    handleAttendanceResponse(response);
+    if (attendanceFlowMode === 'checkout') {
+      const checkoutCodeInput = document.getElementById('checkoutCodeInput');
+      const checkoutCode = checkoutCodeInput ? String(checkoutCodeInput.value || '').replace(/\D/g, '') : '';
+      const checkoutSessionKey = String(currentSessionPayload && (currentSessionPayload.checkoutSessionKey || currentSessionPayload.sessionKey) || '').trim();
+      if (!checkoutCode) {
+        throw createStudentApiError('INVALID_CHECKOUT_CODE', '퇴실 인증 코드를 입력하거나 QR을 스캔해 주세요.');
+      }
+      const response = await callStudentApi('checkoutSubmit', buildSeasonParams({
+        phone: phoneNumber,
+        code: checkoutCode,
+        sessionKey: checkoutSessionKey,
+        method: 'manual_code'
+      }));
+      handleCheckoutResponse(response, { auto: false });
+    } else {
+      const response = await callStudentApi('attendance', buildSeasonParams({ phone: phoneNumber }));
+      handleAttendanceResponse(response);
+    }
   } catch (error) {
     if (handleHistoricalAccessError(error)) return;
-    handleAttendanceError(error);
+    if (attendanceFlowMode === 'checkout') {
+      handleCheckoutError(error);
+    } else {
+      handleAttendanceError(error);
+    }
   }
 }
 
@@ -806,17 +1230,25 @@ function handleAttendanceResponse(response) {
 
     createConfetti();
 
+    if (response.checkoutTicket) {
+      writeCheckoutTicketToStorage({
+        ticket: response.checkoutTicket,
+        sessionKey: response.sessionKey,
+        seasonAlias: response.seasonAlias || currentSeason
+      });
+    }
+
     const typeBadge = response.attendanceType === 'late'
       ? '<span class="attendance-badge late">지각</span>'
       : '<span class="attendance-badge on-time">정시</span>';
 
-    let message = `✅ <span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님, ${response.time} 출석 완료! ${typeBadge}`;
+    let message = `✅ <span class="grade-badge">${escapeHtml(response.seasonLabel || response.grade || '-')}</span>${escapeHtml(response.name)}님, ${escapeHtml(response.time)} 입실 완료! ${typeBadge}`;
 
     if (response.attendanceInfo) {
       const info = response.attendanceInfo;
       message += `
         <div class="attendance-info">
-          <h3><span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님 출석 현황</h3>
+          <h3><span class="grade-badge">${escapeHtml(response.seasonLabel || response.grade || '-')}</span>${escapeHtml(response.name)}님 출석 현황</h3>
           <div class="attendance-stats">
             <div class="stat-item">
               <div class="stat-label">출석 횟수</div>
@@ -849,12 +1281,12 @@ function handleAttendanceResponse(response) {
 
     resultDiv.innerHTML = message;
     resultDiv.className = 'success';
-    attendBtn.innerHTML = '<i class="fas fa-check-circle"></i> <span>출석 완료</span>';
+    setAttendButtonContent('fas fa-check-circle', '입실 완료');
   } else {
-    resultDiv.innerHTML = `❌ ${response.message}`;
+    resultDiv.innerHTML = `❌ ${escapeHtml(response.message || '출석 실패')}`;
     resultDiv.className = 'error';
     attendBtn.disabled = false;
-    attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>지금 출석하기</span>';
+    setAttendButtonContent('fas fa-hand-point-up', '지금 출석하기');
   }
 
   resultDiv.style.display = 'block';
@@ -876,11 +1308,61 @@ function handleAttendanceError(error) {
   resultDiv.style.display = 'block';
 
   attendBtn.disabled = false;
-  attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>지금 출석하기</span>';
+  setAttendButtonContent('fas fa-hand-point-up', '지금 출석하기');
 
   setTimeout(() => {
     resultDiv.style.display = 'none';
   }, 5000);
+}
+
+function handleCheckoutResponse(response, options) {
+  const resultDiv = document.getElementById('result');
+  const attendBtn = document.getElementById('attendBtn');
+
+  if (response && response.success) {
+    createConfetti();
+    clearCheckoutTicketFromStorage();
+
+    const badge = response.alreadyCompleted
+      ? '<span class="attendance-badge on-time">이미완료</span>'
+      : '<span class="attendance-badge on-time">퇴실완료</span>';
+
+    resultDiv.innerHTML = [
+      `✅ <span class="grade-badge">${escapeHtml(response.seasonLabel || response.grade || '-')}</span>${escapeHtml(response.name || '')}님, `,
+      `${escapeHtml(response.checkoutTime || '')} 퇴실 처리 완료! ${badge}`,
+      response.checkoutType ? `<p class="info-text" style="margin-top:10px;">처리 방식: ${escapeHtml(response.checkoutType)}</p>` : ''
+    ].join('');
+    resultDiv.className = 'success';
+    resultDiv.style.display = 'block';
+
+    setAttendButtonContent('fas fa-check-circle', response.alreadyCompleted ? '이미 퇴실 완료' : '퇴실 완료');
+    attendBtn.disabled = true;
+
+    if (response.undoToken && response.undoUntil) {
+      startCheckoutUndoCountdown(response.undoToken, response.undoUntil);
+    } else {
+      clearCheckoutUndoState();
+      renderCheckoutUndoUi();
+    }
+    return;
+  }
+
+  resultDiv.innerHTML = `❌ ${escapeHtml(response && response.message ? response.message : '퇴실 처리 실패')}`;
+  resultDiv.className = 'error';
+  resultDiv.style.display = 'block';
+  attendBtn.disabled = false;
+  setAttendButtonContent('fas fa-door-open', '퇴실 완료하기');
+}
+
+function handleCheckoutError(error) {
+  const resultDiv = document.getElementById('result');
+  const attendBtn = document.getElementById('attendBtn');
+
+  resultDiv.innerHTML = `❌ ${escapeHtml(getDisplayErrorMessage(error, '퇴실 처리 중 오류가 발생했습니다.'))}`;
+  resultDiv.className = 'error';
+  resultDiv.style.display = 'block';
+  attendBtn.disabled = false;
+  setAttendButtonContent('fas fa-door-open', '퇴실 완료하기');
 }
 
 async function checkAttendanceStatus(event) {
@@ -907,6 +1389,31 @@ async function checkAttendanceStatus(event) {
 
   try {
     const response = await callStudentApi('status', buildSeasonParams({ phone: phoneNumber }));
+    handleStatusResponse(response);
+  } catch (error) {
+    if (handleHistoricalAccessError(error)) return;
+    handleStatusError(error);
+  }
+}
+
+async function loadCachedStatusIfPossible() {
+  const statusResult = document.getElementById('statusResult');
+  if (!statusResult) return;
+  if (statusResult.innerHTML && statusResult.innerHTML.trim()) return;
+
+  const savedPhone = String(localStorage.getItem('lastUsedPhone') || '').trim();
+  if (!/^010[0-9]{8}$/.test(savedPhone)) return;
+
+  const statusPhoneInput = document.getElementById('statusPhoneInput');
+  if (statusPhoneInput) {
+    statusPhoneInput.value = savedPhone;
+  }
+
+  statusResult.innerHTML = '<div class="loader" style="margin: 32px auto;"></div>';
+  statusResult.style.display = 'block';
+
+  try {
+    const response = await callStudentApi('status', buildSeasonParams({ phone: savedPhone }));
     handleStatusResponse(response);
   } catch (error) {
     if (handleHistoricalAccessError(error)) return;
@@ -949,10 +1456,20 @@ function handleStatusResponse(response) {
       }
 
       const itemClass = detail.attendanceType === 'future' ? 'future' : '';
+      let checkoutBadge = '';
+      if (detail.checkoutRequired) {
+        if (detail.checkoutStatus === 'completed') {
+          checkoutBadge = `<span class="attendance-badge on-time" style="margin-left:8px;">퇴실완료</span>`;
+        } else if (detail.checkoutStatus === 'missing') {
+          checkoutBadge = `<span class="attendance-badge late" style="margin-left:8px;">퇴실누락</span>`;
+        } else if (detail.checkoutStatus === 'pending') {
+          checkoutBadge = `<span class="attendance-badge late" style="margin-left:8px;">퇴실대기</span>`;
+        }
+      }
 
       detailsHTML += `
         <div class="attendance-item ${itemClass}">
-          <div class="attendance-date">${detail.date}</div>
+          <div class="attendance-date">${escapeHtml(detail.date)} ${checkoutBadge}</div>
           <div class="attendance-status ${statusClass}">
             ${statusIcon}
             <span>${statusText}</span>
@@ -961,10 +1478,33 @@ function handleStatusResponse(response) {
       `;
     });
 
+    let checkoutMissingHTML = '';
+    if (Array.isArray(data.checkoutMissingRecords) && data.checkoutMissingRecords.length > 0) {
+      const rows = data.checkoutMissingRecords.map(item => `
+        <tr>
+          <td>${escapeHtml(item.date || '-')}</td>
+          <td>${escapeHtml(item.attendTime || '-')}</td>
+          <td>${escapeHtml(item.message || '퇴실 정보 없음')}</td>
+        </tr>
+      `).join('');
+
+      checkoutMissingHTML = `
+        <div class="attendance-details" style="margin-top:18px;">
+          <h4 style="color:#fbbf24; margin-bottom:10px; font-size:16px;">미수료(퇴실 정보 누락) 내역</h4>
+          <table class="ranking-table">
+            <thead>
+              <tr><th>회차</th><th>입실 기록</th><th>상태</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
     statusResult.innerHTML = `
       <div class="card">
         <div class="attendance-info">
-          <h3><span class="grade-badge">${data.seasonLabel || data.grade || '-'}</span>${data.name}님 출석 현황</h3>
+          <h3><span class="grade-badge">${escapeHtml(data.seasonLabel || data.grade || '-')}</span>${escapeHtml(data.name)}님 출석 현황</h3>
           <div class="attendance-stats">
             <div class="stat-item">
               <div class="stat-label">출석 횟수</div>
@@ -974,19 +1514,24 @@ function handleStatusResponse(response) {
               <div class="stat-label">출석률</div>
               <div class="stat-value highlight">${data.rate}%</div>
             </div>
+            <div class="stat-item">
+              <div class="stat-label">퇴실 완료</div>
+              <div class="stat-value">${data.checkoutCompletedCount || 0}/${data.checkoutRequiredPastCount || 0}</div>
+            </div>
           </div>
           <p class="info-text" style="margin-top: 12px;">
-            현재까지 ${data.currentSession}회차 중 ${data.attended}회 출석
+            현재까지 ${data.currentSession}회차 중 ${data.attended}회 출석 / 퇴실 누락 ${data.checkoutMissingCount || 0}건
           </p>
         </div>
         <div class="attendance-details">
           <h4 style="color: #e2e8f0; margin-bottom: 16px; font-size: 18px;">출석 상세 내역</h4>
           ${detailsHTML}
         </div>
+        ${checkoutMissingHTML}
       </div>
     `;
   } else {
-    statusResult.innerHTML = `<div class="error">❌ ${response.message}</div>`;
+    statusResult.innerHTML = `<div class="error">❌ ${escapeHtml(response.message || '조회 실패')}</div>`;
   }
 
   statusResult.style.display = 'block';
@@ -994,7 +1539,7 @@ function handleStatusResponse(response) {
 
 function handleStatusError(error) {
   const statusResult = document.getElementById('statusResult');
-  statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${getDisplayErrorMessage(error, '알 수 없는 오류')}</div>`;
+  statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${escapeHtml(getDisplayErrorMessage(error, '알 수 없는 오류'))}</div>`;
   statusResult.style.display = 'block';
 }
 
@@ -1013,6 +1558,10 @@ function showSeasonWarning(message) {
 function applyBlockedStudentState(message) {
   clearInterval(countdownInterval);
   isAttendanceActive = false;
+  attendanceFlowMode = 'closed';
+  stopCheckoutScanner();
+  clearCheckoutUndoState();
+  renderCheckoutUndoUi();
 
   const countdownTitle = document.getElementById('countdown-title');
   const countdownDiv = document.getElementById('countdown');
@@ -1051,6 +1600,28 @@ async function initializeStudentPage() {
     this.focus();
   });
 
+  const checkoutScanBtn = document.getElementById('checkoutScanBtn');
+  if (checkoutScanBtn) {
+    checkoutScanBtn.addEventListener('click', function () {
+      toggleCheckoutScanner();
+    });
+  }
+
+  const checkoutScannerCloseBtn = document.getElementById('checkoutScannerCloseBtn');
+  if (checkoutScannerCloseBtn) {
+    checkoutScannerCloseBtn.addEventListener('click', function () {
+      stopCheckoutScanner();
+    });
+  }
+
+  const checkoutUndoBtn = document.getElementById('checkoutUndoBtn');
+  if (checkoutUndoBtn) {
+    checkoutUndoBtn.addEventListener('click', function () {
+      undoCheckout();
+    });
+  }
+  renderCheckoutUndoUi();
+
   await Promise.all([
     checkAttendanceSession(),
     loadRankings()
@@ -1058,6 +1629,11 @@ async function initializeStudentPage() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  window.addEventListener('beforeunload', function () {
+    stopCheckoutScanner();
+    clearCheckoutUndoState();
+  });
+
   const seasonResult = await ensureInitialSeasonAlias();
   updateSeasonInfoBadge();
 
