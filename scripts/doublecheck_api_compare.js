@@ -95,12 +95,7 @@ function compareApiInfoRecord(base, cand) {
     'fortuneUploadBegin',
     'fortuneUploadChunk',
     'fortuneUploadFinalize',
-    'fortuneUploadAbort',
-    'checkoutChallengeIssue',
-    'checkoutPendingList',
-    'checkoutManualCompleteBatch',
-    'checkoutSubmit',
-    'checkoutUndo'
+    'fortuneUploadAbort'
   ]);
   candSet.forEach((action) => {
     if (baseSet.has(action)) return;

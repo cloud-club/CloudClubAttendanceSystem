@@ -1,22 +1,11 @@
 if (!manualApproveState && typeof createManualApproveInitialState === 'function') {
   manualApproveState = createManualApproveInitialState();
 }
-if (!manualCheckoutState && typeof createManualCheckoutInitialState === 'function') {
-  manualCheckoutState = createManualCheckoutInitialState();
-}
 
 if (!scheduleManualMemberListRender && typeof debounce === 'function') {
   scheduleManualMemberListRender = debounce(() => {
     if (typeof renderManualMemberList === 'function') {
       renderManualMemberList();
-    }
-  }, MANUAL_MEMBER_SEARCH_DEBOUNCE_MS);
-}
-
-if (!scheduleManualCheckoutListRender && typeof debounce === 'function') {
-  scheduleManualCheckoutListRender = debounce(() => {
-    if (typeof renderManualCheckoutList === 'function') {
-      renderManualCheckoutList();
     }
   }, MANUAL_MEMBER_SEARCH_DEBOUNCE_MS);
 }

@@ -652,17 +652,12 @@ function getGraduationReport(seasonName) {
   try {
     const info = getRequestedSeasonSheetInfo(seasonName);
     const sheet = info.sheet;
-    let values = sheet.getDataRange().getValues();
-    let memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+    const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
 
     const variableConfig = getVariableConfig();
     const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: false, memberSchema: memberSchema });
     const now = new Date();
-    const finalizeResult = maybeFinalizeCheckoutForSeasonSheet(sheet, sessions, now);
-    if (finalizeResult && Number(finalizeResult.autoAbsentCount || 0) > 0) {
-      values = sheet.getDataRange().getValues();
-      memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
-    }
 
     const requiredPositions = parseRequiredSessionPositions(variableConfig.required_session_positions);
     const lateToAbsenceRatio = Math.max(1, toNumberWithDefault(variableConfig.late_to_absence_ratio, 3));

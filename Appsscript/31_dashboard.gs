@@ -5,17 +5,12 @@ function getAttendanceDashboardSummary(params) {
     const seasonAlias = info.seasonAlias || toSeasonAlias(sheet.getName());
     const seasonNo = getDashboardSeasonNo(seasonAlias);
     const now = new Date();
-    let values = sheet.getDataRange().getValues();
-    let memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+    const values = sheet.getDataRange().getValues();
+    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
     const sessions = collectSessionsFromSheet(sheet, {
       createMissingMeta: false,
       memberSchema: memberSchema
     }).slice().sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-    const finalizeResult = maybeFinalizeCheckoutForSeasonSheet(sheet, sessions, now);
-    if (finalizeResult && Number(finalizeResult.autoAbsentCount || 0) > 0) {
-      values = sheet.getDataRange().getValues();
-      memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
-    }
 
     const filters = normalizeAttendanceDashboardFilters(params, sessions);
     const disableCache = parseDashboardBooleanParam(params.disableCache);
@@ -866,3 +861,4 @@ function writeAttendanceDashboardCache(key, payload) {
     // no-op
   }
 }
+

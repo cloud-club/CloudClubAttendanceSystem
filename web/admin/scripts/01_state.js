@@ -133,7 +133,6 @@ const ATTENDANCE_DASHBOARD_STATUS_LABELS = {
   future: '예정'
 };
 const MANUAL_APPROVE_BATCH_CHUNK_SIZE = 100;
-const MANUAL_CHECKOUT_BATCH_CHUNK_SIZE = 100;
 const MANUAL_MEMBER_STATUS_LABELS = {
   none: '미기록',
   on_time: '출석',
@@ -142,12 +141,6 @@ const MANUAL_MEMBER_STATUS_LABELS = {
   absent: '미기록(결석)',
   future: '미기록(예정)',
   recorded: '기록됨'
-};
-const MANUAL_CHECKOUT_STATUS_LABELS = {
-  on_time: '출석(퇴실미완료)',
-  late: '지각(퇴실미완료)',
-  absent: '자동결석(복구필요)',
-  unknown: '미확인'
 };
 const EXPECTED_AUTH_REJECTION_CODES = new Set([
   'UNAUTHORIZED',
@@ -158,11 +151,8 @@ const EXPECTED_AUTH_REJECTION_CODES = new Set([
 
 let manualApproveState = null;
 let manualMemberListRenderToken = 0;
-let manualCheckoutState = null;
-let manualCheckoutListRenderToken = 0;
 
 let scheduleManualMemberListRender = null;
-let scheduleManualCheckoutListRender = null;
 
 const IMPORT_FIELD_ORDER = [
   'name',

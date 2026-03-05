@@ -1,5 +1,5 @@
 const variableUsageTabOrder = [
-  '출석 관리',
+  '출석하기',
   '출석현황',
   '일정 관리',
   '유고 처리',
@@ -10,10 +10,9 @@ const variableUsageTabOrder = [
 ];
 
 const variableTabMapByKey = {
-  attendance_open_offset_min: ['출석 관리', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
-  late_threshold_min: ['출석 관리', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
-  absence_threshold_min: ['출석 관리', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
-  checkout_open_offset_min: ['출석 관리', '출석현황', '변수명 관리'],
+  attendance_open_offset_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  late_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
+  absence_threshold_min: ['출석하기', '출석현황', '일정 관리', '유고 처리', '수료 판정'],
   required_attendance_count: ['유고 처리', '수료 판정'],
   late_to_absence_ratio: ['유고 처리', '수료 판정'],
   required_session_positions: ['유고 처리', '수료 판정'],
@@ -184,7 +183,7 @@ function mapVariableUsedTabs(key, usedInText) {
       tabs.push('일정 관리');
     }
     if (/collectsessionsfromsheet|markattendance|getattendancesession|getattendancestatus|getattendanceranking/i.test(usedIn)) {
-      tabs.push('출석 관리', '출석현황');
+      tabs.push('출석하기', '출석현황');
     }
   }
 

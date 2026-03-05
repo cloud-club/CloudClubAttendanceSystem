@@ -69,42 +69,22 @@ function getSeasonAttendanceSession(seasonName) {
 function getAttendanceSessionFromSheet(sheet, seasonAlias) {
   const now = new Date();
   const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false });
-  maybeFinalizeCheckoutForSeasonSheet(sheet, sessions, now);
-
-  const seasonSheetName = sheet.getName();
-  const resolvedSeasonAlias = seasonAlias || toSeasonAlias(seasonSheetName);
-  const checkoutMetaMap = getCheckoutMetaMapForSeason(seasonSheetName, { createIfMissing: false });
-  const checkoutSession = findActiveCheckoutSession(sessions, checkoutMetaMap, now);
   const activeSession = findActiveSession(sessions, now);
 
-  const baseSession = checkoutSession || activeSession;
-  if (baseSession) {
-    const phase = now <= baseSession.onTimeDeadline ? 'on_time' : 'late';
-    const checkoutMeta = checkoutSession ? checkoutMetaMap[checkoutSession.sessionKey] : null;
-    const checkoutBounds = checkoutSession ? getCheckoutWindowBounds(checkoutSession) : null;
-    const checkinActive = !!(activeSession && !checkoutSession);
+  if (activeSession) {
+    const phase = now <= activeSession.onTimeDeadline ? 'on_time' : 'late';
 
     return {
-      active: checkinActive,
-      checkinActive: checkinActive,
-      checkoutActive: !!checkoutSession,
-      flow: checkoutSession ? 'checkout' : 'checkin',
+      active: true,
       phase: phase,
-      openTime: baseSession.openTime.getTime(),
-      startTime: baseSession.startTime.getTime(),
-      onTimeDeadline: baseSession.onTimeDeadline.getTime(),
-      lateDeadline: baseSession.lateDeadline.getTime(),
-      endTime: baseSession.lateDeadline.getTime(),
-      sessionKey: baseSession.sessionKey,
-      checkoutRequired: !!checkoutSession,
-      checkoutSessionKey: checkoutSession ? checkoutSession.sessionKey : '',
-      checkoutCodeDigits: checkoutMeta ? checkoutMeta.codeDigits : CHECKOUT_DEFAULT_CODE_DIGITS,
-      checkoutOpenTime: checkoutBounds && checkoutBounds.openTime ? checkoutBounds.openTime.getTime() : null,
-      checkoutCloseTime: checkoutBounds && checkoutBounds.closeTime ? checkoutBounds.closeTime.getTime() : null,
-      checkoutOpenOffsetMin: checkoutBounds ? checkoutBounds.offsetMin : null,
-      message: checkoutSession ? '퇴실 인증 가능 시간입니다.' : '',
-      currentSheet: seasonSheetName,
-      seasonAlias: resolvedSeasonAlias
+      openTime: activeSession.openTime.getTime(),
+      startTime: activeSession.startTime.getTime(),
+      onTimeDeadline: activeSession.onTimeDeadline.getTime(),
+      lateDeadline: activeSession.lateDeadline.getTime(),
+      endTime: activeSession.lateDeadline.getTime(),
+      sessionKey: activeSession.sessionKey,
+      currentSheet: sheet.getName(),
+      seasonAlias: seasonAlias || toSeasonAlias(sheet.getName())
     };
   }
 
@@ -112,26 +92,20 @@ function getAttendanceSessionFromSheet(sheet, seasonAlias) {
   if (nextSession) {
     return {
       active: false,
-      checkinActive: false,
-      checkoutActive: false,
-      flow: 'waiting',
       message: '아직 출석 오픈 전입니다.',
       nextOpenTime: nextSession.openTime.getTime(),
       nextStartTime: nextSession.startTime.getTime(),
       nextSessionKey: nextSession.sessionKey,
-      currentSheet: seasonSheetName,
-      seasonAlias: resolvedSeasonAlias
+      currentSheet: sheet.getName(),
+      seasonAlias: seasonAlias || toSeasonAlias(sheet.getName())
     };
   }
 
   return {
     active: false,
-    checkinActive: false,
-    checkoutActive: false,
-    flow: 'closed',
     message: '지금은 출석 가능한 시간이 아닙니다.',
-    currentSheet: seasonSheetName,
-    seasonAlias: resolvedSeasonAlias
+    currentSheet: sheet.getName(),
+    seasonAlias: seasonAlias || toSeasonAlias(sheet.getName())
   };
 }
 
@@ -476,21 +450,6 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
     const now = new Date();
 
     const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true, memberSchema: memberSchema });
-    maybeFinalizeCheckoutForSeasonSheet(sheet, sessions, now, { alreadyLocked: true });
-    const checkoutMetaMap = getCheckoutMetaMapForSeason(sheet.getName(), { createIfMissing: false });
-    const activeCheckoutSession = findActiveCheckoutSession(sessions, checkoutMetaMap, now);
-    if (activeCheckoutSession) {
-      const bounds = getCheckoutWindowBounds(activeCheckoutSession);
-      return {
-        success: false,
-        checkoutOnly: true,
-        sessionKey: activeCheckoutSession.sessionKey,
-        checkoutOpenTime: bounds && bounds.openTime ? bounds.openTime.getTime() : null,
-        checkoutCloseTime: bounds && bounds.closeTime ? bounds.closeTime.getTime() : null,
-        message: '지금은 입실이 아니라 퇴실 인증 시간입니다. 전화번호와 퇴실 코드를 입력해 주세요.'
-      };
-    }
-
     const activeSession = findActiveSession(sessions, now);
 
     if (!activeSession) {
@@ -573,12 +532,6 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
 
     const seasonLabel = member.seasonLabel || seasonDisplay;
     const fortune = getRandomFortune();
-    const resolvedSeasonAlias = seasonAlias || toSeasonAlias(sheet.getName());
-    const checkoutTicket = issueCheckoutAttendanceTicket({
-      seasonAlias: resolvedSeasonAlias,
-      sessionKey: activeSession.sessionKey,
-      phone: cleanedInputPhone
-    });
 
     return {
       success: true,
@@ -589,8 +542,7 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
       time: formattedTime,
       attendanceType: attendanceType,
       sessionKey: activeSession.sessionKey,
-      seasonAlias: resolvedSeasonAlias,
-      checkoutTicket: checkoutTicket,
+      seasonAlias: seasonAlias || toSeasonAlias(sheet.getName()),
       attendanceInfo: {
         attended: attendedCount,
         total: sessions.length,
@@ -656,24 +608,9 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
     return { success: false, message: '올바른 전화번호 형식이 아닙니다. (예: 01012345678)' };
   }
 
-  const now = new Date();
-  let values = sheet.getDataRange().getValues();
-  let memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+  const values = sheet.getDataRange().getValues();
+  const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
   const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
-  const finalizeResult = maybeFinalizeCheckoutForSeasonSheet(sheet, sessions, now);
-  if (finalizeResult && Number(finalizeResult.autoAbsentCount || 0) > 0) {
-    values = sheet.getDataRange().getValues();
-    memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
-  }
-
-  const seasonSheetName = sheet.getName();
-  const sessionKeySet = {};
-  sessions.forEach(session => {
-    sessionKeySet[session.sessionKey] = true;
-  });
-  const checkoutMetaMap = getCheckoutMetaMapForSeason(seasonSheetName, { createIfMissing: false });
-  const checkoutEventRows = getCheckoutEventRowsForSeason(seasonSheetName, sessionKeySet);
-  const checkoutCompletionBySession = buildCheckoutCompletionMapBySession(checkoutEventRows);
 
   const lookup = findMemberRowIndexByPhone(values, memberSchema, cleanedInputPhone);
   if (lookup.duplicateRowIndexes.length > 0) {
@@ -685,51 +622,20 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
     return { success: false, message: '등록되지 않은 전화번호입니다.' };
   }
 
+  const now = new Date();
   const member = readMemberFromRow(values[targetRowIndex], memberSchema);
 
   const attendanceDetails = [];
-  const checkoutMissingRecords = [];
   let attendedCount = 0;
   let pastSessionCount = 0;
   let effectivePastCount = 0;
   let lateCount = 0;
   let excusedCount = 0;
-  let checkoutCompletedCount = 0;
-  let checkoutRequiredPastCount = 0;
 
   sessions.forEach(session => {
     const cellValue = values[targetRowIndex][session.colIndex];
     const status = getAttendanceDetailType(cellValue, session, now);
     const isPast = now > session.lateDeadline;
-    const checkoutMeta = checkoutMetaMap[session.sessionKey];
-    const checkoutRequired = isCheckoutRequiredMeta(checkoutMeta);
-    const checkoutCompletion = checkoutRequired
-      && checkoutCompletionBySession[session.sessionKey]
-      ? checkoutCompletionBySession[session.sessionKey][cleanedInputPhone]
-      : null;
-    const checkoutBounds = getCheckoutWindowBounds(session);
-    let checkoutStatus = 'not_required';
-    let checkoutTime = null;
-
-    if (checkoutRequired) {
-      if (isPast) {
-        checkoutRequiredPastCount++;
-      }
-
-      if (checkoutCompletion) {
-        checkoutStatus = 'completed';
-        checkoutTime = checkoutCompletion.submittedAt ? formatDateTime(checkoutCompletion.submittedAt) : null;
-        if (isPast) {
-          checkoutCompletedCount++;
-        }
-      } else if (now > session.lateDeadline) {
-        checkoutStatus = 'missing';
-      } else if (checkoutBounds.openTime && now >= checkoutBounds.openTime) {
-        checkoutStatus = 'pending';
-      } else {
-        checkoutStatus = 'upcoming';
-      }
-    }
 
     if (isPast) {
       pastSessionCount++;
@@ -745,15 +651,6 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
           lateCount++;
         }
       }
-
-      if (checkoutRequired && !checkoutCompletion && (status === 'on_time' || status === 'late')) {
-        checkoutMissingRecords.push({
-          sessionKey: session.sessionKey,
-          date: formatDateTimeMinute(session.startTime),
-          attendTime: cellValue ? String(cellValue) : null,
-          message: '입실 기록은 있으나 퇴실 정보가 없습니다.'
-        });
-      }
     }
 
     const attended = status === 'on_time' || status === 'late';
@@ -764,10 +661,7 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
       attended: attended,
       attendanceType: status,
       attendTime: attended ? (cellValue ? String(cellValue) : null) : null,
-      isPast: isPast,
-      checkoutRequired: checkoutRequired,
-      checkoutStatus: checkoutStatus,
-      checkoutTime: checkoutTime
+      isPast: isPast
     });
   });
 
@@ -789,10 +683,6 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
       pastSessions: pastSessionCount,
       excusedCount: excusedCount,
       lateCount: lateCount,
-      checkoutCompletedCount: checkoutCompletedCount,
-      checkoutRequiredPastCount: checkoutRequiredPastCount,
-      checkoutMissingCount: checkoutMissingRecords.length,
-      checkoutMissingRecords: checkoutMissingRecords,
       rate: attendanceRate,
       details: attendanceDetails
     }
@@ -954,16 +844,11 @@ function getSeasonAttendanceRanking(seasonName) {
  * 특정 시트에서 출석률 순위를 계산합니다.
  */
 function getAttendanceRankingFromSheet(sheet, seasonAlias) {
+  const values = sheet.getDataRange().getValues();
+  const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
   const now = new Date();
-  let values = sheet.getDataRange().getValues();
-  let memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
-  const finalizeResult = maybeFinalizeCheckoutForSeasonSheet(sheet, sessions, now);
-  if (finalizeResult && Number(finalizeResult.autoAbsentCount || 0) > 0) {
-    values = sheet.getDataRange().getValues();
-    memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
-  }
 
+  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
   const closedSessions = sessions.filter(session => session.lateDeadline <= now);
 
   if (closedSessions.length === 0) {

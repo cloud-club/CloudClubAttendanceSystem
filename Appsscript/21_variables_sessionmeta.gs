@@ -163,7 +163,7 @@ function resolveVariableUsedTabs(key, usedInText) {
       tabs.push('일정 관리');
     }
     if (/collectsessionsfromsheet|markattendance|getattendancesession|getattendancestatus|getattendanceranking/i.test(rawUsedIn)) {
-      tabs.push('출석 관리', '출석현황');
+      tabs.push('출석하기', '출석현황');
     }
   }
 
@@ -721,10 +721,6 @@ function normalizeVariableConfig(config) {
   normalized.attendance_open_offset_min = toNumberWithDefault(normalized.attendance_open_offset_min, VARIABLE_DEFAULTS.attendance_open_offset_min);
   normalized.late_threshold_min = Math.max(1, toNumberWithDefault(normalized.late_threshold_min, VARIABLE_DEFAULTS.late_threshold_min));
   normalized.absence_threshold_min = Math.max(normalized.late_threshold_min, toNumberWithDefault(normalized.absence_threshold_min, VARIABLE_DEFAULTS.absence_threshold_min));
-  normalized.checkout_open_offset_min = Math.min(0, Math.max(-180, toNumberWithDefault(
-    normalized.checkout_open_offset_min,
-    VARIABLE_DEFAULTS.checkout_open_offset_min
-  )));
   normalized.required_attendance_count = Math.max(0, toNumberWithDefault(normalized.required_attendance_count, VARIABLE_DEFAULTS.required_attendance_count));
   normalized.late_to_absence_ratio = Math.max(1, toNumberWithDefault(normalized.late_to_absence_ratio, VARIABLE_DEFAULTS.late_to_absence_ratio));
 
@@ -1193,8 +1189,7 @@ function collectSessionsFromSheet(sheet, options) {
       explicitEndAt: explicitEndAt,
       openOffsetMin: openOffsetMin,
       lateThresholdMin: lateThresholdMin,
-      absenceThresholdMin: absenceThresholdMin,
-      checkoutOpenOffsetMin: variableConfig.checkout_open_offset_min
+      absenceThresholdMin: absenceThresholdMin
     };
   });
 }
@@ -1260,3 +1255,4 @@ function findNextSession(sessions, now) {
 
   return next;
 }
+

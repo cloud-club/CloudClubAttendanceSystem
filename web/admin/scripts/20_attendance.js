@@ -305,6 +305,7 @@ async function changeSheet() {
       const seasonQR = document.getElementById('seasonQrcode');
       const studentUrlDiv = document.getElementById('studentUrl');
       seasonQR.style.display = 'none';
+      seasonQR.classList.add('blurred');
       studentUrlDiv.style.display = 'none';
     } else {
       alert(response.message || '시트 변경에 실패했습니다.');
@@ -335,132 +336,12 @@ function formatDurationKorean(ms) {
   return `${minutes}분 ${String(seconds).padStart(2, '0')}초`;
 }
 
-function updateCheckoutSessionHint(session) {
-  const hintInput = document.getElementById('checkoutSessionHint');
-  const meta = document.getElementById('checkoutChallengeMeta');
-  if (!hintInput || !meta) return;
-
-  const payload = session || {};
-  const flow = String(payload.flow || '').trim();
-  const checkoutSessionKey = String(payload.checkoutSessionKey || payload.sessionKey || '').trim();
-  const checkoutOpenTime = Number(payload.checkoutOpenTime || 0);
-  const checkoutCloseTime = Number(payload.checkoutCloseTime || 0);
-  const checkoutOpenOffsetMin = Number(payload.checkoutOpenOffsetMin);
-
-  if (checkoutSessionKey) {
-    hintInput.value = checkoutSessionKey;
-  } else if (payload.nextSessionKey) {
-    hintInput.value = payload.nextSessionKey;
-  } else {
-    hintInput.value = '회차 자동 선택';
-  }
-
-  if (flow === 'checkout') {
-    meta.textContent = `현재 퇴실 시간대입니다. ${formatDurationKorean(Math.max(0, checkoutCloseTime - Date.now()))} 후 마감`;
-    return;
-  }
-
-  if (checkoutOpenTime && checkoutCloseTime) {
-    const offsetText = Number.isFinite(checkoutOpenOffsetMin)
-      ? ` (오픈 오프셋 ${checkoutOpenOffsetMin}분)`
-      : '';
-    meta.textContent = `퇴실 가능 시간: ${new Date(checkoutOpenTime).toLocaleString('ko-KR')} ~ ${new Date(checkoutCloseTime).toLocaleString('ko-KR')}${offsetText}`;
-    return;
-  }
-
-  if (payload.nextSessionKey && payload.nextOpenTime) {
-    meta.textContent = `다음 입실 오픈: ${new Date(Number(payload.nextOpenTime)).toLocaleString('ko-KR')}`;
-    return;
-  }
-
-  meta.textContent = '코드를 생성하면 이 영역에 유효 시간과 대상 회차가 표시됩니다.';
-}
-
-function renderCheckoutChallengeResult(response) {
-  const wrap = document.getElementById('checkoutChallengeResult');
-  const codeValue = document.getElementById('checkoutCodeValue');
-  const meta = document.getElementById('checkoutChallengeMeta');
-  const qrContainer = document.getElementById('checkoutQrcode');
-
-  if (!wrap || !codeValue || !meta || !qrContainer) return;
-
-  if (!response || !response.success) {
-    wrap.style.display = 'none';
-    codeValue.textContent = '---';
-    meta.textContent = response && response.message ? response.message : '퇴실 코드를 생성하지 못했습니다.';
-    return;
-  }
-
-  codeValue.textContent = String(response.code || '').trim() || '---';
-  const offsetText = Number.isFinite(Number(response.checkoutOpenOffsetMin))
-    ? ` / 오픈 오프셋 ${Number(response.checkoutOpenOffsetMin)}분`
-    : '';
-  meta.textContent = `회차 ${response.sessionKey || '-'} / 퇴실 가능 ${response.checkoutOpenLabel || '-'} ~ ${response.checkoutCloseLabel || '-'}${offsetText}`;
-  wrap.style.display = 'block';
-
-  try {
-    if (typeof QRCode === 'undefined') {
-      qrContainer.innerHTML = '<div class="error" style="margin: 12px;">QRCode 라이브러리를 불러오지 못했습니다.</div>';
-      return;
-    }
-
-    qrContainer.innerHTML = '';
-
-    new QRCode(qrContainer, {
-      text: String(response.qrPayload || '').trim(),
-      width: 280,
-      height: 280
-    });
-  } catch (error) {
-    qrContainer.innerHTML = `<div class="error" style="margin: 12px;">${escapeHtml(getDisplayErrorMessage(error, '퇴실 QR 생성 실패'))}</div>`;
-  }
-}
-
-async function issueCheckoutChallenge() {
-  if (!ensureSeasonSourceReady({ renderCountdown: true })) {
-    return;
-  }
-
-  const codeDigitsSelect = document.getElementById('checkoutCodeDigits');
-  const codeDigits = codeDigitsSelect ? String(codeDigitsSelect.value || '3').trim() : '3';
-  const hintInput = document.getElementById('checkoutSessionHint');
-  const sessionKeyRaw = hintInput ? String(hintInput.value || '').trim() : '';
-  const sessionKey = /^\d{4}-\d{2}-\d{2}-\d{2}:\d{2}$/.test(sessionKeyRaw) ? sessionKeyRaw : '';
-  const meta = document.getElementById('checkoutChallengeMeta');
-
-  try {
-    if (meta) {
-      meta.textContent = '퇴실 인증코드를 생성하는 중...';
-    }
-    await ensureQrCodeDependency();
-    const response = await CloudClubApi.call('checkoutChallengeIssue', buildSeasonScopedAdminParams({
-      codeDigits: codeDigits,
-      sessionKey: sessionKey
-    }));
-    renderCheckoutChallengeResult(response);
-    if (response && response.success) {
-      showToast('<i class="fas fa-check-circle"></i> 퇴실 인증코드가 생성되었습니다.', true);
-    }
-  } catch (error) {
-    if (handleUnauthorizedError(error)) return;
-    if (meta) {
-      meta.textContent = getDisplayErrorMessage(error, '퇴실 인증코드 생성 실패');
-    }
-    showToast(`<i class="fas fa-exclamation-circle"></i> ${escapeHtml(getDisplayErrorMessage(error, '퇴실 인증코드 생성 실패'))}`, false);
-  }
-}
-
 function renderCountdown(session) {
   const countdownTitle = document.getElementById('countdown-title');
   const countdownDiv = document.getElementById('countdown');
   const attendBtn = document.getElementById('attendBtn');
-  const payload = session || {};
-  const flow = String(payload.flow || '').trim();
-  const checkoutActive = flow === 'checkout' || !!payload.checkoutActive;
-  const checkinActive = !!(payload.checkinActive || (payload.active && !checkoutActive));
 
   clearInterval(countdownInterval);
-  updateCheckoutSessionHint(payload);
 
   const disableAttend = (label) => {
     isAttendanceActive = false;
@@ -469,29 +350,9 @@ function renderCountdown(session) {
     attendBtn.innerHTML = label;
   };
 
-  if (checkoutActive) {
-    const checkoutCloseTime = Number(payload.checkoutCloseTime || payload.lateDeadline || 0);
-    const updateCheckoutCountdown = () => {
-      const now = Date.now();
-      if (checkoutCloseTime && now > checkoutCloseTime) {
-        clearInterval(countdownInterval);
-        countdownTitle.textContent = '퇴실 인증 시간 종료';
-        countdownDiv.textContent = '00분 00초';
-        disableAttend('<i class="fas fa-times"></i> <span>퇴실 마감</span>');
-        return;
-      }
-      countdownTitle.textContent = '퇴실 인증 마감까지 남은 시간';
-      countdownDiv.textContent = formatDurationKorean(Math.max(0, checkoutCloseTime - now));
-    };
-    updateCheckoutCountdown();
-    countdownInterval = setInterval(updateCheckoutCountdown, 1000);
-    disableAttend('<i class="fas fa-door-open"></i> <span>퇴실 인증 진행중</span>');
-    return;
-  }
-
-  if (!checkinActive) {
-    if (payload.nextOpenTime) {
-      const nextOpenTime = Number(payload.nextOpenTime);
+  if (!session.active) {
+    if (session.nextOpenTime) {
+      const nextOpenTime = Number(session.nextOpenTime);
 
       const updateOpenCountdown = () => {
         const now = Date.now();
@@ -519,7 +380,7 @@ function renderCountdown(session) {
     }
 
     countdownTitle.textContent = '출석 대기 중';
-    countdownDiv.textContent = payload.message || '지금은 출석 가능한 시간이 아닙니다.';
+    countdownDiv.textContent = session.message || '지금은 출석 가능한 시간이 아닙니다.';
     disableAttend('<i class="fas fa-times"></i> <span>출석 불가</span>');
     return;
   }
@@ -529,8 +390,8 @@ function renderCountdown(session) {
     attendBtn.disabled = false;
   }
 
-  const onTimeDeadline = Number(payload.onTimeDeadline || payload.endTime || 0);
-  const lateDeadline = Number(payload.lateDeadline || payload.endTime || 0);
+  const onTimeDeadline = Number(session.onTimeDeadline || session.endTime || 0);
+  const lateDeadline = Number(session.lateDeadline || session.endTime || 0);
 
   const updateClock = () => {
     const now = Date.now();
@@ -633,7 +494,6 @@ function openTab(tabName, evt) {
   }
 
   if (tabName === 'attend') {
-    checkAttendanceSession();
     loadScheduleList();
   }
 
@@ -937,21 +797,6 @@ function createManualApproveInitialState() {
   };
 }
 
-function createManualCheckoutInitialState() {
-  return {
-    seasonAlias: '',
-    sessionKey: '',
-    keyword: '',
-    selectedOnly: false,
-    autoOnly: false,
-    members: [],
-    selectedPhones: {},
-    filteredMembers: [],
-    loadedSeasonAlias: '',
-    loadedSessionKey: ''
-  };
-}
-
 function normalizeManualMemberStatus(rawStatus) {
   const value = String(rawStatus || '').trim();
   if (!value) return 'none';
@@ -1015,10 +860,6 @@ function buildManualStatusByPhoneFromReport(report, sessionKey) {
 }
 
 function initializeManualApproveUi() {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-
   const defaultCommentInput = document.getElementById('manualDefaultCommentInput');
   if (defaultCommentInput) {
     defaultCommentInput.value = manualApproveState.defaultComment || '';
@@ -1029,21 +870,7 @@ function initializeManualApproveUi() {
     forceOverrideInput.checked = !!manualApproveState.forceOverride;
   }
 
-  const checkoutSearchInput = document.getElementById('manualCheckoutSearchInput');
-  if (checkoutSearchInput) {
-    checkoutSearchInput.value = manualCheckoutState.keyword || '';
-  }
-  const checkoutSelectedOnly = document.getElementById('manualCheckoutSelectedOnly');
-  if (checkoutSelectedOnly) {
-    checkoutSelectedOnly.checked = !!manualCheckoutState.selectedOnly;
-  }
-  const checkoutAutoOnly = document.getElementById('manualCheckoutAutoOnly');
-  if (checkoutAutoOnly) {
-    checkoutAutoOnly.checked = !!manualCheckoutState.autoOnly;
-  }
-
   renderManualMemberList();
-  renderManualCheckoutList();
 }
 
 function populateManualSessionSelect(items) {
@@ -1076,25 +903,13 @@ function populateManualSessionSelect(items) {
 }
 
 function onManualSessionChanged(value) {
-  const nextSessionKey = String(value || '').trim();
-  manualApproveState.sessionKey = nextSessionKey;
+  manualApproveState.sessionKey = String(value || '').trim();
   manualApproveState.selectedPhones = {};
   manualApproveState.memberComments = {};
   manualApproveState.openCommentPhones = {};
   manualApproveState.statusLoadedSessionKey = '';
   manualApproveState.statusLoadedSeasonAlias = '';
-
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-  manualCheckoutState.sessionKey = nextSessionKey;
-  manualCheckoutState.selectedPhones = {};
-  manualCheckoutState.loadedSessionKey = '';
-  manualCheckoutState.loadedSeasonAlias = '';
-
-  syncManualCheckoutSessionHint();
   renderManualMemberList();
-  renderManualCheckoutList();
   refreshManualApproveData({ forceMembers: false, forceStatuses: true }).catch(error => {
     if (handleUnauthorizedError(error)) return;
     showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 회차 상태 조회 중 오류'))}`, false);
@@ -1383,483 +1198,6 @@ function renderManualMemberList() {
   renderChunk();
 }
 
-function syncManualCheckoutSessionHint() {
-  const hintInput = document.getElementById('manualCheckoutSessionHint');
-  if (!hintInput) return;
-  const sessionKey = String(manualApproveState && manualApproveState.sessionKey || '').trim();
-  hintInput.value = sessionKey || '수동 출석 승인 회차를 먼저 선택해주세요.';
-}
-
-function normalizeManualCheckoutStatus(status) {
-  const raw = String(status || '').trim();
-  if (raw === 'on_time' || raw === 'late' || raw === 'absent') {
-    return raw;
-  }
-  return 'unknown';
-}
-
-function onManualCheckoutSearchInput(value) {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-  manualCheckoutState.keyword = String(value || '').trim().toLowerCase();
-  if (scheduleManualCheckoutListRender) {
-    scheduleManualCheckoutListRender();
-    return;
-  }
-  renderManualCheckoutList();
-}
-
-function setManualCheckoutSelectedOnly(value) {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-  manualCheckoutState.selectedOnly = !!value;
-  renderManualCheckoutList();
-}
-
-function setManualCheckoutAutoOnly(value) {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-  manualCheckoutState.autoOnly = !!value;
-  renderManualCheckoutList();
-}
-
-function toggleManualCheckoutSelectFiltered(selectFiltered) {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-
-  const shouldSelect = !!selectFiltered;
-  const filtered = Array.isArray(manualCheckoutState.filteredMembers)
-    ? manualCheckoutState.filteredMembers
-    : [];
-  filtered.forEach(member => {
-    const phone = String(member.phone || '').trim();
-    if (!phone) return;
-    if (shouldSelect) {
-      manualCheckoutState.selectedPhones[phone] = true;
-    } else {
-      delete manualCheckoutState.selectedPhones[phone];
-    }
-  });
-
-  renderManualCheckoutList();
-}
-
-function toggleManualCheckoutMemberSelection(encodedPhone, checked) {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-
-  const phone = decodeURIComponent(String(encodedPhone || ''));
-  if (!phone) return;
-  if (checked) {
-    manualCheckoutState.selectedPhones[phone] = true;
-  } else {
-    delete manualCheckoutState.selectedPhones[phone];
-  }
-  renderManualCheckoutList();
-}
-
-function getManualCheckoutFilteredMembers() {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-
-  const keyword = manualCheckoutState.keyword || '';
-  const members = Array.isArray(manualCheckoutState.members) ? manualCheckoutState.members : [];
-  return members.filter(member => {
-    const phone = String(member.phone || '').trim();
-    if (!phone) return false;
-    if (manualCheckoutState.autoOnly && !member.autoFinalized) {
-      return false;
-    }
-    if (manualCheckoutState.selectedOnly && !manualCheckoutState.selectedPhones[phone]) {
-      return false;
-    }
-
-    if (!keyword) return true;
-    const haystack = [
-      String(member.name || '').toLowerCase(),
-      String(member.seasonLabel || member.grade || '').toLowerCase(),
-      phone
-    ].join(' ');
-    return haystack.includes(keyword);
-  });
-}
-
-function getManualCheckoutSelectedCount() {
-  if (!manualCheckoutState) return 0;
-  const members = Array.isArray(manualCheckoutState.members) ? manualCheckoutState.members : [];
-  const memberPhoneSet = {};
-  members.forEach(member => {
-    const phone = String(member.phone || '').trim();
-    if (phone) memberPhoneSet[phone] = true;
-  });
-
-  return Object.keys(manualCheckoutState.selectedPhones || {}).reduce((count, phone) => {
-    return memberPhoneSet[phone] ? count + 1 : count;
-  }, 0);
-}
-
-function updateManualCheckoutMeta(filteredMembers) {
-  const meta = document.getElementById('manualCheckoutMeta');
-  if (!meta) return;
-  const visibleCount = Array.isArray(filteredMembers) ? filteredMembers.length : 0;
-  const totalCount = manualCheckoutState && Array.isArray(manualCheckoutState.members) ? manualCheckoutState.members.length : 0;
-  const selectedCount = getManualCheckoutSelectedCount();
-  meta.textContent = `표시 ${visibleCount}명 / 전체 ${totalCount}명 / 선택 ${selectedCount}명`;
-}
-
-function syncManualCheckoutSubmitState() {
-  const btn = document.getElementById('manualCheckoutBtn');
-  const summary = document.getElementById('manualCheckoutSelectionSummary');
-  const selectedCount = getManualCheckoutSelectedCount();
-  const sessionKey = String(manualApproveState && manualApproveState.sessionKey || '').trim();
-
-  if (btn) {
-    btn.disabled = selectedCount === 0 || !sessionKey;
-    btn.innerHTML = `<i class="fas fa-door-open"></i> <span>${selectedCount}명 퇴실 완료 처리</span>`;
-  }
-  if (summary) {
-    summary.textContent = `선택 ${selectedCount}명`;
-  }
-}
-
-function buildManualCheckoutMemberRowHtml(member) {
-  const phone = String(member.phone || '').trim();
-  const encodedPhone = encodeURIComponent(phone);
-  const selected = !!(manualCheckoutState && manualCheckoutState.selectedPhones[phone]);
-  const status = normalizeManualCheckoutStatus(member.attendanceType);
-  const statusLabel = MANUAL_CHECKOUT_STATUS_LABELS[status] || MANUAL_CHECKOUT_STATUS_LABELS.unknown;
-  const autoBadge = member.autoFinalized
-    ? '<span class="manual-status-badge recorded">자동결석</span>'
-    : '<span class="manual-status-badge none">미완료</span>';
-  const recoverableBadge = member.recoverable
-    ? '<span class="manual-status-badge on_time">복구가능</span>'
-    : (member.autoFinalized ? '<span class="manual-status-badge absent">복구정보없음</span>' : '');
-  const rowClass = ['manual-member-row', selected ? 'is-selected' : ''].filter(Boolean).join(' ');
-  const attendLine = member.attendTime
-    ? `<span class="manual-member-sub">입실시각: ${escapeHtml(member.attendTime)}</span>`
-    : '';
-  const autoLine = member.autoFinalizedAt
-    ? `<span class="manual-member-sub">자동결석시각: ${escapeHtml(member.autoFinalizedAt)}</span>`
-    : '';
-  const noteLine = member.note
-    ? `<span class="manual-member-sub">${escapeHtml(member.note)}</span>`
-    : '';
-
-  return `
-    <div class="${rowClass}" role="listitem">
-      <label class="manual-member-check">
-        <input type="checkbox"
-               ${selected ? 'checked' : ''}
-               onchange="toggleManualCheckoutMemberSelection('${encodedPhone}', this.checked)"
-               aria-label="${escapeHtml(member.name || phone)} 선택">
-      </label>
-      <div class="manual-member-main">
-        <div class="manual-member-name-line">
-          <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>
-          <span>${escapeHtml(member.name || '-')}</span>
-          <span class="manual-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
-          ${autoBadge}
-          ${recoverableBadge}
-        </div>
-        <span class="manual-member-sub">${escapeHtml(phone)}</span>
-        ${attendLine}
-        ${autoLine}
-        ${noteLine}
-      </div>
-      <div class="manual-member-actions"></div>
-    </div>
-  `;
-}
-
-function renderManualCheckoutList() {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-  syncManualCheckoutSessionHint();
-
-  const wrap = document.getElementById('manualCheckoutListWrap');
-  if (!wrap) return;
-
-  manualCheckoutListRenderToken += 1;
-  const renderToken = manualCheckoutListRenderToken;
-  const sessionKey = String(manualApproveState && manualApproveState.sessionKey || '').trim();
-  const members = Array.isArray(manualCheckoutState.members) ? manualCheckoutState.members : [];
-  const filtered = getManualCheckoutFilteredMembers();
-  manualCheckoutState.filteredMembers = filtered;
-
-  updateManualCheckoutMeta(filtered);
-  syncManualCheckoutSubmitState();
-
-  if (!sessionKey) {
-    wrap.classList.remove('manual-member-list-cv');
-    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">대상 회차를 먼저 선택해주세요.</p>';
-    return;
-  }
-
-  if (members.length === 0) {
-    wrap.classList.remove('manual-member-list-cv');
-    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">퇴실 미완료 대상이 없습니다.</p>';
-    return;
-  }
-
-  if (filtered.length === 0) {
-    wrap.classList.remove('manual-member-list-cv');
-    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">조건에 맞는 대상이 없습니다.</p>';
-    return;
-  }
-
-  const useContentVisibility = isAdminPerfUiEnabled()
-    && filtered.length >= MANUAL_MEMBER_CONTENT_VISIBILITY_THRESHOLD;
-  wrap.classList.toggle('manual-member-list-cv', useContentVisibility);
-  wrap.innerHTML = '';
-
-  const chunkSize = Math.max(1, Number(MANUAL_MEMBER_RENDER_CHUNK_SIZE || 24));
-  let cursor = 0;
-
-  const renderChunk = () => {
-    if (renderToken !== manualCheckoutListRenderToken) return;
-    const end = Math.min(cursor + chunkSize, filtered.length);
-    let rows = '';
-    for (let i = cursor; i < end; i += 1) {
-      rows += buildManualCheckoutMemberRowHtml(filtered[i]);
-    }
-    wrap.insertAdjacentHTML('beforeend', rows);
-    cursor = end;
-    if (cursor < filtered.length) {
-      requestAnimationFrame(renderChunk);
-    }
-  };
-  renderChunk();
-}
-
-function renderManualCheckoutDetailTable(results, summary) {
-  const wrap = document.getElementById('manualCheckoutDetailWrap');
-  if (!wrap) return;
-  if (!Array.isArray(results) || results.length === 0) {
-    wrap.innerHTML = '';
-    return;
-  }
-
-  const labelMap = {
-    completed: '완료',
-    skipped: '건너뜀',
-    failed: '실패'
-  };
-  const rows = results.map(item => `
-    <tr>
-      <td>${escapeHtml(item.name || '-')}</td>
-      <td>${escapeHtml(item.phone || '-')}</td>
-      <td>${escapeHtml(labelMap[item.status] || item.status || '-')}</td>
-      <td>${escapeHtml(item.completedAt || '-')}</td>
-      <td>${escapeHtml(item.message || '-')}</td>
-      <td>${item.restoredAttendance ? '입실복구' : '-'}</td>
-    </tr>
-  `).join('');
-
-  wrap.innerHTML = `
-    <p class="info-text" style="margin-top: 10px;">
-      처리 요약: 요청 ${Number(summary.requested || 0)}건 / 완료 ${Number(summary.completed || 0)}건 / 복구 ${Number(summary.restoredAttendance || 0)}건 / 건너뜀 ${Number(summary.skipped || 0)}건 / 실패 ${Number(summary.failed || 0)}건
-    </p>
-    <table class="manual-detail-table">
-      <thead>
-        <tr>
-          <th>이름</th>
-          <th>전화번호</th>
-          <th>결과</th>
-          <th>완료시각</th>
-          <th>메시지</th>
-          <th>입실복구</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows}
-      </tbody>
-    </table>
-  `;
-}
-
-async function refreshManualCheckoutData(options) {
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-
-  const opts = options || {};
-  const throwOnError = !!opts.throwOnError;
-  const season = getSelectedSeasonAlias();
-  const sessionKey = String(manualApproveState && manualApproveState.sessionKey || '').trim();
-  manualCheckoutState.seasonAlias = season || '';
-  manualCheckoutState.sessionKey = sessionKey;
-  syncManualCheckoutSessionHint();
-
-  if (!season || !sessionKey) {
-    manualCheckoutState.members = [];
-    manualCheckoutState.selectedPhones = {};
-    renderManualCheckoutList();
-    return;
-  }
-
-  const canReuse = !opts.forceReload
-    && manualCheckoutState.loadedSeasonAlias === season
-    && manualCheckoutState.loadedSessionKey === sessionKey;
-  if (canReuse) {
-    renderManualCheckoutList();
-    return;
-  }
-
-  let response;
-  try {
-    response = await CloudClubApi.call('checkoutPendingList', {
-      season,
-      sessionKey,
-      adminToken
-    });
-  } catch (error) {
-    if (handleUnauthorizedError(error)) return;
-    if (throwOnError) throw error;
-    showBoxMessage('manualCheckoutResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '퇴실 미완료 목록 조회 중 오류'))}`, false);
-    manualCheckoutState.members = [];
-    renderManualCheckoutList();
-    return;
-  }
-
-  if (!response.success) {
-    const message = response.message || '퇴실 미완료 목록 조회 실패';
-    if (throwOnError) {
-      throw new Error(message);
-    }
-    showBoxMessage('manualCheckoutResult', `❌ ${escapeHtml(message)}`, false);
-    manualCheckoutState.members = [];
-    renderManualCheckoutList();
-    return;
-  }
-
-  const members = Array.isArray(response.pendingMembers) ? response.pendingMembers : [];
-  const nextSelected = {};
-  members.forEach(member => {
-    const phone = String(member.phone || '').trim();
-    if (!phone) return;
-    if (manualCheckoutState.selectedPhones[phone]) {
-      nextSelected[phone] = true;
-    }
-  });
-
-  manualCheckoutState.members = members;
-  manualCheckoutState.selectedPhones = nextSelected;
-  manualCheckoutState.loadedSeasonAlias = season;
-  manualCheckoutState.loadedSessionKey = sessionKey;
-
-  renderManualCheckoutList();
-}
-
-async function submitManualCheckoutCompleteBatch(event) {
-  if (event && typeof event.preventDefault === 'function') {
-    event.preventDefault();
-  }
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-
-  const season = getSelectedSeasonAlias();
-  const sessionKey = String(manualApproveState && manualApproveState.sessionKey || '').trim();
-  if (!season || !sessionKey) {
-    alert('시즌/회차를 먼저 선택해주세요.');
-    return;
-  }
-
-  const selectedItems = (manualCheckoutState.members || [])
-    .map(member => {
-      const phone = String(member.phone || '').trim();
-      if (!phone || !manualCheckoutState.selectedPhones[phone]) return null;
-      return { phone: phone };
-    })
-    .filter(Boolean);
-  if (selectedItems.length === 0) {
-    alert('퇴실 완료 처리할 대상을 선택해주세요.');
-    return;
-  }
-
-  const btn = document.getElementById('manualCheckoutBtn');
-  const detailWrap = document.getElementById('manualCheckoutDetailWrap');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="loader"></span> <span>배치 처리 중...</span>';
-  }
-  if (detailWrap) {
-    detailWrap.innerHTML = '<div class="loader" style="margin: 18px auto;"></div>';
-  }
-
-  const mergedSummary = {
-    requested: 0,
-    completed: 0,
-    restoredAttendance: 0,
-    skipped: 0,
-    failed: 0
-  };
-  const mergedResults = [];
-
-  try {
-    for (let i = 0; i < selectedItems.length; i += MANUAL_CHECKOUT_BATCH_CHUNK_SIZE) {
-      const chunk = selectedItems.slice(i, i + MANUAL_CHECKOUT_BATCH_CHUNK_SIZE);
-      const response = await CloudClubApi.call('checkoutManualCompleteBatch', {
-        season,
-        sessionKey,
-        itemsJson: JSON.stringify(chunk),
-        adminToken
-      });
-      if (!response.success) {
-        throw new Error(response.message || '퇴실 수동 완료 처리 실패');
-      }
-
-      const summary = response.summary || {};
-      mergedSummary.requested += Number(summary.requested || chunk.length);
-      mergedSummary.completed += Number(summary.completed || 0);
-      mergedSummary.restoredAttendance += Number(summary.restoredAttendance || 0);
-      mergedSummary.skipped += Number(summary.skipped || 0);
-      mergedSummary.failed += Number(summary.failed || 0);
-      if (Array.isArray(response.results)) {
-        mergedResults.push(...response.results);
-      }
-    }
-
-    const ok = mergedSummary.failed === 0;
-    const message = `${ok ? '✅' : '⚠️'} 요청 ${mergedSummary.requested}건 중 완료 ${mergedSummary.completed}건 / 복구 ${mergedSummary.restoredAttendance}건 / 건너뜀 ${mergedSummary.skipped}건 / 실패 ${mergedSummary.failed}건`;
-    showBoxMessage('manualCheckoutResult', message, ok);
-    renderManualCheckoutDetailTable(mergedResults, mergedSummary);
-    showToast(`<i class="fas fa-check-circle"></i> 퇴실 수동 완료 처리 완료 (${mergedSummary.completed}건)`, ok);
-
-    const retrySelection = {};
-    mergedResults.forEach(item => {
-      if (!item || item.status === 'completed') return;
-      const phone = normalizeImportPhoneLocal(item.phone || '');
-      if (phone) retrySelection[phone] = true;
-    });
-    manualCheckoutState.selectedPhones = retrySelection;
-    invalidateSeasonOperationalCaches(getSelectedSeasonAlias());
-
-    await Promise.all([
-      refreshSessionAndRanking(),
-      loadGraduationReport({ forceReload: true })
-    ]);
-    await refreshStatusDashboardIfVisible();
-    await refreshManualApproveData({ forceMembers: false, forceStatuses: true });
-    await refreshManualCheckoutData({ forceReload: true });
-  } catch (error) {
-    if (handleUnauthorizedError(error)) return;
-    showBoxMessage('manualCheckoutResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '퇴실 수동 완료 처리 중 오류'))}`, false);
-    if (detailWrap) {
-      detailWrap.innerHTML = '';
-    }
-  } finally {
-    syncManualCheckoutSubmitState();
-  }
-}
-
 function renderManualApproveDetailTable(results, summary) {
   const wrap = document.getElementById('manualApproveDetailWrap');
   if (!wrap) return;
@@ -1998,20 +1336,6 @@ async function refreshManualApproveData(options) {
     manualApproveState.forceOverride = prevForceOverride;
   }
 
-  if (!manualCheckoutState) {
-    manualCheckoutState = createManualCheckoutInitialState();
-  }
-  if (seasonChanged) {
-    const prevKeyword = manualCheckoutState.keyword || '';
-    const prevSelectedOnly = !!manualCheckoutState.selectedOnly;
-    const prevAutoOnly = !!manualCheckoutState.autoOnly;
-    manualCheckoutState = createManualCheckoutInitialState();
-    manualCheckoutState.keyword = prevKeyword;
-    manualCheckoutState.selectedOnly = prevSelectedOnly;
-    manualCheckoutState.autoOnly = prevAutoOnly;
-  }
-  manualCheckoutState.seasonAlias = season;
-
   if (forceMembers || seasonChanged || membersCache.length === 0) {
     await loadMembers({ force: true, seasonAlias: season });
   }
@@ -2021,7 +1345,6 @@ async function refreshManualApproveData(options) {
     const select = document.getElementById('manualSessionSelect');
     manualApproveState.sessionKey = select ? String(select.value || '').trim() : '';
   }
-  manualCheckoutState.sessionKey = manualApproveState.sessionKey;
 
   await loadManualApproveStatuses({
     forceStatuses: forceStatuses || seasonChanged
@@ -2052,29 +1375,7 @@ async function refreshManualApproveData(options) {
     selectedOnlyInput.checked = !!manualApproveState.selectedOnly;
   }
 
-  const checkoutSearchInput = document.getElementById('manualCheckoutSearchInput');
-  if (checkoutSearchInput && checkoutSearchInput.value !== (manualCheckoutState.keyword || '')) {
-    checkoutSearchInput.value = manualCheckoutState.keyword || '';
-  }
-  const checkoutSelectedOnlyInput = document.getElementById('manualCheckoutSelectedOnly');
-  if (checkoutSelectedOnlyInput && checkoutSelectedOnlyInput.checked !== !!manualCheckoutState.selectedOnly) {
-    checkoutSelectedOnlyInput.checked = !!manualCheckoutState.selectedOnly;
-  }
-  const checkoutAutoOnlyInput = document.getElementById('manualCheckoutAutoOnly');
-  if (checkoutAutoOnlyInput && checkoutAutoOnlyInput.checked !== !!manualCheckoutState.autoOnly) {
-    checkoutAutoOnlyInput.checked = !!manualCheckoutState.autoOnly;
-  }
-
-  syncManualCheckoutSessionHint();
   renderManualMemberList();
-  try {
-    await refreshManualCheckoutData({
-      forceReload: forceStatuses || seasonChanged || forceMembers
-    });
-  } catch (error) {
-    if (handleUnauthorizedError(error)) return;
-    showBoxMessage('manualCheckoutResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '퇴실 미완료 목록 조회 중 오류'))}`, false);
-  }
 }
 
 async function submitManualApproveBatch(event) {
