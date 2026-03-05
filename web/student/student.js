@@ -1,5 +1,6 @@
 let countdownInterval;
 let isAttendanceActive = false;
+let currentAttendancePhase = '';
 let currentSeason = '';
 let latestSeason = '';
 let requestedSeason = '';
@@ -15,6 +16,7 @@ let studentRankingCache = {
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
 const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
 const STUDENT_RANKING_CACHE_TTL_MS = 10000;
+const ATTENDANCE_PHASE_NOTICE_TEXT = '지각 허용 시간 이후부터는 결석 처리됩니다';
 const STUDENT_ALLOWED_ACTIONS = {
   sheets: true,
   latestSeason: true,
@@ -503,6 +505,109 @@ function buildSeasonParams(extraParams) {
   return params;
 }
 
+function toSafeInteger(value, fallbackValue) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return Number.isFinite(Number(fallbackValue)) ? Number(fallbackValue) : 0;
+  }
+  return Math.floor(parsed);
+}
+
+function clearAttendButtonPhaseClassNames(attendBtn) {
+  if (!attendBtn) return;
+  attendBtn.classList.remove('is-on-time', 'is-late');
+}
+
+function setAttendancePhaseNoticeVisible(visible) {
+  const notice = document.getElementById('attendancePhaseNotice');
+  if (!notice) return;
+
+  if (visible) {
+    notice.textContent = ATTENDANCE_PHASE_NOTICE_TEXT;
+    notice.style.display = 'block';
+  } else {
+    notice.style.display = 'none';
+  }
+}
+
+function setAttendButtonByPhase(phase, options) {
+  const attendBtn = document.getElementById('attendBtn');
+  if (!attendBtn) return;
+
+  const opts = options || {};
+  const preserveDisabledLabel = opts.preserveDisabledLabel !== false;
+  const normalizedPhase = phase === 'late' ? 'late' : 'on_time';
+  currentAttendancePhase = normalizedPhase;
+
+  clearAttendButtonPhaseClassNames(attendBtn);
+  attendBtn.classList.add(normalizedPhase === 'late' ? 'is-late' : 'is-on-time');
+
+  if (attendBtn.disabled && preserveDisabledLabel) {
+    return;
+  }
+
+  if (normalizedPhase === 'late') {
+    attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>출석체크 (지각)</span>';
+  } else {
+    attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>출석하기 (정시)</span>';
+  }
+}
+
+function buildLiveAttendanceProgress(attendanceInfo) {
+  const info = attendanceInfo || {};
+  const baseAttended = Math.max(0, toSafeInteger(info.attended, 0));
+  const baseCurrentSession = Math.max(0, toSafeInteger(info.currentSession, 0));
+  const baseEffectiveTotal = Math.max(0, toSafeInteger(info.effectiveTotal, baseCurrentSession));
+
+  const attended = baseAttended + 1;
+  const currentSession = Math.max(baseCurrentSession + 1, attended);
+  const effectiveTotal = Math.max(baseEffectiveTotal + 1, attended);
+  const rate = effectiveTotal > 0
+    ? Math.round((attended / effectiveTotal) * 100)
+    : 0;
+
+  return {
+    attended: attended,
+    currentSession: currentSession,
+    effectiveTotal: effectiveTotal,
+    rate: rate
+  };
+}
+
+function buildStatusProgressFromDetails(details) {
+  const list = Array.isArray(details) ? details : [];
+  let attended = 0;
+  let currentSession = 0;
+  let effectiveTotal = 0;
+
+  list.forEach(detail => {
+    const type = String((detail && detail.attendanceType) || '').trim();
+    if (type === 'future') return;
+
+    currentSession++;
+
+    if (type === 'excused') {
+      return;
+    }
+
+    effectiveTotal++;
+    if (type === 'on_time' || type === 'late') {
+      attended++;
+    }
+  });
+
+  const rate = effectiveTotal > 0
+    ? Math.round((attended / effectiveTotal) * 100)
+    : 0;
+
+  return {
+    attended: attended,
+    currentSession: currentSession,
+    effectiveTotal: effectiveTotal,
+    rate: rate
+  };
+}
+
 function formatDurationKorean(ms) {
   const totalSec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
   const days = Math.floor(totalSec / 86400);
@@ -527,6 +632,10 @@ function renderCountdown(session) {
   clearInterval(countdownInterval);
 
   if (!session.active) {
+    currentAttendancePhase = '';
+    setAttendancePhaseNoticeVisible(false);
+    clearAttendButtonPhaseClassNames(attendBtn);
+
     if (session.nextOpenTime) {
       const nextOpenTime = Number(session.nextOpenTime || 0);
 
@@ -540,6 +649,7 @@ function renderCountdown(session) {
           countdownDiv.textContent = '잠시 후 자동 갱신됩니다.';
           isAttendanceActive = false;
           attendBtn.disabled = true;
+          clearAttendButtonPhaseClassNames(attendBtn);
           attendBtn.innerHTML = '<i class="fas fa-clock"></i> <span>오픈 대기</span>';
           setTimeout(() => {
             checkAttendanceSession();
@@ -555,6 +665,7 @@ function renderCountdown(session) {
       countdownInterval = setInterval(updateOpenCountdown, 1000);
       isAttendanceActive = false;
       attendBtn.disabled = true;
+      clearAttendButtonPhaseClassNames(attendBtn);
       attendBtn.innerHTML = '<i class="fas fa-clock"></i> <span>오픈 대기</span>';
       return;
     }
@@ -563,11 +674,13 @@ function renderCountdown(session) {
     countdownDiv.textContent = session.message || '지금은 출석 가능한 시간이 아닙니다.';
     isAttendanceActive = false;
     attendBtn.disabled = true;
+    clearAttendButtonPhaseClassNames(attendBtn);
     attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 불가</span>';
     return;
   }
 
   isAttendanceActive = true;
+  setAttendancePhaseNoticeVisible(true);
   attendBtn.disabled = false;
 
   const onTimeDeadline = Number(session.onTimeDeadline || session.endTime || 0);
@@ -581,19 +694,27 @@ function renderCountdown(session) {
       countdownTitle.textContent = '출석 시간 종료';
       countdownDiv.textContent = '00분 00초';
       isAttendanceActive = false;
+      currentAttendancePhase = '';
+      setAttendancePhaseNoticeVisible(false);
       attendBtn.disabled = true;
+      clearAttendButtonPhaseClassNames(attendBtn);
       attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 마감</span>';
       return;
     }
 
     let target = lateDeadline;
+    let phase = 'late';
     if (onTimeDeadline && now <= onTimeDeadline) {
       countdownTitle.textContent = '정시 마감까지 남은 시간';
       target = onTimeDeadline;
+      phase = 'on_time';
     } else {
       countdownTitle.textContent = '지각 마감까지 남은 시간';
       target = lateDeadline;
+      phase = 'late';
     }
+
+    setAttendButtonByPhase(phase);
 
     const remaining = Math.max(0, target - now);
     countdownDiv.textContent = formatDurationKorean(remaining);
@@ -813,14 +934,14 @@ function handleAttendanceResponse(response) {
     let message = `✅ <span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님, ${response.time} 출석 완료! ${typeBadge}`;
 
     if (response.attendanceInfo) {
-      const info = response.attendanceInfo;
+      const info = buildLiveAttendanceProgress(response.attendanceInfo);
       message += `
         <div class="attendance-info">
           <h3><span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님 출석 현황</h3>
           <div class="attendance-stats">
             <div class="stat-item">
               <div class="stat-label">출석 횟수</div>
-              <div class="stat-value">${info.attended}/${info.total}</div>
+              <div class="stat-value">${info.attended}/${info.currentSession}</div>
             </div>
             <div class="stat-item">
               <div class="stat-label">출석률</div>
@@ -854,7 +975,7 @@ function handleAttendanceResponse(response) {
     resultDiv.innerHTML = `❌ ${response.message}`;
     resultDiv.className = 'error';
     attendBtn.disabled = false;
-    attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>지금 출석하기</span>';
+    setAttendButtonByPhase(currentAttendancePhase || 'on_time', { preserveDisabledLabel: false });
   }
 
   resultDiv.style.display = 'block';
@@ -863,6 +984,7 @@ function handleAttendanceResponse(response) {
     resultDiv.style.display = 'none';
     if (!response.success && isAttendanceActive) {
       attendBtn.disabled = false;
+      setAttendButtonByPhase(currentAttendancePhase || 'on_time', { preserveDisabledLabel: false });
     }
   }, response.success ? 15000 : 5000);
 }
@@ -875,8 +997,14 @@ function handleAttendanceError(error) {
   resultDiv.className = 'error';
   resultDiv.style.display = 'block';
 
-  attendBtn.disabled = false;
-  attendBtn.innerHTML = '<i class="fas fa-hand-point-up"></i> <span>지금 출석하기</span>';
+  if (isAttendanceActive) {
+    attendBtn.disabled = false;
+    setAttendButtonByPhase(currentAttendancePhase || 'on_time', { preserveDisabledLabel: false });
+  } else {
+    attendBtn.disabled = true;
+    clearAttendButtonPhaseClassNames(attendBtn);
+    attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 불가</span>';
+  }
 
   setTimeout(() => {
     resultDiv.style.display = 'none';
@@ -919,6 +1047,7 @@ function handleStatusResponse(response) {
 
   if (response.success) {
     const data = response.data;
+    const liveProgress = buildStatusProgressFromDetails(data.details);
     let detailsHTML = '';
 
     data.details.forEach(detail => {
@@ -968,15 +1097,15 @@ function handleStatusResponse(response) {
           <div class="attendance-stats">
             <div class="stat-item">
               <div class="stat-label">출석 횟수</div>
-              <div class="stat-value">${data.attended}/${data.total}</div>
+              <div class="stat-value">${liveProgress.attended}/${liveProgress.currentSession}</div>
             </div>
             <div class="stat-item">
               <div class="stat-label">출석률</div>
-              <div class="stat-value highlight">${data.rate}%</div>
+              <div class="stat-value highlight">${liveProgress.rate}%</div>
             </div>
           </div>
           <p class="info-text" style="margin-top: 12px;">
-            현재까지 ${data.currentSession}회차 중 ${data.attended}회 출석
+            현재까지 ${liveProgress.currentSession}회차 중 ${liveProgress.attended}회 출석
           </p>
         </div>
         <div class="attendance-details">

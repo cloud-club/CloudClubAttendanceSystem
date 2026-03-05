@@ -22,6 +22,18 @@ const variableTabMapByKey = {
   default_session_start_time: ['일정 관리']
 };
 
+const variableUiTextOverrideByKey = {
+  attendance_open_offset_min: {
+    labelKo: '출석 가능 시간',
+    description: '출석 시간 N분 전부터 출석이 가능한 시간대를 설정합니다.'
+  },
+  late_threshold_min: {
+    labelKo: '지각 판정 기준',
+    description: '행사 시작 정시 이후 N분까지 지각으로 허용하는 시간입니다.',
+    detailGuide: '정시 시각을 기준으로 설정된 시간까지만 지각을 허용하며, 해당 시간 이후부터는 결석 처리됩니다.'
+  }
+};
+
 function setVariableActionButtonsDisabled(disabled) {
   const buttonIds = [
     'variablesSaveBtn',
@@ -215,6 +227,15 @@ function normalizeVariableItemMeta(item) {
   normalized.usedIn = usedIn;
   normalized.usedTabs = usedTabs;
   normalized.usedTabsText = usedTabsText;
+
+  const key = String(normalized.key || '').trim().toLowerCase();
+  const uiOverride = variableUiTextOverrideByKey[key];
+  if (uiOverride) {
+    if (uiOverride.labelKo) normalized.labelKo = uiOverride.labelKo;
+    if (uiOverride.description) normalized.description = uiOverride.description;
+    if (uiOverride.detailGuide) normalized.detailGuide = uiOverride.detailGuide;
+  }
+
   return normalized;
 }
 
@@ -331,6 +352,7 @@ function renderVariableHelpPanel(item) {
     <p><strong>설정 위치:</strong> 관리자 페이지 &gt; 변수명 관리 탭</p>
     <p><strong>어떤 효과:</strong> ${escapeHtml(getFallbackVariableMetaText(item.appliesTo))}</p>
     <p><strong>언제 반영:</strong> ${escapeHtml(getFallbackVariableMetaText(item.appliesWhen))}</p>
+    ${item.detailGuide ? `<p><strong>상세 가이드:</strong> ${escapeHtml(item.detailGuide)}</p>` : ''}
     <p><strong>실제 사용처:</strong> ${escapeHtml(getVariableUsedInText(item))}</p>
     <p><strong>영향 범위:</strong> 저장 즉시 계산 기준이 갱신됩니다. 이미 확정된 과거 회차는 메타 스냅샷 기준을 유지합니다.</p>
     <p><strong>설명:</strong> ${escapeHtml(item.description || '-')}</p>

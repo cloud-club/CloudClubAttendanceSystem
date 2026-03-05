@@ -283,12 +283,29 @@
       box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
       background: linear-gradient(45deg, #2563eb, #3b82f6);
     }
-    
+
+    .btn.is-late {
+      background: linear-gradient(45deg, #f59e0b, #fb923c);
+      box-shadow: 0 4px 12px rgba(251, 146, 60, 0.35);
+    }
+
+    .btn.is-late:hover:enabled {
+      box-shadow: 0 6px 20px rgba(251, 146, 60, 0.45);
+      background: linear-gradient(45deg, #d97706, #f97316);
+    }
+
     .btn:disabled {
       background: #475569;
       color: #94a3b8;
       cursor: not-allowed;
       box-shadow: none;
+    }
+
+    .attendance-phase-notice {
+      margin-top: 10px;
+      color: #fbbf24;
+      font-size: 13px;
+      line-height: 1.45;
     }
     
     #result, #statusResult {
@@ -736,6 +753,7 @@
             <i class="fas fa-hand-point-up"></i>
             <span>지금 출석하기</span>
           </button>
+          <p id="attendancePhaseNotice" class="attendance-phase-notice" style="display: none;"></p>
         </form>
       </div>
       
