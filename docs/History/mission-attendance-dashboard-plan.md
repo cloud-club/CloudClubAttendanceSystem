@@ -2,6 +2,8 @@
 
 > 문서 링크: [docs/History/mission-attendance-dashboard-plan.md](./mission-attendance-dashboard-plan.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/mission-attendance-dashboard-plan.md)
 
+> 후속 변경 메모: 이 문서는 출석 대시보드 1차 계획 문서입니다. 현재 운영 기준에서 차트 C와 drilldown 해석은 일부 달라졌으며, 최신 기준은 [025_관리자_출석현황_평균출석시간추이_전환_운영기록_2026-03-10.md](./025_관리자_출석현황_평균출석시간추이_전환_운영기록_2026-03-10.md)를 우선 참고하세요.
+
 ## 빠른 흐름도
 ```mermaid
 flowchart LR

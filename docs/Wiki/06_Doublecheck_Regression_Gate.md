@@ -3,7 +3,7 @@
 > 문서 링크: [docs/Wiki/06_Doublecheck_Regression_Gate.md](./06_Doublecheck_Regression_Gate.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/06_Doublecheck_Regression_Gate.md)
 
 ## 목적
-운세 기능 추가 이후에도 기존 사용자(학생)와 운영자(Admin/Super)의 체감 사용감이 변하지 않았음을 배포 전/후에 증빙하는 실행 문서입니다.
+운세 기능 추가 이후 문서로 시작했지만, 현재는 **기존 사용자(학생)와 운영자(Admin/Super)의 체감 사용감이 변하지 않았음을 배포 전/후에 증빙하는 공통 실행 문서**입니다.
 핵심 원칙은 **공개 API 불변과 시즌업데이트 리스크 분리**입니다.
 이 문서는 아래 게이트 순서만 따릅니다.
 
@@ -126,10 +126,15 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 2. [ ] attend/status/schedule/excused/graduation 탭 기존 동작 정상
 3. [ ] Super 전용 탭 접근 차단 유지
 4. [ ] 운세 탭 접근/검증/저장/다운로드 정상
+5. [ ] 출석현황 탭에서 멤버 미선택 시 상단 3번째 차트가 전체 평균으로 보임
+6. [ ] 멤버 1명 선택 시 상단 3번째 차트가 개인 추이처럼 해석 가능하고, 드릴다운 표가 개인 상세로 열림
+7. [ ] 멤버 2명 이상 선택 시 상단 3번째 차트가 평균값 1개 라인으로 보이고, KPI/랭킹/도넛은 그대로 유지됨
+8. [ ] 상단 3번째 차트의 점 클릭 시 행사 drilldown이 열림
 
 ### super
 1. [ ] variables/seasonImport/adminUsers 기존 동작 정상
 2. [ ] 운세 탭 접근/저장/다운로드/버전 로드 정상
+3. [ ] 출석현황 탭에서 season_admin과 동일한 평균 추이 시나리오가 재현됨
 
 ## Gate 4: 구버전 백엔드 호환성(수동)
 조건: `fortune*` 미지원 백엔드 URL로 관리자 페이지 연결.

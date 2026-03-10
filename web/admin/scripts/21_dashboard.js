@@ -508,7 +508,7 @@ function renderAttendanceDashboardMemberPicker() {
     }).join('') + (overflowCount > 0 ? `<span class="dashboard-chip dashboard-chip-overflow">+${overflowCount}</span>` : '');
 
   if (hintNode) {
-    hintNode.textContent = `최대 ${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명 / hover로 출석일시·유고사유 확인`;
+    hintNode.textContent = `선택 없으면 전체 평균 / 최대 ${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명 선택`;
   }
   if (countBadge) {
     countBadge.textContent = `선택 ${selectedKeys.length}/${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}`;
@@ -559,7 +559,7 @@ function setAttendanceDashboardMemberKeys(keys, options) {
   if (trimmed.length > ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION) {
     trimmed = trimmed.slice(0, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION);
     if (opts.showLimitToast !== false) {
-      showToast(`<i class="fas fa-info-circle"></i> 개인 시계열은 최대 ${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명까지 선택됩니다.`, true);
+      showToast(`<i class="fas fa-info-circle"></i> 평균 추이 대상은 최대 ${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명까지 선택됩니다.`, true);
     }
   }
 
@@ -572,8 +572,12 @@ function setAttendanceDashboardMemberKeys(keys, options) {
   if (opts.renderTrend !== false) {
     renderAttendanceDashboardMemberTrendChart();
   }
-  if (opts.drilldown !== false && trimmed.length === 1) {
-    loadAttendanceDashboardDrilldown('member', trimmed[0]);
+  if (opts.drilldown !== false) {
+    if (trimmed.length === 1) {
+      loadAttendanceDashboardDrilldown('member', trimmed[0]);
+    } else {
+      renderAttendanceDashboardTopEventTable(attendanceDashboardLastEventRows);
+    }
   }
 }
 
@@ -1122,7 +1126,7 @@ function renderAttendanceDashboardTopEventTable(rows) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length === 0) {
     title.textContent = '드릴다운';
-    summary.textContent = '차트를 클릭하거나 개인을 선택하면 상세가 표시됩니다.';
+    summary.textContent = '차트를 클릭하거나 1명을 선택하면 상세가 표시됩니다.';
     wrap.innerHTML = '<p class="info-text">표시할 드릴다운 데이터가 없습니다.</p>';
     return;
   }
@@ -1271,30 +1275,55 @@ function renderAttendanceDashboardDrilldown(payload) {
   }
 }
 
-function buildMemberTrendCacheKey(memberKey) {
+function buildMemberTrendCacheKey() {
   const season = getSelectedSeasonAlias();
+  const selectedMemberKey = (attendanceDashboardState.selectedMemberKeys || []).slice().sort().join('|') || 'ALL';
   const filterKey = [
     attendanceDashboardState.group || 'all',
     attendanceDashboardState.dateFrom || '-',
     attendanceDashboardState.dateTo || '-',
     (attendanceDashboardState.sessionKeys || []).slice().sort().join('|')
   ].join(':');
-  return `${season}:${memberKey}:${filterKey}`;
+  return `${season}:${selectedMemberKey}:${filterKey}`;
 }
 
-async function loadAttendanceDashboardMemberSeries(memberKey) {
-  const cacheKey = buildMemberTrendCacheKey(memberKey);
+function getAttendanceDashboardMemberTrendLabel() {
+  const selected = attendanceDashboardState.selectedMemberKeys || [];
+  if (selected.length === 0) {
+    return '전체 평균';
+  }
+
+  const optionMap = {};
+  getAttendanceDashboardMemberOptions().forEach(item => {
+    optionMap[item.memberKey] = item;
+  });
+
+  if (selected.length === 1) {
+    const item = optionMap[selected[0]];
+    if (item) {
+      return `${item.seasonLabel || '-'} ${item.name || selected[0]}`;
+    }
+    return '선택 1명';
+  }
+
+  return `선택 ${selected.length}명 평균`;
+}
+
+async function loadAttendanceDashboardMemberTrendSeries() {
+  const cacheKey = buildMemberTrendCacheKey();
   if (attendanceDashboardMemberSeriesCache[cacheKey]) {
     return attendanceDashboardMemberSeriesCache[cacheKey];
   }
 
   const season = getSelectedSeasonAlias();
   if (!season) return null;
+  const selected = (attendanceDashboardState.selectedMemberKeys || []).slice(0, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION);
   const params = Object.assign({
     adminToken: adminToken,
     season: season,
-    drillType: 'member',
-    key: memberKey
+    drillType: 'memberAverage',
+    key: selected.length === 1 ? selected[0] : 'aggregate',
+    memberKeysCsv: selected.join(',')
   }, getAttendanceDashboardApiFilterParams());
 
   const response = await CloudClubApi.call('attendanceDashboardDrilldown', params);
@@ -1313,8 +1342,13 @@ async function renderAttendanceDashboardMemberTrendChart() {
   const canvas = document.getElementById('dashboardMemberTrendChart');
   if (!canvas) return;
 
-  const selected = (attendanceDashboardState.selectedMemberKeys || []).slice(0, ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION);
-  if (selected.length === 0) {
+  const series = await loadAttendanceDashboardMemberTrendSeries()
+    .catch((error) => {
+      console.error('평균 추이 로드 실패:', error);
+      return null;
+    });
+
+  if (!series || !series.success || !Array.isArray(series.rows) || series.rows.length === 0) {
     if (attendanceDashboardMemberTrendChart) {
       attendanceDashboardMemberTrendChart.destroy();
       attendanceDashboardMemberTrendChart = null;
@@ -1324,74 +1358,32 @@ async function renderAttendanceDashboardMemberTrendChart() {
     return;
   }
 
-  const seriesList = (await Promise.all(
-    selected.map((key) => loadAttendanceDashboardMemberSeries(key)
-      .then((series) => (series && series.success ? series : null))
-      .catch((error) => {
-        console.error('개인 시계열 로드 실패:', error);
-        return null;
-      }))
-  )).filter(Boolean);
-
-  if (seriesList.length === 0) {
-    if (attendanceDashboardMemberTrendChart) {
-      attendanceDashboardMemberTrendChart.destroy();
-      attendanceDashboardMemberTrendChart = null;
-    }
-    return;
-  }
-
-  let labels = [];
-  const selectedSessions = attendanceDashboardPayload && attendanceDashboardPayload.meta && Array.isArray(attendanceDashboardPayload.meta.availableSessions)
-    ? attendanceDashboardPayload.meta.availableSessions.filter(item => item.isSelected)
-    : [];
-  if (selectedSessions.length > 0) {
-    labels = selectedSessions.map(item => item.sessionKey);
-  } else {
-    labels = (seriesList[0].rows || []).map(row => row.sessionKey);
-  }
-
-  const datasets = seriesList.map((series, index) => {
-    const rowMap = {};
-    (series.rows || []).forEach(row => {
-      rowMap[row.sessionKey] = row;
-    });
-
-    const data = [];
-    const pointMeta = [];
-    labels.forEach(label => {
-      const row = rowMap[label];
-      if (!row) {
-        data.push(null);
-        pointMeta.push(null);
-        return;
-      }
-      const offset = row.offsetSeconds;
-      data.push(typeof offset === 'number' ? Number((offset / 60).toFixed(2)) : null);
-      pointMeta.push(row);
-    });
-
-    const member = series.member || {};
-    return {
-      label: `${member.seasonLabel || '-'} ${member.name || series.key}`,
-      data: data,
-      pointMeta: pointMeta,
-      borderColor: getDashboardColor(index),
-      backgroundColor: 'rgba(0,0,0,0)',
-      borderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 5,
-      tension: 0.2,
-      spanGaps: true,
-      memberKey: member.memberKey || series.key
-    };
-  });
+  const rows = series.rows || [];
+  const labels = rows.map(row => row.sessionKey);
+  const datasets = [{
+    label: getAttendanceDashboardMemberTrendLabel(),
+    data: rows.map(row => (
+      typeof row.averageOffsetSeconds === 'number'
+        ? Number((row.averageOffsetSeconds / 60).toFixed(2))
+        : null
+    )),
+    pointMeta: rows,
+    summaryMeta: series.summary || {},
+    borderColor: getDashboardColor(0),
+    backgroundColor: 'rgba(0,0,0,0)',
+    borderWidth: 2,
+    pointRadius: 4,
+    pointHoverRadius: 5,
+    tension: 0.2,
+    spanGaps: false
+  }];
 
   if (
     attendanceDashboardMemberTrendChart
     && attendanceDashboardMemberTrendChart.config
     && attendanceDashboardMemberTrendChart.config.type === 'line'
   ) {
+    attendanceDashboardMemberTrendChart.$ccRows = rows;
     attendanceDashboardMemberTrendChart.data.labels = labels;
     attendanceDashboardMemberTrendChart.data.datasets = datasets;
     attendanceDashboardMemberTrendChart.update('none');
@@ -1428,31 +1420,37 @@ async function renderAttendanceDashboardMemberTrendChart() {
             label(context) {
               const dataset = context.dataset || {};
               const pointMeta = Array.isArray(dataset.pointMeta) ? dataset.pointMeta[context.dataIndex] : null;
-              if (!pointMeta) return `${dataset.label}: -`;
-              const noteText = pointMeta.note ? String(pointMeta.note) : '-';
-              return [
-                `${dataset.label}: ${formatSignedOffsetMinutes(pointMeta.offsetSeconds)}`,
-                `상태: ${formatDashboardStatus(pointMeta.status)}`,
-                `출석일시: ${pointMeta.attendTime || '-'}`,
-                `유고/메모: ${noteText}`
+              const summaryMeta = dataset.summaryMeta || {};
+              if (!pointMeta || typeof pointMeta.averageOffsetSeconds !== 'number') {
+                return [`${dataset.label}: 평균 출석 데이터 없음`];
+              }
+
+              const lines = [
+                `${dataset.label}: ${formatSignedOffsetMinutes(pointMeta.averageOffsetSeconds)}`,
+                `평균 출석일시: ${pointMeta.averageAttendTime || '-'}`,
+                `유효 출석자: ${Number(pointMeta.validAttendanceCount || 0)}명`
               ];
+              if (typeof summaryMeta.filteredMemberCount === 'number' && summaryMeta.filteredMemberCount > 0) {
+                lines.push(`대상 인원: ${summaryMeta.filteredMemberCount}명`);
+              }
+              return lines;
             }
           }
         }
       },
       onClick(event, elements) {
         if (!elements || elements.length === 0) return;
-        const element = elements[0];
-        const dataset = attendanceDashboardMemberTrendChart
-          && attendanceDashboardMemberTrendChart.data
-          && Array.isArray(attendanceDashboardMemberTrendChart.data.datasets)
-          ? attendanceDashboardMemberTrendChart.data.datasets[element.datasetIndex]
-          : null;
-        if (!dataset || !dataset.memberKey) return;
-        loadAttendanceDashboardDrilldown('member', dataset.memberKey);
+        const index = elements[0].index;
+        const chartRows = attendanceDashboardMemberTrendChart && attendanceDashboardMemberTrendChart.$ccRows
+          ? attendanceDashboardMemberTrendChart.$ccRows
+          : rows;
+        const row = chartRows[index];
+        if (!row || !row.sessionKey) return;
+        loadAttendanceDashboardDrilldown('event', row.sessionKey);
       }
     }
   });
+  attendanceDashboardMemberTrendChart.$ccRows = rows;
 }
 
 async function loadAttendanceDashboardDrilldown(drillType, key) {
@@ -1519,18 +1517,6 @@ function renderAttendanceDashboard(payload) {
     ? payload.table.eventTopRows.slice()
     : [];
   renderAttendanceDashboardTopEventTable(attendanceDashboardLastEventRows);
-
-  const defaultMemberKeys = payload && payload.meta && Array.isArray(payload.meta.defaultMemberKeys)
-    ? payload.meta.defaultMemberKeys
-    : [];
-  if ((attendanceDashboardState.selectedMemberKeys || []).length === 0 && defaultMemberKeys.length > 0) {
-    setAttendanceDashboardMemberKeys(defaultMemberKeys, {
-      save: true,
-      renderTrend: false,
-      drilldown: false,
-      showLimitToast: false
-    });
-  }
 
   renderAttendanceDashboardMemberTrendChart();
   attendanceDashboardLastRenderSignature = renderSignature;

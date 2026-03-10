@@ -105,15 +105,27 @@ flowchart LR
 3. `status`, `ranking` 액션으로 개인/랭킹 데이터 보완
 4. 요약 KPI + 드릴다운 + 순위 렌더링
 
+#### 현재 대시보드 해석 기준
+1. 상단 세 번째 차트는 **개인별 비교 차트가 아니라, 현재 필터에 걸린 대상의 회차별 평균 출석시간 추이**입니다.
+2. 멤버를 선택하지 않으면 `전체 평균`으로 해석합니다.
+3. 멤버를 1명만 선택하면 그 사람의 값이 곧 평균이므로, 사실상 개인 추이처럼 볼 수 있습니다.
+4. 멤버를 2명 이상 선택하면 선택 집합만의 평균값 1개 라인으로 보여줍니다.
+5. 이 멤버 선택은 **차트 전용 부분집합 필터**이며, KPI/랭킹/도넛/이벤트 Top 테이블 전체를 다시 계산하는 전역 필터는 아닙니다.
+6. 평균 계산에서는 실제 출석시각이 있는 `출석/지각` 데이터만 포함하고, `유고/결석`은 제외합니다.
+
 #### 운영 시 주의사항
 - 필터 조건 바뀐 상태에서 결과를 혼동하지 않기
 - 랭킹 동률 규칙(출석횟수→평균오프셋→이름순) 안내 통일
 - 대시보드 숫자와 원본 시트 불일치 시 즉시 원인 분리
 - 인증 만료 발생 시 `handleUnauthorizedError` 경로로 로그인 게이트 복귀를 우선 확인
+- 멤버를 비워 둔 상태가 오류가 아니라 **전체 평균 기본 상태**라는 점을 운영자에게 안내할 것
+- 상단 세 번째 차트에서 점을 클릭하면 개인 상세가 아니라 **해당 행사 드릴다운**이 열리는 현재 동작을 기준으로 설명할 것
+- 개인 상세를 보고 싶다면 멤버를 1명만 선택한 뒤 드릴다운 표를 함께 확인할 것
 
 #### 수정 시 확인 파일
 - [web/admin/index.html](../../web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
 - [web/admin/scripts/20_attendance.js](../../web/admin/scripts/20_attendance.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/20_attendance.js)
+- [web/admin/scripts/21_dashboard.js](../../web/admin/scripts/21_dashboard.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/21_dashboard.js)
 - [web/admin/scripts/](../../web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - [Appsscript/00_entry_api.gs](../../Appsscript/00_entry_api.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/00_entry_api.gs)
 - [Appsscript/30_attendance_core.gs](../../Appsscript/30_attendance_core.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/30_attendance_core.gs)

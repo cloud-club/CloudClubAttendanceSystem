@@ -382,6 +382,7 @@ function getAttendanceDashboardDrilldown(params) {
 
     const filters = normalizeAttendanceDashboardFilters(params, sessions);
     const selectedSessions = filterSessionsForDashboard(sessions, filters);
+    const closedSelectedSessions = selectedSessions.filter(session => session.lateDeadline <= now);
     const sessionStartCol = Math.max(0, memberSchema.sessionStartColIndex);
     const notesMatrix = getDashboardNotesMatrix(sheet, sessionStartCol);
 
@@ -578,7 +579,99 @@ function getAttendanceDashboardDrilldown(params) {
       };
     }
 
-    return { success: false, message: '지원하지 않는 drillType입니다. (event/member)' };
+    if (drillType === 'memberAverage') {
+      const requestedMemberKeys = parseDashboardCsv(params.memberKeysCsv || params.memberKeys || '')
+        .map(key => normalizePhone(key))
+        .filter(key => !!key);
+      const selectedMemberSet = {};
+      requestedMemberKeys.forEach(key => {
+        selectedMemberSet[key] = true;
+      });
+      const hasMemberFilter = requestedMemberKeys.length > 0;
+
+      const sessionRows = closedSelectedSessions.map(session => ({
+        sessionKey: session.sessionKey,
+        date: formatDateTimeMinute(session.startTime),
+        startTime: session.startTime.getTime(),
+        averageOffsetSeconds: null,
+        averageOffsetLabel: '',
+        averageAttendTime: '',
+        validAttendanceCount: 0
+      }));
+      const sessionRowMap = {};
+      sessionRows.forEach(row => {
+        sessionRowMap[row.sessionKey] = row;
+      });
+
+      let targetedMemberCount = 0;
+
+      for (let i = 1; i < values.length; i++) {
+        const member = readMemberFromRow(values[i], memberSchema);
+        if (!member.name || !member.phone) continue;
+
+        const cohortTag = resolveDashboardMemberGroup(member.season, seasonNo);
+        if (!isDashboardGroupAllowed(filters.group, cohortTag)) continue;
+
+        const memberKey = normalizePhone(member.phone);
+        if (!memberKey) continue;
+        if (hasMemberFilter && !selectedMemberSet[memberKey]) continue;
+
+        targetedMemberCount++;
+
+        closedSelectedSessions.forEach(session => {
+          const row = sessionRowMap[session.sessionKey];
+          if (!row) return;
+
+          const cellValue = values[i][session.colIndex];
+          const status = getAttendanceDetailType(cellValue, session, now);
+          if (status !== 'on_time' && status !== 'late') return;
+
+          const attendTime = parseAttendanceTime(cellValue);
+          if (!attendTime || isNaN(attendTime.getTime())) return;
+
+          const diffSec = Math.floor((attendTime - session.startTime) / 1000);
+          const minAllowed = Math.floor((session.openTime - session.startTime) / 1000);
+          const maxAllowed = Math.floor((session.lateDeadline - session.startTime) / 1000);
+          if (diffSec < minAllowed || diffSec > maxAllowed) return;
+
+          if (typeof row._offsetSumSeconds !== 'number') row._offsetSumSeconds = 0;
+          if (typeof row._attendTimeSumMs !== 'number') row._attendTimeSumMs = 0;
+          row._offsetSumSeconds += diffSec;
+          row._attendTimeSumMs += attendTime.getTime();
+          row.validAttendanceCount += 1;
+        });
+      }
+
+      let sessionsWithAverage = 0;
+      sessionRows.forEach(row => {
+        if (row.validAttendanceCount > 0) {
+          row.averageOffsetSeconds = Math.round(row._offsetSumSeconds / row.validAttendanceCount);
+          row.averageOffsetLabel = formatSignedOffset(row.averageOffsetSeconds);
+          row.averageAttendTime = formatDateTime(new Date(Math.round(row._attendTimeSumMs / row.validAttendanceCount)));
+          sessionsWithAverage++;
+        }
+        delete row._offsetSumSeconds;
+        delete row._attendTimeSumMs;
+      });
+
+      return {
+        success: true,
+        seasonAlias: seasonAlias,
+        drillType: 'memberAverage',
+        key: key,
+        rows: sessionRows,
+        summary: {
+          targetedMemberCount: targetedMemberCount,
+          filteredMemberCount: targetedMemberCount,
+          selectedMemberCount: requestedMemberKeys.length,
+          closedSessionCount: closedSelectedSessions.length,
+          sessionsWithAverage: sessionsWithAverage,
+          hasMemberFilter: hasMemberFilter
+        }
+      };
+    }
+
+    return { success: false, message: '지원하지 않는 drillType입니다. (event/member/memberAverage)' };
   } catch (error) {
     return {
       success: false,
@@ -649,6 +742,7 @@ function normalizeDashboardDrillType(rawType) {
   const value = String(rawType || '').trim().toLowerCase();
   if (value === 'event') return 'event';
   if (value === 'member') return 'member';
+  if (value === 'memberaverage' || value === 'member_average') return 'memberAverage';
   return '';
 }
 
@@ -861,4 +955,3 @@ function writeAttendanceDashboardCache(key, payload) {
     // no-op
   }
 }
-

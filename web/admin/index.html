@@ -3643,7 +3643,7 @@
               </select>
             </div>
             <div class="dashboard-input-group dashboard-input-group-wide dashboard-input-group-picker" id="dashboardMemberPickerField">
-              <label for="dashboardMemberSearchInput">개인 시계열 대상(다중 선택)</label>
+              <label for="dashboardMemberSearchInput">평균 추이 대상(선택 시 부분집합)</label>
               <div class="dashboard-picker-trigger-row">
                 <input id="dashboardMemberSearchInput" type="text" class="form-input" placeholder="이름/기수/그룹 검색">
                 <button type="button" id="dashboardMemberPickerBtn" class="dashboard-picker-open-btn" aria-expanded="false" aria-controls="dashboardMemberPickerPopover">선택</button>
@@ -3652,11 +3652,11 @@
                 <span class="dashboard-picker-count-badge" id="dashboardMemberCountBadge">선택 0/5</span>
                 <div id="dashboardMemberChipList" class="dashboard-chip-list"></div>
               </div>
-              <div class="dashboard-selection-hint" id="dashboardMemberSelectionHint">최대 5명까지 선택할 수 있습니다.</div>
+              <div class="dashboard-selection-hint" id="dashboardMemberSelectionHint">선택 없으면 전체 평균 / 최대 5명까지 선택할 수 있습니다.</div>
               <div id="dashboardMemberPickerPopover" class="dashboard-picker-popover" hidden>
                 <div class="dashboard-picker-panel">
                 <div class="dashboard-quick-actions">
-                  <button type="button" class="dashboard-quick-btn" onclick="dashboardSelectTopMembers()">상위 3명 추천</button>
+                  <button type="button" class="dashboard-quick-btn" onclick="dashboardSelectTopMembers()">상위 3명 선택</button>
                   <button type="button" class="dashboard-quick-btn" onclick="dashboardClearMemberSelection()">선택 해제</button>
                 </div>
                 <div id="dashboardMemberOptionList" class="dashboard-option-list">
@@ -3736,8 +3736,8 @@
             </div>
           </div>
           <div class="dashboard-chart-card">
-            <div class="dashboard-chart-title">개인별 출석 시간 추이</div>
-            <div class="dashboard-chart-subtitle">hover에 출석일시/상태/유고사유(note) 노출</div>
+            <div class="dashboard-chart-title">필터 대상 평균 출석 시간 추이</div>
+            <div class="dashboard-chart-subtitle">선택 없으면 전체 평균 / 1명 선택 시 개인 추이처럼 해석</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardMemberTrendChart"></canvas>
             </div>
