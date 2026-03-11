@@ -111,6 +111,12 @@ function normalizePayload(api, payload) {
     }
   }
 
+  if (normalized && normalized.data && api === 'attendanceDashboardSummary') {
+    if (normalized.data.meta && normalized.data.meta.quickFilter !== undefined) {
+      delete normalized.data.meta.quickFilter;
+    }
+  }
+
   return sortKeysDeep(normalized);
 }
 

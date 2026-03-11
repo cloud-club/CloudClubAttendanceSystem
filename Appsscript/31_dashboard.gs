@@ -32,6 +32,7 @@ function getAttendanceDashboardSummary(params) {
     });
 
     const closedSelectedSessions = selectedSessions.filter(session => session.lateDeadline <= now);
+    const quickFilterClosedSessionKeys = closedSelectedSessions.map(session => session.sessionKey);
     const closedSessionMap = {};
     closedSelectedSessions.forEach(session => {
       closedSessionMap[session.sessionKey] = {
@@ -53,6 +54,7 @@ function getAttendanceDashboardSummary(params) {
     const notesMatrix = getDashboardNotesMatrix(sheet, sessionStartCol);
 
     const memberRows = [];
+    const quickFilterMembers = [];
     let totalMembers = 0;
     let obMembers = 0;
     let ybMembers = 0;
@@ -83,10 +85,12 @@ function getAttendanceDashboardSummary(params) {
       let effectiveCount = 0;
       let totalAttendOffsetSeconds = 0;
       let validOffsetCount = 0;
+      const sessionCodes = [];
 
       closedSelectedSessions.forEach(session => {
         const cellValue = values[i][session.colIndex];
         const status = getAttendanceDetailType(cellValue, session, now);
+        sessionCodes.push(getDashboardQuickFilterStatusCode(status));
         const eventCounter = closedSessionMap[session.sessionKey];
         if (!eventCounter) return;
 
@@ -168,6 +172,17 @@ function getAttendanceDashboardSummary(params) {
         absenceRate: absenceRate,
         avgAttendOffsetSeconds: avgAttendOffsetSeconds,
         avgAttendOffset: avgAttendOffset
+      });
+      quickFilterMembers.push({
+        memberKey: member.phone,
+        name: member.name,
+        season: member.season,
+        seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
+        cohortTag: cohortTag,
+        email: member.email,
+        attendedCount: attendedCount,
+        attendanceRate: attendanceRate,
+        sessionCodes: sessionCodes.join('')
       });
     }
 
@@ -343,6 +358,11 @@ function getAttendanceDashboardSummary(params) {
           maxAttendAtMs: maxActualAttendanceMs,
           minAttendAt: minActualAttendanceMs === null ? '' : formatDateTimeMinute(new Date(minActualAttendanceMs)),
           maxAttendAt: maxActualAttendanceMs === null ? '' : formatDateTimeMinute(new Date(maxActualAttendanceMs))
+        },
+        quickFilter: {
+          version: 1,
+          closedSessionKeys: quickFilterClosedSessionKeys,
+          members: quickFilterMembers
         },
         defaultDateRange: {
           fromDate: defaultDateFrom,
@@ -846,6 +866,16 @@ function getDashboardStatusOrder(status) {
     case 'excused': return 2;
     case 'absent': return 3;
     default: return 4;
+  }
+}
+
+function getDashboardQuickFilterStatusCode(status) {
+  switch (String(status || '')) {
+    case 'on_time': return 'O';
+    case 'late': return 'L';
+    case 'absent': return 'A';
+    case 'excused': return 'E';
+    default: return '-';
   }
 }
 

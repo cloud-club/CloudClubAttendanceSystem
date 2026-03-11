@@ -65,9 +65,17 @@ function invalidateAttendanceDashboardLocalState() {
   attendanceDashboardPayload = null;
   attendanceDashboardDrilldownPayload = null;
   attendanceDashboardMemberSeriesCache = {};
+  attendanceDashboardMemberHistoryCache = {};
+  attendanceDashboardActiveSliceFilter = null;
+  attendanceDashboardActiveSliceMembers = [];
+  attendanceDashboardCountDistributionItems = [];
+  attendanceDashboardMemberHistoryModalState = null;
   attendanceDashboardLastFetchKey = '';
   attendanceDashboardLastFetchedAt = 0;
   attendanceDashboardLastRenderSignature = '';
+  if (typeof closeAttendanceDashboardMemberHistoryModal === 'function') {
+    closeAttendanceDashboardMemberHistoryModal();
+  }
 }
 
 function invalidateSeasonOperationalCaches(seasonAlias) {

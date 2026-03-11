@@ -209,6 +209,7 @@ function checkSyntax() {
     'web/admin/scripts/01_state.js',
     'web/admin/scripts/10_auth.js',
     'web/admin/scripts/20_attendance.js',
+    'web/admin/scripts/21_dashboard.js',
     'web/admin/scripts/23_import.js',
     'web/admin/scripts/28_fortune.js',
     'web/admin/scripts/99_compat_handlers.js',

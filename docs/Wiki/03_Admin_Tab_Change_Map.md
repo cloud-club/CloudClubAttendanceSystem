@@ -75,9 +75,11 @@ flowchart LR
 1. 차트 C는 **필터 대상 평균 출석시간 추이**입니다.
 2. 멤버 미선택 시 전체 평균, 1명 선택 시 사실상 개인 추이, 2명 이상 선택 시 선택 집합 평균으로 해석합니다.
 3. 멤버 선택은 KPI/랭킹/도넛 전체를 다시 계산하는 전역 필터가 아니라 **차트 C 전용 부분집합 필터**입니다.
-4. 차트 C 클릭 동작은 개인 drilldown이 아니라 **행사 drilldown**입니다.
-5. 개인 상세가 필요하면 멤버를 1명만 선택하고, 아래 드릴다운 표를 기준으로 확인합니다.
-6. 백엔드 응답의 `meta.defaultMemberKeys`는 현재 프런트 기본 선택에 사용되지 않는 **레거시 호환용 필드**로 보고, 실제 기본 상태는 `selectedMemberKeys=[]` 기준으로 해석합니다.
+4. 클릭형 빠른 필터는 `행사별 출석/지각/결석/유고 분포`, `OB/YB 구성 비율`, `출석 횟수 분포` 3개 그래프에서만 동작합니다.
+5. 하단 영역은 더 이상 이벤트/개인 drilldown 기본 표가 아니라 **빠른 멤버 필터 카드**이며, `출석일 확인` 모달만 `attendanceDashboardDrilldown(member)`를 사용합니다.
+6. `행사별 출석률`, `평균 출석 시간 추이` 차트는 hover-only이며 click drilldown을 하지 않습니다.
+7. 백엔드 응답의 `meta.defaultMemberKeys`는 현재 프런트 기본 선택에 사용되지 않는 **레거시 호환용 필드**로 보고, 실제 기본 상태는 `selectedMemberKeys=[]` 기준으로 해석합니다.
+8. `attendanceDashboardSummary.meta.quickFilter`는 하단 멤버 목록을 즉시 계산하기 위한 additive field이며, 기존 summary 계약을 대체하지 않습니다.
 
 ## 권한 체크 포인트
 권한 경계는 기능 성공 여부만큼 중요합니다. 수정 중에는 아래 조건을 항상 함께 확인해야 운영 회귀를 막을 수 있습니다.
@@ -97,8 +99,13 @@ flowchart LR
 4. `SERVER_INTEGRITY_MISSING` 분기 시 같은 deployment 재배포 절차로 복구하는지 확인
 5. `attendanceDashboardDrilldown`의 `event`, `member`, `memberAverage` 해석이 서로 충돌하지 않는지 확인
 6. 멤버 미선택 상태에서 차트 C가 비어 있지 않고 전체 평균을 렌더하는지 확인
-7. 멤버 1명 선택 시 차트 C 해석과 개인 drilldown 표가 서로 일치하는지 확인
+7. 멤버 1명 선택 시 차트 C가 개인 추이처럼 해석 가능한지 확인
 8. 멤버 2명 이상 선택 시 KPI/랭킹/도넛은 그대로 두고 차트 C만 부분집합 평균으로 변하는지 확인
+9. 행사별 출석/지각/결석/유고 분포의 stacked bar segment 클릭 시 하단 멤버 목록이 즉시 갱신되는지 확인
+10. OB/YB 구성 비율 donut 클릭 시 하단 멤버 목록이 즉시 갱신되는지 확인
+11. 출석 횟수 분포 donut의 exact bucket과 `기타` 클릭이 모두 올바른 멤버 목록을 보여주는지 확인
+12. 하단 멤버 목록의 `출석일 확인`만 API 호출을 사용하고, 같은 멤버 재조회 시 캐시가 적용되는지 확인
+13. `행사별 출석률`, `평균 출석 시간 추이` 차트는 click drilldown을 시도하지 않는지 확인
 
 ## 관련 문서
 - 관리자 가이드: [02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)

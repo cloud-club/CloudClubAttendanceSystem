@@ -2623,6 +2623,99 @@
       margin-bottom: 8px;
       line-height: 1.5;
     }
+
+    .dashboard-drilldown-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .dashboard-drilldown-text {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .dashboard-drilldown-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .dashboard-drilldown-count {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(59, 130, 246, 0.16);
+      color: #bfdbfe;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .dashboard-status-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .dashboard-status-chip.on_time {
+      background: #4ade80;
+    }
+
+    .dashboard-status-chip.late {
+      background: #fbbf24;
+    }
+
+    .dashboard-status-chip.absent {
+      background: #f87171;
+    }
+
+    .dashboard-status-chip.excused {
+      background: #93c5fd;
+    }
+
+    .dashboard-status-chip.future,
+    .dashboard-status-chip.recorded,
+    .dashboard-status-chip.empty {
+      background: #94a3b8;
+    }
+
+    .dashboard-subtext {
+      display: block;
+      margin-top: 4px;
+      color: #94a3b8;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .dashboard-member-contact {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+    }
+
+    .dashboard-member-history-modal {
+      max-width: 760px;
+    }
+
+    .dashboard-member-history-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
     
     /* Ranking Table */
     .ranking-table {
@@ -3723,21 +3816,21 @@
         <div class="dashboard-chart-grid-primary">
           <div class="dashboard-chart-card">
             <div class="dashboard-chart-title">행사별 출석률</div>
-            <div class="dashboard-chart-subtitle">hover로 상세 수치, click으로 행사 드릴다운</div>
+            <div class="dashboard-chart-subtitle">hover로 상세 수치 확인</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardEventRateChart"></canvas>
             </div>
           </div>
           <div class="dashboard-chart-card">
             <div class="dashboard-chart-title">행사별 출석/지각/결석/유고 분포</div>
-            <div class="dashboard-chart-subtitle">stacked bar 기준</div>
+            <div class="dashboard-chart-subtitle">stacked bar 기준 / 클릭 시 하단 멤버 필터</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardEventStatusChart"></canvas>
             </div>
           </div>
           <div class="dashboard-chart-card">
             <div class="dashboard-chart-title">필터 대상 평균 출석 시간 추이</div>
-            <div class="dashboard-chart-subtitle">선택 없으면 전체 평균 / 1명 선택 시 개인 추이처럼 해석</div>
+            <div class="dashboard-chart-subtitle">선택 없으면 전체 평균 / 1명 선택 시 개인 추이처럼 해석 / hover로 상세 확인</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardMemberTrendChart"></canvas>
             </div>
@@ -3754,7 +3847,7 @@
           </div>
           <div class="dashboard-chart-card dashboard-chart-card-donut">
             <div class="dashboard-chart-title">OB/YB 구성 비율</div>
-            <div class="dashboard-chart-subtitle">OB/YB/미분류 인원 비율</div>
+            <div class="dashboard-chart-subtitle">OB/YB/미분류 인원 비율 / 클릭 시 하단 멤버 필터</div>
             <div class="dashboard-canvas-wrap-square">
               <canvas id="dashboardCohortDonutChart"></canvas>
             </div>
@@ -3762,7 +3855,7 @@
           </div>
           <div class="dashboard-chart-card dashboard-chart-card-donut">
             <div class="dashboard-chart-title">출석 횟수 분포</div>
-            <div class="dashboard-chart-subtitle">현재 필터 기준 인원 분포 (정확 횟수별 + 기타)</div>
+            <div class="dashboard-chart-subtitle">현재 필터 기준 인원 분포 (정확 횟수별 + 기타) / 클릭 시 하단 멤버 필터</div>
             <div class="dashboard-canvas-wrap-square">
               <canvas id="dashboardAttendanceCountDonutChart"></canvas>
             </div>
@@ -3771,10 +3864,15 @@
         </div>
 
         <div class="dashboard-drilldown-card">
-          <div class="dashboard-drilldown-title" id="dashboardDrilldownTitle">드릴다운</div>
-          <div class="dashboard-drilldown-summary" id="dashboardDrilldownSummary">차트를 클릭하거나 개인을 선택하면 상세가 표시됩니다.</div>
+          <div class="dashboard-drilldown-head">
+            <div class="dashboard-drilldown-text">
+              <div class="dashboard-drilldown-title" id="dashboardDrilldownTitle">멤버 빠른 필터</div>
+              <div class="dashboard-drilldown-summary" id="dashboardDrilldownSummary">행사 상태 막대, OB/YB 비율, 출석 횟수 분포를 클릭하면 해당 멤버가 바로 표시됩니다.</div>
+            </div>
+            <div class="dashboard-drilldown-actions" id="dashboardDrilldownActions"></div>
+          </div>
           <div class="dashboard-table-wrap" id="dashboardDrilldownTableWrap">
-            <p class="info-text">표시할 드릴다운 데이터가 없습니다.</p>
+            <p class="info-text">활성 그래프 조각이 없습니다. 원하는 구간을 클릭해 멤버를 바로 확인하세요.</p>
           </div>
         </div>
       </div>
@@ -4413,6 +4511,19 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeScheduleDeleteForceModal()">취소</button>
         <button type="button" class="btn" onclick="submitScheduleDeleteForceModal()">강제 삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboardMemberHistoryModal" class="modal-backdrop">
+    <div class="modal-panel dashboard-member-history-modal">
+      <h3 id="dashboardMemberHistoryModalTitle">출석일 확인</h3>
+      <p id="dashboardMemberHistoryModalSummary">현재 대시보드 필터 기준 회차만 표시합니다.</p>
+      <div class="dashboard-table-wrap" id="dashboardMemberHistoryModalBody">
+        <p class="info-text">표시할 출석 기록이 없습니다.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeAttendanceDashboardMemberHistoryModal()">닫기</button>
       </div>
     </div>
   </div>
