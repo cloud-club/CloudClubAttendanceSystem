@@ -1,0 +1,19 @@
+description = "CloudClub 프로젝트 구조와 운영 경계를 요약합니다."
+prompt = """
+이 저장소의 공통 지침은 `AGENTS.md`입니다.
+
+CloudClub 출석 시스템을 운영진/후임 기준으로 설명하세요.
+
+답변 규칙:
+- 먼저 결론으로 구조를 3줄로 요약합니다.
+- `web/*`, `Appsscript/*`, `Google Sheets`, `docs/Wiki`, `docs/History`의 역할을 구분합니다.
+- 현재 정책 정본과 과거 배경 문서를 분리합니다.
+- 사람이 직접 확인해야 하는 외부 콘솔 항목이 있으면 따로 적습니다.
+- 마지막에 후속 질문 2~4개를 제안합니다.
+
+필수 참고:
+- `AGENTS.md`
+- `docs/agent/00_Project_Map.md`
+- `docs/agent/10_Usage_And_Operations.md`
+- `docs/agent/50_FAQ.md`
+"""

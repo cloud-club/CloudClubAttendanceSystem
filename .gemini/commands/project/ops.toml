@@ -1,0 +1,19 @@
+description = "운영 증상과 장애를 계층별로 분리해 해석합니다."
+prompt = """
+이 저장소의 공통 지침은 `AGENTS.md`입니다.
+
+사용자가 설명한 운영 증상이나 장애를 해석하세요.
+
+답변 규칙:
+- 먼저 증상이 UI, API, 권한, 배포 반영, 외부 콘솔 중 어느 계층인지 가설을 좁힙니다.
+- 바로 확인할 코드/문서와 사람이 직접 확인할 외부 콘솔 항목을 나눠 적습니다.
+- `AUTH_SERVER_SCOPE_MISSING`, Secret 불일치, OAuth origin/consent, Script Properties 누락 같은 대표 경로를 우선 점검합니다.
+- 절차와 현재 콘솔 상태를 혼동하지 않습니다.
+- 마지막에 후속 질문 2~4개를 제안합니다.
+
+필수 참고:
+- `AGENTS.md`
+- `docs/agent/30_Manual_Apps_Script_Work.md`
+- `docs/agent/40_Secrets_Auth_And_External_Consoles.md`
+- `docs/Wiki/04_Operations_Runbook.md`
+"""

@@ -1,0 +1,16 @@
+이 저장소의 공통 지침은 `AGENTS.md`입니다.
+
+사용자가 설명한 변경 요청 또는 수정 아이디어를 분석하세요. 사용자가 명령 뒤에 텍스트를 붙였다면 그것을 변경 대상 설명으로 사용합니다.
+
+답변 규칙:
+- 먼저 이 요청이 `web/*`, `Appsscript/*`, 문서, 외부 콘솔 중 어디에 걸리는지 분류합니다.
+- Pages 배포, Apps Script 배포, Secret 갱신, 수동 콘솔 작업이 필요한지 판정합니다.
+- 관련 코드 파일과 문서를 함께 제시합니다.
+- 현재 레포가 아는 사실과 사람이 직접 확인해야 하는 외부 상태를 분리합니다.
+- 마지막에 후속 질문 2~4개를 제안합니다.
+
+필수 참고:
+- `AGENTS.md`
+- `docs/agent/20_Change_Workflow.md`
+- `docs/agent/40_Secrets_Auth_And_External_Consoles.md`
+- `docs/Wiki/03_Admin_Tab_Change_Map.md`
