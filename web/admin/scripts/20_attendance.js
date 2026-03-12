@@ -68,6 +68,8 @@ function invalidateAttendanceDashboardLocalState() {
   attendanceDashboardMemberHistoryCache = {};
   attendanceDashboardActiveSliceFilter = null;
   attendanceDashboardActiveSliceMembers = [];
+  attendanceDashboardActiveStatusRankingRows = [];
+  attendanceDashboardActiveDrilldownMode = '';
   attendanceDashboardCountDistributionItems = [];
   attendanceDashboardMemberHistoryModalState = null;
   attendanceDashboardLastFetchKey = '';

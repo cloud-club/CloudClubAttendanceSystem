@@ -85,6 +85,10 @@ function getAttendanceDashboardSummary(params) {
       let effectiveCount = 0;
       let totalAttendOffsetSeconds = 0;
       let validOffsetCount = 0;
+      let onTimeOffsetTotalSeconds = 0;
+      let onTimeOffsetValidCount = 0;
+      let lateOffsetTotalSeconds = 0;
+      let lateOffsetValidCount = 0;
       const sessionCodes = [];
 
       closedSelectedSessions.forEach(session => {
@@ -134,6 +138,13 @@ function getAttendanceDashboardSummary(params) {
           if (diffSec >= minAllowed && diffSec <= maxAllowed) {
             totalAttendOffsetSeconds += diffSec;
             validOffsetCount++;
+            if (status === 'late') {
+              lateOffsetTotalSeconds += diffSec;
+              lateOffsetValidCount++;
+            } else {
+              onTimeOffsetTotalSeconds += diffSec;
+              onTimeOffsetValidCount++;
+            }
           }
           return;
         }
@@ -154,6 +165,10 @@ function getAttendanceDashboardSummary(params) {
       const absenceRate = effectiveCount > 0 ? Math.round((absentCount / effectiveCount) * 100) : 0;
       const avgAttendOffsetSeconds = validOffsetCount > 0 ? Math.round(totalAttendOffsetSeconds / validOffsetCount) : null;
       const avgAttendOffset = avgAttendOffsetSeconds === null ? '미출석' : formatSignedOffset(avgAttendOffsetSeconds);
+      const onTimeAvgOffsetSeconds = onTimeOffsetValidCount > 0 ? Math.round(onTimeOffsetTotalSeconds / onTimeOffsetValidCount) : null;
+      const onTimeAvgOffset = onTimeAvgOffsetSeconds === null ? '미출석' : formatSignedOffset(onTimeAvgOffsetSeconds);
+      const lateAvgOffsetSeconds = lateOffsetValidCount > 0 ? Math.round(lateOffsetTotalSeconds / lateOffsetValidCount) : null;
+      const lateAvgOffset = lateAvgOffsetSeconds === null ? '미출석' : formatSignedOffset(lateAvgOffsetSeconds);
 
       memberRows.push({
         memberKey: member.phone,
@@ -171,7 +186,11 @@ function getAttendanceDashboardSummary(params) {
         lateRate: lateRate,
         absenceRate: absenceRate,
         avgAttendOffsetSeconds: avgAttendOffsetSeconds,
-        avgAttendOffset: avgAttendOffset
+        avgAttendOffset: avgAttendOffset,
+        onTimeAvgOffsetSeconds: onTimeAvgOffsetSeconds,
+        onTimeAvgOffset: onTimeAvgOffset,
+        lateAvgOffsetSeconds: lateAvgOffsetSeconds,
+        lateAvgOffset: lateAvgOffset
       });
       quickFilterMembers.push({
         memberKey: member.phone,
@@ -182,7 +201,15 @@ function getAttendanceDashboardSummary(params) {
         email: member.email,
         attendedCount: attendedCount,
         attendanceRate: attendanceRate,
-        sessionCodes: sessionCodes.join('')
+        sessionCodes: sessionCodes.join(''),
+        onTimeCount: attendedCount - lateCount,
+        lateCount: lateCount,
+        absentCount: absentCount,
+        excusedCount: excusedCount,
+        onTimeAvgOffsetSeconds: onTimeAvgOffsetSeconds,
+        onTimeAvgOffset: onTimeAvgOffset,
+        lateAvgOffsetSeconds: lateAvgOffsetSeconds,
+        lateAvgOffset: lateAvgOffset
       });
     }
 
@@ -360,7 +387,7 @@ function getAttendanceDashboardSummary(params) {
           maxAttendAt: maxActualAttendanceMs === null ? '' : formatDateTimeMinute(new Date(maxActualAttendanceMs))
         },
         quickFilter: {
-          version: 1,
+          version: 2,
           closedSessionKeys: quickFilterClosedSessionKeys,
           members: quickFilterMembers
         },

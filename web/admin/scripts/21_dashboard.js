@@ -279,12 +279,19 @@ function formatDashboardPhoneDisplay(value) {
 }
 
 function getAttendanceDashboardQuickFilterMeta() {
-  return attendanceDashboardPayload
+  const quickFilter = attendanceDashboardPayload
     && attendanceDashboardPayload.meta
     && attendanceDashboardPayload.meta.quickFilter
-    && attendanceDashboardPayload.meta.quickFilter.version === 1
     ? attendanceDashboardPayload.meta.quickFilter
     : null;
+  const version = Number(quickFilter && quickFilter.version || 0);
+  return quickFilter && version >= 1 ? quickFilter : null;
+}
+
+function getAttendanceDashboardQuickFilterVersion() {
+  const meta = getAttendanceDashboardQuickFilterMeta();
+  const version = Number(meta && meta.version || 0);
+  return isNaN(version) ? 0 : version;
 }
 
 function getAttendanceDashboardQuickFilterMembers() {
@@ -345,6 +352,119 @@ function sortAttendanceDashboardSliceMembers(rows) {
   });
 }
 
+function getAttendanceDashboardDrilldownMode() {
+  const mode = String(attendanceDashboardActiveDrilldownMode || '').trim();
+  return mode === 'statusRanking' || mode === 'memberList' ? mode : '';
+}
+
+function hasAttendanceDashboardStatusRankingSupport() {
+  if (getAttendanceDashboardQuickFilterVersion() < 2) {
+    return false;
+  }
+  const members = getAttendanceDashboardQuickFilterMembers();
+  const sample = members.find(Boolean);
+  if (!sample) {
+    return !!getAttendanceDashboardQuickFilterMeta();
+  }
+  return Object.prototype.hasOwnProperty.call(sample, 'onTimeCount')
+    && Object.prototype.hasOwnProperty.call(sample, 'lateCount')
+    && Object.prototype.hasOwnProperty.call(sample, 'absentCount')
+    && Object.prototype.hasOwnProperty.call(sample, 'excusedCount')
+    && Object.prototype.hasOwnProperty.call(sample, 'onTimeAvgOffsetSeconds')
+    && Object.prototype.hasOwnProperty.call(sample, 'lateAvgOffsetSeconds');
+}
+
+function getDashboardStatusRankingCount(member, statusKey) {
+  const source = member || {};
+  switch (String(statusKey || '')) {
+    case 'on_time': return Number(source.onTimeCount || 0);
+    case 'late': return Number(source.lateCount || 0);
+    case 'absent': return Number(source.absentCount || 0);
+    case 'excused': return Number(source.excusedCount || 0);
+    default: return 0;
+  }
+}
+
+function getDashboardStatusRankingOffsetSeconds(member, statusKey) {
+  const source = member || {};
+  switch (String(statusKey || '')) {
+    case 'on_time': return source.onTimeAvgOffsetSeconds;
+    case 'late': return source.lateAvgOffsetSeconds;
+    default: return null;
+  }
+}
+
+function getDashboardStatusRankingOffsetLabel(member, statusKey) {
+  const source = member || {};
+  switch (String(statusKey || '')) {
+    case 'on_time': return source.onTimeAvgOffset || '-';
+    case 'late': return source.lateAvgOffset || '-';
+    default: return '-';
+  }
+}
+
+function getDashboardStatusRankingSummaryText(statusKey, count) {
+  const total = Number(count || 0);
+  switch (String(statusKey || '')) {
+    case 'on_time':
+      return `현재 대시보드 필터 기준 정시 출석 랭킹 ${total}명 / 정시 출석 횟수 내림차순, 동률이면 평균 정시 출석 오프셋이 더 빠른 순`;
+    case 'late':
+      return `현재 대시보드 필터 기준 지각 랭킹 ${total}명 / 지각 횟수 내림차순, 동률이면 평균 지각 오프셋이 더 늦은 순`;
+    case 'absent':
+      return `현재 대시보드 필터 기준 결석 랭킹 ${total}명 / 결석 횟수 내림차순`;
+    case 'excused':
+      return `현재 대시보드 필터 기준 유고 랭킹 ${total}명 / 유고 사용 횟수 내림차순`;
+    default:
+      return `현재 대시보드 필터 기준 상태별 랭킹 ${total}명`;
+  }
+}
+
+function sortAttendanceDashboardStatusRankingRows(statusKey, rows) {
+  const normalizedStatusKey = String(statusKey || '');
+  return (Array.isArray(rows) ? rows.slice() : []).sort((a, b) => {
+    const aCount = Number(a && a.count || 0);
+    const bCount = Number(b && b.count || 0);
+    if (bCount !== aCount) {
+      return bCount - aCount;
+    }
+
+    if (normalizedStatusKey === 'on_time' || normalizedStatusKey === 'late') {
+      const aRaw = a && a.offsetSeconds;
+      const bRaw = b && b.offsetSeconds;
+      const aMissing = aRaw === null || aRaw === undefined || isNaN(Number(aRaw));
+      const bMissing = bRaw === null || bRaw === undefined || isNaN(Number(bRaw));
+      if (aMissing && !bMissing) return 1;
+      if (!aMissing && bMissing) return -1;
+      if (!aMissing && !bMissing) {
+        const aOffset = Number(aRaw);
+        const bOffset = Number(bRaw);
+        if (aOffset !== bOffset) {
+          return normalizedStatusKey === 'late'
+            ? bOffset - aOffset
+            : aOffset - bOffset;
+        }
+      }
+    }
+
+    const nameDiff = String(a && a.name || '').localeCompare(String(b && b.name || ''), 'ko');
+    if (nameDiff !== 0) return nameDiff;
+    return String(a && a.memberKey || '').localeCompare(String(b && b.memberKey || ''));
+  }).map((item, index) => Object.assign({}, item, { rank: index + 1 }));
+}
+
+function buildAttendanceDashboardStatusRankingRows(statusKey) {
+  const normalizedStatusKey = String(statusKey || '').trim();
+  return sortAttendanceDashboardStatusRankingRows(normalizedStatusKey, getAttendanceDashboardQuickFilterMembers().map(member => ({
+    memberKey: member.memberKey,
+    name: member.name,
+    season: member.season,
+    seasonLabel: member.seasonLabel,
+    count: getDashboardStatusRankingCount(member, normalizedStatusKey),
+    offsetSeconds: getDashboardStatusRankingOffsetSeconds(member, normalizedStatusKey),
+    offsetLabel: getDashboardStatusRankingOffsetLabel(member, normalizedStatusKey)
+  })).filter(row => Number(row.count || 0) > 0));
+}
+
 function clearAttendanceDashboardMemberHistoryCache() {
   attendanceDashboardMemberHistoryCache = {};
 }
@@ -353,6 +473,8 @@ function resetAttendanceDashboardSliceUiState(options) {
   const opts = options || {};
   attendanceDashboardActiveSliceFilter = null;
   attendanceDashboardActiveSliceMembers = [];
+  attendanceDashboardActiveStatusRankingRows = [];
+  attendanceDashboardActiveDrilldownMode = '';
   if (opts.clearHistoryCache !== false) {
     clearAttendanceDashboardMemberHistoryCache();
   }
@@ -369,15 +491,71 @@ function toggleAttendanceDashboardActiveSlice(filter, members) {
   const currentId = attendanceDashboardActiveSliceFilter && attendanceDashboardActiveSliceFilter.id
     ? String(attendanceDashboardActiveSliceFilter.id)
     : '';
-  if (nextId && nextId === currentId) {
+  if (nextId && nextId === currentId && getAttendanceDashboardDrilldownMode() === 'memberList') {
     resetAttendanceDashboardSliceUiState();
     return;
   }
 
   attendanceDashboardActiveSliceFilter = filter || null;
   attendanceDashboardActiveSliceMembers = sortAttendanceDashboardSliceMembers(members);
+  attendanceDashboardActiveStatusRankingRows = [];
+  attendanceDashboardActiveDrilldownMode = filter ? 'memberList' : '';
   closeAttendanceDashboardMemberHistoryModal();
   renderAttendanceDashboardSliceMembers();
+}
+
+function toggleAttendanceDashboardStatusRanking(filter, rows) {
+  const nextId = filter && filter.id ? String(filter.id) : '';
+  const currentId = attendanceDashboardActiveSliceFilter && attendanceDashboardActiveSliceFilter.id
+    ? String(attendanceDashboardActiveSliceFilter.id)
+    : '';
+  if (nextId && nextId === currentId && getAttendanceDashboardDrilldownMode() === 'statusRanking') {
+    resetAttendanceDashboardSliceUiState();
+    return;
+  }
+
+  attendanceDashboardActiveSliceFilter = filter || null;
+  attendanceDashboardActiveSliceMembers = [];
+  attendanceDashboardActiveStatusRankingRows = Array.isArray(rows) ? rows.slice() : [];
+  attendanceDashboardActiveDrilldownMode = filter ? 'statusRanking' : '';
+  closeAttendanceDashboardMemberHistoryModal();
+  renderAttendanceDashboardSliceMembers();
+}
+
+async function applyAttendanceDashboardStatusRankingSlice(statusKey, options) {
+  const opts = options || {};
+  if (!getAttendanceDashboardQuickFilterMeta()) {
+    showToast('<i class="fas fa-info-circle"></i> 빠른 필터 인덱스를 찾을 수 없습니다. Apps Script를 먼저 배포했는지 확인해주세요.', true);
+    return;
+  }
+  if (getAttendanceDashboardQuickFilterVersion() < 2) {
+    if (!opts.skipRefreshAttempt) {
+      showToast('<i class="fas fa-sync-alt"></i> 상태별 랭킹 데이터를 최신 요약으로 다시 불러오는 중입니다.', true);
+      await loadAttendanceDashboard({ forceReload: true });
+      return applyAttendanceDashboardStatusRankingSlice(statusKey, { skipRefreshAttempt: true });
+    }
+    showToast('<i class="fas fa-info-circle"></i> 상태별 랭킹 인덱스를 찾을 수 없습니다. Apps Script를 먼저 배포했는지 확인해주세요.', true);
+    return;
+  }
+  if (!hasAttendanceDashboardStatusRankingSupport()) {
+    showToast('<i class="fas fa-info-circle"></i> 상태별 랭킹 인덱스를 찾을 수 없습니다. Apps Script를 먼저 배포했는지 확인해주세요.', true);
+    return;
+  }
+
+  const normalizedStatusKey = String(statusKey || '').trim();
+  if (!normalizedStatusKey) return;
+  const rankingRows = buildAttendanceDashboardStatusRankingRows(normalizedStatusKey);
+  const statusLabel = formatDashboardStatus(normalizedStatusKey);
+  const filterLabel = normalizedStatusKey === 'on_time'
+    ? `${statusLabel}(정시) 랭킹`
+    : `${statusLabel} 랭킹`;
+  toggleAttendanceDashboardStatusRanking({
+    id: `status-ranking:${normalizedStatusKey}`,
+    type: 'statusRanking',
+    statusKey: normalizedStatusKey,
+    label: filterLabel,
+    summary: getDashboardStatusRankingSummaryText(normalizedStatusKey, rankingRows.length)
+  }, rankingRows);
 }
 
 function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
@@ -459,27 +637,80 @@ function renderAttendanceDashboardSliceMembers() {
   if (!wrap || !title || !summary || !actions) return;
 
   const activeFilter = attendanceDashboardActiveSliceFilter;
+  const activeMode = getAttendanceDashboardDrilldownMode();
   const activeMembers = Array.isArray(attendanceDashboardActiveSliceMembers)
     ? attendanceDashboardActiveSliceMembers
     : [];
+  const activeRankingRows = Array.isArray(attendanceDashboardActiveStatusRankingRows)
+    ? attendanceDashboardActiveStatusRankingRows
+    : [];
 
-  if (!activeFilter) {
-    title.textContent = '멤버 빠른 필터';
-    summary.textContent = '행사 상태 막대, OB/YB 비율, 출석 횟수 분포를 클릭하면 해당 멤버가 바로 표시됩니다.';
+  if (!activeFilter || !activeMode) {
+    title.textContent = '대시보드 드릴다운';
+    summary.textContent = '출석 상태 비율은 하단 상태별 랭킹, 행사 상태 막대/OB-YB 비율/출석 횟수 분포는 하단 멤버 목록으로 연결됩니다.';
     actions.innerHTML = '';
-    wrap.innerHTML = '<p class="info-text">활성 그래프 조각이 없습니다. 원하는 구간을 클릭해 멤버를 바로 확인하세요.</p>';
+    wrap.innerHTML = '<p class="info-text">활성 그래프 조각이 없습니다. 상태 비율은 랭킹, 나머지 3개 그래프는 멤버 목록으로 바로 확인할 수 있습니다.</p>';
     return;
   }
 
-  title.textContent = activeFilter.label || '멤버 빠른 필터';
+  title.textContent = activeFilter.label || '대시보드 드릴다운';
   summary.textContent = activeFilter.summary || '선택된 그래프 구간에 해당하는 멤버 목록입니다.';
   actions.innerHTML = `
-    <span class="dashboard-drilldown-count">${activeMembers.length}명</span>
+    <span class="dashboard-drilldown-count">${activeMode === 'statusRanking' ? activeRankingRows.length : activeMembers.length}명</span>
     <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:12px;" onclick="resetAttendanceDashboardSliceUiState()">
       <i class="fas fa-rotate-left"></i>
       <span>필터 해제</span>
     </button>
   `;
+
+  if (activeMode === 'statusRanking') {
+    if (activeRankingRows.length === 0) {
+      wrap.innerHTML = '<p class="info-text">선택한 상태에 해당하는 멤버가 없습니다.</p>';
+      return;
+    }
+
+    const rowsHtml = activeRankingRows.map(row => {
+      const rankDisplay = Number(row.rank || 0) <= 3
+        ? `<span class="rank-medal rank-${Number(row.rank || 0)}">${Number(row.rank || 0)}</span>`
+        : `<span style="color: #94a3b8;">${Number(row.rank || 0)}</span>`;
+      const offsetLabel = String(row.offsetLabel || '-').trim() || '-';
+      const offsetDisplay = offsetLabel === '-' || offsetLabel === '미출석'
+        ? '<span style="color: #64748b;">-</span>'
+        : `<span style="color: #60a5fa;">${escapeHtml(offsetLabel)}</span>`;
+      return `
+        <tr>
+          <td>${rankDisplay}</td>
+          <td><span class="grade-badge">${escapeHtml(row.seasonLabel || '-')}</span></td>
+          <td>${escapeHtml(row.name || row.memberKey || '-')}</td>
+          <td>${Number(row.count || 0)}회</td>
+          <td>${offsetDisplay}</td>
+          <td>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:12px;" onclick="openAttendanceDashboardMemberHistoryModal('${encodeURIComponent(row.memberKey || '')}')">
+              <i class="fas fa-calendar-check"></i>
+              <span>출석일 확인</span>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table class="dashboard-table">
+        <thead>
+          <tr>
+            <th>순위</th>
+            <th>기수</th>
+            <th>이름</th>
+            <th>횟수</th>
+            <th>보조시간</th>
+            <th>출석일 확인</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `;
+    return;
+  }
 
   if (activeMembers.length === 0) {
     wrap.innerHTML = '<p class="info-text">선택한 조건에 해당하는 멤버가 없습니다.</p>';
@@ -1102,7 +1333,19 @@ function renderAttendanceDashboardStatusDonutChart(payload) {
     'dashboardStatusDonutEmpty',
     ['출석', '지각', '결석', '유고'],
     values,
-    ['#4ade80', '#fbbf24', '#f87171', '#93c5fd']
+    ['#4ade80', '#fbbf24', '#f87171', '#93c5fd'],
+    {
+      meta: [
+        { statusKey: 'on_time', label: '출석' },
+        { statusKey: 'late', label: '지각' },
+        { statusKey: 'absent', label: '결석' },
+        { statusKey: 'excused', label: '유고' }
+      ],
+      onSliceClick(meta) {
+        if (!meta || !meta.statusKey) return;
+        applyAttendanceDashboardStatusRankingSlice(meta.statusKey);
+      }
+    }
   );
 
   if (!hasValue) {
@@ -2360,6 +2603,23 @@ function downloadAttendanceDashboardCsv() {
   const timestamp = new Date();
   const stamp = `${timestamp.getFullYear()}${String(timestamp.getMonth() + 1).padStart(2, '0')}${String(timestamp.getDate()).padStart(2, '0')}_${String(timestamp.getHours()).padStart(2, '0')}${String(timestamp.getMinutes()).padStart(2, '0')}`;
 
+  if (attendanceDashboardActiveSliceFilter && getAttendanceDashboardDrilldownMode() === 'statusRanking') {
+    const headers = ['rank', 'seasonLabel', 'name', 'phone', 'count', 'offsetLabel', 'sliceLabel'];
+    const rows = (Array.isArray(attendanceDashboardActiveStatusRankingRows) ? attendanceDashboardActiveStatusRankingRows : []).map(row => [
+      Number(row.rank || 0),
+      row.seasonLabel || '',
+      row.name || '',
+      formatDashboardPhoneDisplay(row.memberKey || ''),
+      Number(row.count || 0),
+      row.offsetLabel || '-',
+      attendanceDashboardActiveSliceFilter && attendanceDashboardActiveSliceFilter.label
+        ? attendanceDashboardActiveSliceFilter.label
+        : ''
+    ]);
+    downloadCsvFile(`${season}_dashboard_status_ranking_${stamp}.csv`, headers, rows);
+    return;
+  }
+
   if (attendanceDashboardActiveSliceFilter) {
     const headers = ['seasonLabel', 'name', 'phone', 'email', 'cohortTag', 'attendanceRate', 'attendedCount', 'sliceLabel'];
     const rows = (Array.isArray(attendanceDashboardActiveSliceMembers) ? attendanceDashboardActiveSliceMembers : []).map(member => [
@@ -2415,7 +2675,7 @@ async function loadAttendanceDashboard(options) {
 
   const filterParams = getAttendanceDashboardApiFilterParams();
   const fetchKey = buildAttendanceDashboardFetchKey(season, filterParams);
-  if (attendanceDashboardLastFetchKey && attendanceDashboardLastFetchKey !== fetchKey) {
+  if (opts.forceReload || (attendanceDashboardLastFetchKey && attendanceDashboardLastFetchKey !== fetchKey)) {
     resetAttendanceDashboardSliceUiState({ render: true });
   }
   const now = Date.now();
