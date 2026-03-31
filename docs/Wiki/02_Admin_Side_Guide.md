@@ -134,6 +134,8 @@ flowchart LR
 
 또 하나 중요한 해석 포인트는 `출석 상태 비율` 도넛의 `출석`이 전체 출석이 아니라 **정시 출석(on_time)** 기준 랭킹이라는 점입니다. 개인 회차 이력이 정말 필요할 때는 하단 결과의 `출석일 확인` 버튼을 사용하면 되고, 이 모달은 항상 **현재 대시보드 필터 기준 회차만** 보여준다고 안내하는 것이 맞습니다. 인증 만료가 발생했을 때는 일반 에러 원인을 추측하기보다 `handleUnauthorizedError` 경로로 로그인 게이트가 정상 복귀하는지부터 확인하는 것이 운영상 더 안전합니다.
 
+최근 기준에서는 `행사별 출석/지각/결석/유고 분포`의 막대를 눌렀을 때 하단 멤버 목록에 **`출석 시간` 컬럼이 추가로 보이는 것**도 운영상 중요합니다. 이 컬럼은 full timestamp가 아니라 `HH:MM`만 보여주며, 이미 날짜 정보는 회차/일시 영역에 있으므로 현장에서 “누가 몇 시쯤 들어왔는지”를 빠르게 읽게 하는 용도입니다. 실제 출석 기록이 없는 `결석/유고/미확정` 행은 `-`로 보이는 것이 맞고, `출석/지각`만 시간값을 가진다고 이해하면 됩니다.
+
 #### 수정 시 확인 파일
 - [web/admin/index.html](../../web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
 - [web/admin/scripts/20_attendance.js](../../web/admin/scripts/20_attendance.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/20_attendance.js)

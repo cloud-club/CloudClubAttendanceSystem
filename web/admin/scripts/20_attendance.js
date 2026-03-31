@@ -66,6 +66,7 @@ function invalidateAttendanceDashboardLocalState() {
   attendanceDashboardDrilldownPayload = null;
   attendanceDashboardMemberSeriesCache = {};
   attendanceDashboardMemberHistoryCache = {};
+  attendanceDashboardEventDrilldownCache = {};
   attendanceDashboardActiveSliceFilter = null;
   attendanceDashboardActiveSliceMembers = [];
   attendanceDashboardActiveStatusRankingRows = [];

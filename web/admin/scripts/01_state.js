@@ -71,6 +71,7 @@ let attendanceDashboardPayload = null;
 let attendanceDashboardDrilldownPayload = null;
 let attendanceDashboardMemberSeriesCache = {};
 let attendanceDashboardMemberHistoryCache = {};
+let attendanceDashboardEventDrilldownCache = {};
 let attendanceDashboardEventRateChart = null;
 let attendanceDashboardEventStatusChart = null;
 let attendanceDashboardMemberTrendChart = null;
