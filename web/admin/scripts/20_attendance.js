@@ -896,11 +896,69 @@ function initializeManualApproveUi() {
   renderManualMemberList();
 }
 
+function getManualSessionDateKey(item) {
+  const directDateKey = String(item && item.dateKey || '').trim();
+  if (directDateKey) {
+    return directDateKey;
+  }
+  return getDateKeyFromMs(item && item.startTime);
+}
+
+function getClosestManualSessionItem(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (list.length === 0) return null;
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const todayDate = parseDateKeyToDate(getDateKeyFromDate(new Date()));
+  const nowMs = Date.now();
+  let bestItem = list[0];
+  let bestRank = null;
+
+  list.forEach(item => {
+    const dateKey = getManualSessionDateKey(item);
+    const sessionDate = parseDateKeyToDate(dateKey);
+    const startMs = Number(item && item.startTime || 0);
+    let rank = null;
+
+    if (todayDate && sessionDate) {
+      const diffDays = Math.round((sessionDate.getTime() - todayDate.getTime()) / dayMs);
+      rank = [
+        0,
+        Math.abs(diffDays),
+        diffDays < 0 ? 1 : 0,
+        startMs || Number.POSITIVE_INFINITY
+      ];
+    } else {
+      rank = [
+        1,
+        startMs ? Math.abs(startMs - nowMs) : Number.POSITIVE_INFINITY,
+        startMs && startMs >= nowMs ? 0 : 1,
+        startMs || Number.POSITIVE_INFINITY
+      ];
+    }
+
+    if (!bestRank) {
+      bestItem = item;
+      bestRank = rank;
+      return;
+    }
+
+    for (let i = 0; i < rank.length; i += 1) {
+      if (rank[i] === bestRank[i]) continue;
+      if (rank[i] < bestRank[i]) {
+        bestItem = item;
+        bestRank = rank;
+      }
+      return;
+    }
+  });
+
+  return bestItem;
+}
+
 function populateManualSessionSelect(items) {
   const select = document.getElementById('manualSessionSelect');
   if (!select) return;
-
-  const previousValue = manualApproveState.sessionKey || String(select.value || '').trim();
   select.innerHTML = '';
 
   if (!items || items.length === 0) {
@@ -919,8 +977,8 @@ function populateManualSessionSelect(items) {
     select.appendChild(opt);
   });
 
-  const hasPrevious = items.some(item => item.sessionKey === previousValue);
-  select.value = hasPrevious ? previousValue : items[0].sessionKey;
+  const targetItem = getClosestManualSessionItem(items);
+  select.value = targetItem && targetItem.sessionKey ? targetItem.sessionKey : items[0].sessionKey;
   manualApproveState.sessionKey = String(select.value || '').trim();
   syncManualApproveSubmitState();
 }
