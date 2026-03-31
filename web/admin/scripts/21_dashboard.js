@@ -5,6 +5,7 @@ function getDefaultAttendanceDashboardState() {
     dateTo: '',
     sessionSearch: '',
     sessionKeys: [],
+    sessionScopeMode: 'auto',
     topN: 10,
     sortBy: 'attendanceRate',
     chartType: 'bar',
@@ -25,6 +26,7 @@ function normalizeAttendanceDashboardState(rawState) {
     dateTo: /^\d{4}-\d{2}-\d{2}$/.test(String(source.dateTo || '')) ? String(source.dateTo || '') : '',
     sessionSearch: String(source.sessionSearch || '').trim(),
     sessionKeys: Array.isArray(source.sessionKeys) ? source.sessionKeys.map(v => String(v || '').trim()).filter(v => !!v) : [],
+    sessionScopeMode: String(source.sessionScopeMode || '').toLowerCase() === 'manual' ? 'manual' : 'auto',
     topN: Math.max(1, Math.min(30, parseInt(String(source.topN || base.topN), 10) || base.topN)),
     sortBy: ['attendanceRate', 'absenceRate', 'participants'].includes(String(source.sortBy || ''))
       ? String(source.sortBy || '')
@@ -74,11 +76,15 @@ function readAttendanceDashboardStateFromQuery() {
     if (query.has('dash_to')) state.dateTo = query.get('dash_to');
     if (query.has('dash_session_q')) state.sessionSearch = query.get('dash_session_q');
     if (query.has('dash_sessions')) state.sessionKeys = String(query.get('dash_sessions') || '').split(',').map(v => v.trim()).filter(v => !!v);
+    if (query.has('dash_scope')) state.sessionScopeMode = query.get('dash_scope');
     if (query.has('dash_top')) state.topN = query.get('dash_top');
     if (query.has('dash_sort')) state.sortBy = query.get('dash_sort');
     if (query.has('dash_chart')) state.chartType = query.get('dash_chart');
     if (query.has('dash_members')) state.selectedMemberKeys = String(query.get('dash_members') || '').split(',').map(v => v.trim()).filter(v => !!v);
     if (query.has('dash_member_q')) state.memberSearch = query.get('dash_member_q');
+    if (!state.sessionScopeMode && (state.dateFrom || state.dateTo || (state.sessionKeys && state.sessionKeys.length > 0))) {
+      state.sessionScopeMode = 'manual';
+    }
     return Object.keys(state).length > 0 ? normalizeAttendanceDashboardState(state) : null;
   } catch (error) {
     return null;
@@ -101,6 +107,7 @@ function buildAttendanceDashboardShareUrl() {
   setOrDelete('dash_to', state.dateTo);
   setOrDelete('dash_session_q', state.sessionSearch);
   setOrDelete('dash_sessions', state.sessionKeys.join(','));
+  setOrDelete('dash_scope', state.sessionScopeMode === 'manual' ? 'manual' : '');
   setOrDelete('dash_top', state.topN);
   setOrDelete('dash_sort', state.sortBy);
   setOrDelete('dash_chart', state.chartType);
@@ -181,6 +188,7 @@ function collectAttendanceDashboardStateFromControls() {
     dateTo: dateToInput ? dateToInput.value : attendanceDashboardState.dateTo,
     sessionSearch: sessionSearchInput ? sessionSearchInput.value : attendanceDashboardState.sessionSearch,
     sessionKeys: sessionKeys.length > 0 ? sessionKeys : attendanceDashboardState.sessionKeys,
+    sessionScopeMode: attendanceDashboardState.sessionScopeMode || 'auto',
     topN: topNSelect ? topNSelect.value : attendanceDashboardState.topN,
     sortBy: sortBySelect ? sortBySelect.value : attendanceDashboardState.sortBy,
     chartType: chartTypeSelect ? chartTypeSelect.value : attendanceDashboardState.chartType,
@@ -580,6 +588,8 @@ function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
   toggleAttendanceDashboardActiveSlice({
     id: `event-status:${sessionKey}:${statusKey}`,
     type: 'eventStatus',
+    sessionKey: String(sessionKey || ''),
+    statusKey: String(statusKey || ''),
     label: `${sessionKey} / ${statusLabel}`,
     summary: statusKey === 'pending'
       ? `회차 ${sessionKey}에서 아직 출석하지 않은 멤버 ${matchedMembers.length}명`
@@ -602,6 +612,7 @@ function applyAttendanceDashboardCohortSlice(cohortTag) {
   toggleAttendanceDashboardActiveSlice({
     id: `cohort:${normalizedTag}`,
     type: 'cohort',
+    cohortTag: normalizedTag,
     label: `${badge} 구성 멤버`,
     summary: `${badge}로 분류된 멤버 ${matchedMembers.length}명`
   }, matchedMembers);
@@ -631,9 +642,55 @@ function applyAttendanceDashboardAttendanceCountSlice(item) {
       ? `attendance-count:other:${(target.counts || []).join(',')}`
       : `attendance-count:${target.count}`,
     type: 'attendanceCount',
+    count: target.count,
+    counts: Array.isArray(target.counts) ? target.counts.slice() : [],
+    isOther: !!target.isOther,
     label: label,
     summary: `${target.label || label}에 해당하는 멤버 ${matchedMembers.length}명`
   }, matchedMembers);
+}
+
+function captureAttendanceDashboardActiveSliceSnapshot() {
+  const filter = attendanceDashboardActiveSliceFilter || null;
+  const mode = getAttendanceDashboardDrilldownMode();
+  if (!filter || !mode) return null;
+  return {
+    id: filter.id || '',
+    type: filter.type || '',
+    mode: mode,
+    statusKey: filter.statusKey || '',
+    sessionKey: filter.sessionKey || '',
+    cohortTag: filter.cohortTag || '',
+    count: filter.count,
+    counts: Array.isArray(filter.counts) ? filter.counts.slice() : [],
+    isOther: !!filter.isOther
+  };
+}
+
+function restoreAttendanceDashboardActiveSliceSnapshot(snapshot) {
+  if (!snapshot || !snapshot.type) return false;
+
+  if (snapshot.type === 'statusRanking' && snapshot.statusKey) {
+    applyAttendanceDashboardStatusRankingSlice(snapshot.statusKey, { skipRefreshAttempt: true });
+    return true;
+  }
+  if (snapshot.type === 'eventStatus' && snapshot.sessionKey && snapshot.statusKey) {
+    applyAttendanceDashboardEventStatusSlice(snapshot.sessionKey, snapshot.statusKey);
+    return true;
+  }
+  if (snapshot.type === 'cohort' && snapshot.cohortTag) {
+    applyAttendanceDashboardCohortSlice(snapshot.cohortTag);
+    return true;
+  }
+  if (snapshot.type === 'attendanceCount') {
+    applyAttendanceDashboardAttendanceCountSlice({
+      count: snapshot.count,
+      counts: snapshot.counts,
+      isOther: snapshot.isOther
+    });
+    return true;
+  }
+  return false;
 }
 
 function renderAttendanceDashboardSliceMembers() {
@@ -930,7 +987,10 @@ function renderAttendanceDashboardSessionPicker() {
       const item = sessionMap[key];
       return item && item.isOngoing;
     }).length;
-    hintNode.textContent = `종료 회차 ${closedCount}개 / 진행중 회차 ${ongoingCount}개 포함 / 필터 적용 시 전체 지표 동기화`;
+    const activeScope = !isAttendanceDashboardSessionScopeManual() && ongoingCount > 0;
+    hintNode.textContent = activeScope
+      ? `현재 활성 출석 ${ongoingCount}개 기준 / 날짜·회차를 직접 바꾸면 수동 필터로 전환`
+      : `종료 회차 ${closedCount}개 / 진행중 회차 ${ongoingCount}개 포함 / 필터 적용 시 전체 지표 동기화`;
   }
   if (countBadge) {
     countBadge.textContent = `선택 ${selectedKeys.length}개`;
@@ -1030,6 +1090,9 @@ function setAttendanceDashboardSessionKeys(keys, options) {
   });
 
   attendanceDashboardState.sessionKeys = next;
+  if (opts.markManual !== false) {
+    attendanceDashboardState.sessionScopeMode = 'manual';
+  }
   syncDashboardSessionSelectSelection();
   renderAttendanceDashboardSessionPicker();
   if (opts.save !== false) {
@@ -2285,6 +2348,49 @@ function getDashboardAutoDateRange(payload) {
   return { fromDate: '', toDate: '', source: 'none' };
 }
 
+function getAttendanceDashboardActiveSessionKeys(payload) {
+  const meta = payload && payload.meta ? payload.meta : {};
+  if (Array.isArray(meta.activeSessionKeys)) {
+    return meta.activeSessionKeys.map(key => String(key || '').trim()).filter(key => !!key);
+  }
+  const availableSessions = Array.isArray(meta.availableSessions) ? meta.availableSessions : [];
+  return availableSessions
+    .filter(item => item && item.isOngoing)
+    .map(item => String(item.sessionKey || '').trim())
+    .filter(key => !!key);
+}
+
+function isAttendanceDashboardSessionScopeManual() {
+  return String(attendanceDashboardState && attendanceDashboardState.sessionScopeMode || 'auto') === 'manual';
+}
+
+function tryHydrateAttendanceDashboardActiveSessionScope(payload, options) {
+  const opts = options || {};
+  if (opts.skipAutoSessionHydration) return false;
+  if (isAttendanceDashboardSessionScopeManual()) return false;
+
+  const activeKeys = getAttendanceDashboardActiveSessionKeys(payload);
+  const currentKeys = Array.isArray(attendanceDashboardState.sessionKeys)
+    ? attendanceDashboardState.sessionKeys.slice()
+    : [];
+
+  const sameKeys = activeKeys.length === currentKeys.length
+    && activeKeys.every((key, index) => key === currentKeys[index]);
+
+  if (sameKeys) return false;
+
+  attendanceDashboardState.sessionKeys = activeKeys;
+  attendanceDashboardState.sessionScopeMode = 'auto';
+  applyAttendanceDashboardStateToControls();
+  saveAttendanceDashboardStateToStorage();
+  setAttendanceDashboardMetaText(
+    activeKeys.length > 0
+      ? `현재 활성 출석 회차로 기본 범위를 맞췄습니다. (${activeKeys.join(', ')})`
+      : '현재 활성 출석 회차가 없어 기본 범위를 전체 회차로 되돌렸습니다.'
+  );
+  return true;
+}
+
 function tryHydrateAttendanceDashboardDateRange(payload, options) {
   const opts = options || {};
   if (opts.skipAutoDateHydration) return false;
@@ -2349,6 +2455,20 @@ function initializeAttendanceDashboardUi() {
     queryState || {}
   );
   attendanceDashboardState = normalizeAttendanceDashboardState(merged);
+  const hasExplicitSessionScope = !!(
+    (storedState && Object.prototype.hasOwnProperty.call(storedState, 'sessionScopeMode'))
+    || (queryState && Object.prototype.hasOwnProperty.call(queryState, 'sessionScopeMode'))
+  );
+  if (
+    !hasExplicitSessionScope
+    && (
+      attendanceDashboardState.dateFrom
+      || attendanceDashboardState.dateTo
+      || ((attendanceDashboardState.sessionKeys || []).length > 0)
+    )
+  ) {
+    attendanceDashboardState.sessionScopeMode = 'manual';
+  }
   attendanceDashboardDateRangeUserEdited = !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
   attendanceDashboardAutoDateHydratedOnce = !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
   applyAttendanceDashboardStateToControls();
@@ -2515,6 +2635,7 @@ function initializeAttendanceDashboardUi() {
         if (attendanceDashboardDateInputSyncing) return;
         attendanceDashboardDateRangeUserEdited = true;
         attendanceDashboardAutoDateHydratedOnce = true;
+        attendanceDashboardState.sessionScopeMode = 'manual';
       });
     });
   }
@@ -2525,6 +2646,7 @@ function initializeAttendanceDashboardUi() {
         if (attendanceDashboardDateInputSyncing) return;
         attendanceDashboardDateRangeUserEdited = true;
         attendanceDashboardAutoDateHydratedOnce = true;
+        attendanceDashboardState.sessionScopeMode = 'manual';
       });
     });
   }
@@ -2554,19 +2676,24 @@ function applyAttendanceDashboardPreset(type) {
     current.dateFrom = '';
     current.dateTo = '';
     current.sessionKeys = [];
+    current.sessionScopeMode = 'auto';
     current.sortBy = 'attendanceRate';
   } else if (mode === 'yb') {
     current.group = 'yb';
+    current.sessionScopeMode = 'manual';
   } else if (mode === 'ob') {
     current.group = 'ob';
+    current.sessionScopeMode = 'manual';
   } else if (mode === 'recent4') {
     const sessions = attendanceDashboardPayload && attendanceDashboardPayload.meta && Array.isArray(attendanceDashboardPayload.meta.availableSessions)
       ? attendanceDashboardPayload.meta.availableSessions.filter(item => item.isClosed)
       : [];
     current.sessionKeys = sessions.slice(-4).map(item => item.sessionKey);
+    current.sessionScopeMode = 'manual';
   } else if (mode === 'high_absence') {
     current.sortBy = 'absenceRate';
     current.topN = 10;
+    current.sessionScopeMode = 'manual';
   }
 
   attendanceDashboardState = normalizeAttendanceDashboardState(current);
@@ -2581,6 +2708,7 @@ function applyAttendanceDashboardPreset(type) {
 
 function applyAttendanceDashboardFilters() {
   collectAttendanceDashboardStateFromControls();
+  attendanceDashboardState.sessionScopeMode = 'manual';
   closeAttendanceDashboardPopovers();
   resetAttendanceDashboardSliceUiState({ render: true });
   saveAttendanceDashboardStateToStorage();
@@ -2713,8 +2841,19 @@ async function loadAttendanceDashboard(options) {
 
   const filterParams = getAttendanceDashboardApiFilterParams();
   const fetchKey = buildAttendanceDashboardFetchKey(season, filterParams);
+  const preserveSlice = opts.preserveSlice !== false;
+  const sliceSnapshot = preserveSlice ? captureAttendanceDashboardActiveSliceSnapshot() : null;
   if (opts.forceReload || (attendanceDashboardLastFetchKey && attendanceDashboardLastFetchKey !== fetchKey)) {
-    resetAttendanceDashboardSliceUiState({ render: true });
+    if (sliceSnapshot) {
+      attendanceDashboardActiveSliceFilter = null;
+      attendanceDashboardActiveSliceMembers = [];
+      attendanceDashboardActiveStatusRankingRows = [];
+      attendanceDashboardActiveDrilldownMode = '';
+      clearAttendanceDashboardMemberHistoryCache();
+      closeAttendanceDashboardMemberHistoryModal();
+    } else {
+      resetAttendanceDashboardSliceUiState({ render: true });
+    }
   }
   const now = Date.now();
   if (
@@ -2723,6 +2862,11 @@ async function loadAttendanceDashboard(options) {
     && attendanceDashboardLastFetchKey === fetchKey
     && (now - attendanceDashboardLastFetchedAt) < ATTENDANCE_DASHBOARD_FRONT_CACHE_TTL_MS
   ) {
+    if (tryHydrateAttendanceDashboardActiveSessionScope(attendanceDashboardPayload, opts)) {
+      endPerfMark(perfToken, { status: 'memory-cache-active-session-reload' });
+      await loadAttendanceDashboard({ forceReload: true, skipAutoSessionHydration: true });
+      return;
+    }
     renderAttendanceDashboard(attendanceDashboardPayload);
     displayRankings({
       success: true,
@@ -2763,6 +2907,13 @@ async function loadAttendanceDashboard(options) {
       return;
     }
 
+    if (tryHydrateAttendanceDashboardActiveSessionScope(response, opts)) {
+      attendanceDashboardLoading = false;
+      endPerfMark(perfToken, { status: 'rehydrate-active-session-reload' });
+      await loadAttendanceDashboard({ forceReload: true, skipAutoSessionHydration: true });
+      return;
+    }
+
     if (tryHydrateAttendanceDashboardDateRange(response, opts)) {
       attendanceDashboardLoading = false;
       endPerfMark(perfToken, { status: 'rehydrate-reload' });
@@ -2792,6 +2943,9 @@ async function loadAttendanceDashboard(options) {
     setAttendanceDashboardMetaText(
       `시즌 ${response.seasonAlias} / 선택 회차 ${response.meta && response.meta.selectedSessionCount ? response.meta.selectedSessionCount : 0} / 종료 회차 ${response.meta && response.meta.closedSessionCount ? response.meta.closedSessionCount : 0} / 진행중 회차 ${response.meta && response.meta.ongoingSessionCount ? response.meta.ongoingSessionCount : 0}${rangeLabel}${fromCache}`
     );
+    if (sliceSnapshot) {
+      restoreAttendanceDashboardActiveSliceSnapshot(sliceSnapshot);
+    }
     endPerfMark(perfToken, { status: 'ok' });
   } catch (error) {
     if (handleUnauthorizedError(error)) return;

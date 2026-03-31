@@ -103,6 +103,7 @@ let attendanceDashboardState = {
   dateTo: '',
   sessionSearch: '',
   sessionKeys: [],
+  sessionScopeMode: 'auto',
   topN: 10,
   sortBy: 'attendanceRate',
   chartType: 'bar',

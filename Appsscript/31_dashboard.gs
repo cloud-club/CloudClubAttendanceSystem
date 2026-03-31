@@ -454,6 +454,8 @@ function getAttendanceDashboardSummary(params) {
         eventTopRows: topEventRows
       },
       meta: {
+        hasActiveSession: sessions.some(session => isDashboardSessionOngoing(session, now)),
+        activeSessionKeys: sessions.filter(session => isDashboardSessionOngoing(session, now)).map(session => session.sessionKey),
         closedSessionCount: closedSelectedSessions.length,
         ongoingSessionCount: ongoingSelectedSessions.length,
         statusSessionCount: statusSelectedSessions.length,
