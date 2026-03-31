@@ -989,7 +989,7 @@ function renderAttendanceDashboardSessionPicker() {
     }).length;
     const activeScope = !isAttendanceDashboardSessionScopeManual() && ongoingCount > 0;
     hintNode.textContent = activeScope
-      ? `현재 활성 출석 ${ongoingCount}개 기준 / 날짜·회차를 직접 바꾸면 수동 필터로 전환`
+      ? `완료 회차 + 현재 활성 출석 ${ongoingCount}개 기준 / 날짜·회차를 직접 바꾸면 수동 필터로 전환`
       : `종료 회차 ${closedCount}개 / 진행중 회차 ${ongoingCount}개 포함 / 필터 적용 시 전체 지표 동기화`;
   }
   if (countBadge) {
@@ -2348,14 +2348,11 @@ function getDashboardAutoDateRange(payload) {
   return { fromDate: '', toDate: '', source: 'none' };
 }
 
-function getAttendanceDashboardActiveSessionKeys(payload) {
+function getAttendanceDashboardDefaultVisibleSessionKeys(payload) {
   const meta = payload && payload.meta ? payload.meta : {};
-  if (Array.isArray(meta.activeSessionKeys)) {
-    return meta.activeSessionKeys.map(key => String(key || '').trim()).filter(key => !!key);
-  }
   const availableSessions = Array.isArray(meta.availableSessions) ? meta.availableSessions : [];
   return availableSessions
-    .filter(item => item && item.isOngoing)
+    .filter(item => item && (item.isClosed || item.isOngoing))
     .map(item => String(item.sessionKey || '').trim())
     .filter(key => !!key);
 }
@@ -2369,7 +2366,7 @@ function tryHydrateAttendanceDashboardActiveSessionScope(payload, options) {
   if (opts.skipAutoSessionHydration) return false;
   if (isAttendanceDashboardSessionScopeManual()) return false;
 
-  const activeKeys = getAttendanceDashboardActiveSessionKeys(payload);
+  const activeKeys = getAttendanceDashboardDefaultVisibleSessionKeys(payload);
   const currentKeys = Array.isArray(attendanceDashboardState.sessionKeys)
     ? attendanceDashboardState.sessionKeys.slice()
     : [];
@@ -2385,8 +2382,8 @@ function tryHydrateAttendanceDashboardActiveSessionScope(payload, options) {
   saveAttendanceDashboardStateToStorage();
   setAttendanceDashboardMetaText(
     activeKeys.length > 0
-      ? `현재 활성 출석 회차로 기본 범위를 맞췄습니다. (${activeKeys.join(', ')})`
-      : '현재 활성 출석 회차가 없어 기본 범위를 전체 회차로 되돌렸습니다.'
+      ? `기본 범위를 완료 회차 + 현재 활성 출석까지로 맞췄습니다. (${activeKeys.join(', ')})`
+      : '완료되었거나 현재 활성인 출석 회차가 없어 기본 범위를 비워 둡니다.'
   );
   return true;
 }

@@ -108,7 +108,7 @@ function manualApproveAttendance(params) {
     });
 
     targetRange.setValue(formattedTime);
-    targetRange.setBackground(LATE_COLOR);
+    targetRange.setBackground(getManualApprovalBackgroundColor(writeTime, session));
     targetRange.setNote(noteText);
 
     return {
@@ -259,6 +259,12 @@ function computeManualApprovalWriteTime(processedAt, session) {
   };
 }
 
+function getManualApprovalBackgroundColor(writeTime, session) {
+  return getAttendanceType(writeTime, session) === 'on_time'
+    ? ON_TIME_COLOR
+    : LATE_COLOR;
+}
+
 function manualApproveBatchAttendance(params) {
   const seasonName = String(params.season || '').trim();
   const sessionKey = String(params.sessionKey || '').trim();
@@ -389,7 +395,7 @@ function manualApproveBatchAttendance(params) {
         });
 
         targetRange.setValue(formattedTime);
-        targetRange.setBackground(LATE_COLOR);
+        targetRange.setBackground(getManualApprovalBackgroundColor(writeTime, session));
         targetRange.setNote(noteText);
 
         summary.approved++;
