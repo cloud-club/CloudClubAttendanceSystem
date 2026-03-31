@@ -1,1 +1,2 @@
 .DS_Store
+\n# 작업 결과물 및 AI 에이전트 로그\n.artifacts/\n.omx/\n*.har
