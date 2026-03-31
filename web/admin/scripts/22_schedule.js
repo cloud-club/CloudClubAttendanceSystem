@@ -58,6 +58,17 @@ function populateScheduleSelect(items) {
   updateScheduleSaveButtonLabel();
 }
 
+function getScheduleItemDateKey(item) {
+  if (!item) return '';
+  return String(item.dateKey || getDateKeyFromMs(item.startTime) || '').trim();
+}
+
+function findScheduleItemBySessionKey(sessionKey) {
+  const key = String(sessionKey || '').trim();
+  if (!key) return null;
+  return scheduleItems.find(item => String(item.sessionKey || '').trim() === key) || null;
+}
+
 function renderScheduleTable(items) {
   const wrap = document.getElementById('scheduleTableWrap');
   if (!wrap) return;
@@ -144,15 +155,12 @@ function handleScheduleSelectionChange() {
 
 function selectScheduleForEdit(encodedSessionKey) {
   const key = decodeURIComponent(encodedSessionKey || '');
-  const select = document.getElementById('scheduleSessionSelect');
-  if (!select) return;
-  select.value = key;
-  handleScheduleSelectionChange();
-
-  const scheduleTabButton = Array.from(document.querySelectorAll('.tab-button')).find(btn => btn.textContent.includes('일정 관리'));
-  if (scheduleTabButton) {
-    openTab('schedule', { currentTarget: scheduleTabButton });
+  const item = findScheduleItemBySessionKey(key);
+  if (!item) {
+    showBoxMessage('scheduleActionResult', `❌ ${escapeHtml('해당 회차 정보를 찾지 못했습니다. 목록을 새로고침한 뒤 다시 시도해주세요.')}`, false);
+    return;
   }
+  openScheduleCalendarModalForItem(item);
 }
 
 async function loadScheduleList(options) {
@@ -403,7 +411,11 @@ function selectCalendarDate(dateKey) {
   renderScheduleCalendar();
 }
 
-function openScheduleCalendarModal(dateKey) {
+function openScheduleCalendarModalForItem(item, options) {
+  const opts = options || {};
+  const dateKey = String(opts.dateKey || getScheduleItemDateKey(item) || '').trim();
+  if (!dateKey) return;
+
   const modal = document.getElementById('scheduleCalendarModal');
   const title = document.getElementById('scheduleCalendarModalTitle');
   const targetDate = document.getElementById('scheduleCalendarModalTargetDate');
@@ -414,7 +426,6 @@ function openScheduleCalendarModal(dateKey) {
   const deleteBtn = document.getElementById('scheduleCalendarModalDeleteBtn');
   if (!modal || !title || !targetDate || !sessionInfo || !startInput || !endInput || !saveBtn || !deleteBtn) return;
 
-  const item = scheduleByDateMap[dateKey] || null;
   scheduleCalendarModalState = {
     dateKey: dateKey,
     isEdit: !!item,
@@ -443,6 +454,14 @@ function openScheduleCalendarModal(dateKey) {
 
   modal.style.display = 'flex';
   setTimeout(() => startInput.focus(), 0);
+}
+
+function openScheduleCalendarModal(dateKey) {
+  const normalizedDateKey = String(dateKey || '').trim();
+  if (!normalizedDateKey) return;
+  openScheduleCalendarModalForItem(scheduleByDateMap[normalizedDateKey] || null, {
+    dateKey: normalizedDateKey
+  });
 }
 
 function closeScheduleCalendarModal() {

@@ -158,9 +158,11 @@ flowchart LR
 
 #### 동작 흐름 (UI → API → Sheet)
 1. `loadScheduleList`로 현재 일정 조회
-2. `saveSchedule` 또는 `deleteSelectedSchedule` 실행
-3. `scheduleSave`, `scheduleDelete` 액션으로 시트 반영
-4. 충돌/중복 정책 검증 후 결과 반영
+2. 상단 폼 또는 `현재 시즌 일정 목록`의 `수정`, 캘린더 `+` 버튼으로 편집 진입
+3. 목록 `수정` 버튼과 캘린더 수정은 동일한 일정 모달을 사용
+4. `saveSchedule` 또는 모달 저장/삭제 실행
+5. `scheduleSave`, `scheduleDelete` 액션으로 시트 반영
+6. 충돌/중복 정책 검증 후 결과 반영
 
 #### 운영 시 주의사항
 - 날짜 유일성 정책(`SCHEDULE_DATE_DUPLICATE`) 위반 여부 확인
