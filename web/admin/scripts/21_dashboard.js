@@ -305,6 +305,7 @@ function getDashboardStatusCodeFromKey(statusKey) {
     case 'late': return 'L';
     case 'absent': return 'A';
     case 'excused': return 'E';
+    case 'pending': return 'P';
     default: return '-';
   }
 }
@@ -315,6 +316,7 @@ function getDashboardStatusKeyFromCode(code) {
     case 'L': return 'late';
     case 'A': return 'absent';
     case 'E': return 'excused';
+    case 'P': return 'pending';
     default: return 'future';
   }
 }
@@ -558,13 +560,33 @@ async function applyAttendanceDashboardStatusRankingSlice(statusKey, options) {
   }, rankingRows);
 }
 
-function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
-  const meta = getAttendanceDashboardQuickFilterMeta();
-  if (!meta || !Array.isArray(meta.closedSessionKeys)) {
+function applyAttendanceDashboardPendingSlice() {
+  if (!getAttendanceDashboardQuickFilterMeta()) {
     showToast('<i class="fas fa-info-circle"></i> 빠른 필터 인덱스를 찾을 수 없습니다. Apps Script를 먼저 배포했는지 확인해주세요.', true);
     return;
   }
-  const index = meta.closedSessionKeys.indexOf(String(sessionKey || ''));
+
+  const matchedMembers = getAttendanceDashboardQuickFilterMembers().filter(member => {
+    return Number(member && member.pendingCount || 0) > 0;
+  });
+  toggleAttendanceDashboardActiveSlice({
+    id: 'status-pending',
+    type: 'pending',
+    label: '진행중 미확정 멤버',
+    summary: `진행 중 회차에서 아직 출석하지 않은 멤버 ${matchedMembers.length}명`
+  }, matchedMembers);
+}
+
+function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
+  const meta = getAttendanceDashboardQuickFilterMeta();
+  const sessionKeys = meta && Array.isArray(meta.sessionKeys) && meta.sessionKeys.length > 0
+    ? meta.sessionKeys
+    : (meta && Array.isArray(meta.closedSessionKeys) ? meta.closedSessionKeys : null);
+  if (!meta || !Array.isArray(sessionKeys)) {
+    showToast('<i class="fas fa-info-circle"></i> 빠른 필터 인덱스를 찾을 수 없습니다. Apps Script를 먼저 배포했는지 확인해주세요.', true);
+    return;
+  }
+  const index = sessionKeys.indexOf(String(sessionKey || ''));
   if (index < 0) return;
 
   const targetCode = getDashboardStatusCodeFromKey(statusKey);
@@ -576,7 +598,9 @@ function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
     id: `event-status:${sessionKey}:${statusKey}`,
     type: 'eventStatus',
     label: `${sessionKey} / ${statusLabel}`,
-    summary: `회차 ${sessionKey}에서 ${statusLabel}로 집계된 멤버 ${matchedMembers.length}명`
+    summary: statusKey === 'pending'
+      ? `회차 ${sessionKey}에서 아직 출석하지 않은 멤버 ${matchedMembers.length}명`
+      : `회차 ${sessionKey}에서 ${statusLabel}로 집계된 멤버 ${matchedMembers.length}명`
   }, matchedMembers);
 }
 
@@ -647,9 +671,9 @@ function renderAttendanceDashboardSliceMembers() {
 
   if (!activeFilter || !activeMode) {
     title.textContent = '대시보드 드릴다운';
-    summary.textContent = '출석 상태 비율은 하단 상태별 랭킹, 행사 상태 막대/OB-YB 비율/출석 횟수 분포는 하단 멤버 목록으로 연결됩니다.';
+    summary.textContent = '출석 상태 비율은 랭킹(진행중 미확정은 멤버 목록), 행사 상태 막대/OB-YB 비율/출석 횟수 분포는 하단 멤버 목록으로 연결됩니다.';
     actions.innerHTML = '';
-    wrap.innerHTML = '<p class="info-text">활성 그래프 조각이 없습니다. 상태 비율은 랭킹, 나머지 3개 그래프는 멤버 목록으로 바로 확인할 수 있습니다.</p>';
+    wrap.innerHTML = '<p class="info-text">활성 그래프 조각이 없습니다. 상태 비율은 랭킹(진행중 미확정은 멤버 목록), 나머지 그래프는 멤버 목록으로 바로 확인할 수 있습니다.</p>';
     return;
   }
 
@@ -866,7 +890,7 @@ function renderAttendanceDashboardSessionPicker() {
   const sessionMap = {};
   allSessions.forEach(item => { sessionMap[item.sessionKey] = item; });
 
-  const filteredSignature = filtered.map(item => `${item.sessionKey}:${item.isClosed ? 1 : 0}`).join('|');
+  const filteredSignature = filtered.map(item => `${item.sessionKey}:${item.isClosed ? 1 : 0}:${item.isOngoing ? 1 : 0}`).join('|');
   const selectedSignature = selectedKeys.join('|');
   const renderSignature = [
     attendanceDashboardState.sessionSearch || '',
@@ -894,7 +918,7 @@ function renderAttendanceDashboardSessionPicker() {
           <span class="dashboard-option-main">${escapeHtml(item.sessionKey || '-')}</span>
           <span class="dashboard-option-sub">${escapeHtml(item.date || '-')}</span>
         </span>
-        <span class="dashboard-option-badge ${item.isClosed ? 'closed' : 'open'}">${item.isClosed ? '종료' : '예정'}</span>
+        <span class="dashboard-option-badge ${item.isClosed ? 'closed' : 'open'}">${item.isClosed ? '종료' : (item.isOngoing ? '진행중' : '예정')}</span>
       </label>
     `).join('');
   }
@@ -919,7 +943,11 @@ function renderAttendanceDashboardSessionPicker() {
       const item = sessionMap[key];
       return item && item.isClosed;
     }).length;
-    hintNode.textContent = `종료 회차 ${closedCount}개 포함 / 필터 적용 시 전체 지표 동기화`;
+    const ongoingCount = selectedKeys.filter(key => {
+      const item = sessionMap[key];
+      return item && item.isOngoing;
+    }).length;
+    hintNode.textContent = `종료 회차 ${closedCount}개 / 진행중 회차 ${ongoingCount}개 포함 / 필터 적용 시 전체 지표 동기화`;
   }
   if (countBadge) {
     countBadge.textContent = `선택 ${selectedKeys.length}개`;
@@ -1231,6 +1259,7 @@ function renderDashboardDonutChart(chartRefName, canvasId, emptyId, labels, valu
   const opts = options || {};
   const canvas = document.getElementById(canvasId);
   const emptyNode = document.getElementById(emptyId);
+  const valueUnit = String(opts.valueUnit || '명').trim() || '명';
   if (!canvas) return;
 
   const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
@@ -1292,7 +1321,7 @@ function renderDashboardDonutChart(chartRefName, canvasId, emptyId, labels, valu
               const all = chartValues.reduce((sum, value) => sum + Number(value || 0), 0);
               const current = Number(context.raw || 0);
               const ratio = all > 0 ? Math.round((current / all) * 100) : 0;
-              return `${context.label}: ${current}명 (${ratio}%)`;
+              return `${context.label}: ${current}${valueUnit} (${ratio}%)`;
             }
           }
         }
@@ -1325,34 +1354,41 @@ function renderAttendanceDashboardStatusDonutChart(payload) {
     Number(statusRatio.onTimeCount || 0),
     Number(statusRatio.lateCount || 0),
     Number(statusRatio.absentCount || 0),
-    Number(statusRatio.excusedCount || 0)
+    Number(statusRatio.excusedCount || 0),
+    Number(statusRatio.pendingCount || 0)
   ];
   const hasValue = renderDashboardDonutChart(
     'status',
     'dashboardStatusDonutChart',
     'dashboardStatusDonutEmpty',
-    ['출석', '지각', '결석', '유고'],
+    ['출석', '지각', '결석', '유고', '미확정'],
     values,
-    ['#4ade80', '#fbbf24', '#f87171', '#93c5fd'],
+    ['#4ade80', '#fbbf24', '#f87171', '#93c5fd', '#94a3b8'],
     {
+      valueUnit: '회',
       meta: [
-        { statusKey: 'on_time', label: '출석' },
-        { statusKey: 'late', label: '지각' },
-        { statusKey: 'absent', label: '결석' },
-        { statusKey: 'excused', label: '유고' }
+        { statusKey: 'on_time', label: '출석', drilldownMode: 'statusRanking' },
+        { statusKey: 'late', label: '지각', drilldownMode: 'statusRanking' },
+        { statusKey: 'absent', label: '결석', drilldownMode: 'statusRanking' },
+        { statusKey: 'excused', label: '유고', drilldownMode: 'statusRanking' },
+        { statusKey: 'pending', label: '미확정', drilldownMode: 'memberList' }
       ],
       onSliceClick(meta) {
         if (!meta || !meta.statusKey) return;
+        if (meta.drilldownMode === 'memberList') {
+          applyAttendanceDashboardPendingSlice();
+          return;
+        }
         applyAttendanceDashboardStatusRankingSlice(meta.statusKey);
       }
     }
   );
 
   if (!hasValue) {
-    const closedCount = Number(payload && payload.meta ? payload.meta.closedSessionCount || 0 : 0);
-    const message = closedCount > 0
+    const statusCount = Number(payload && payload.meta ? payload.meta.statusSessionCount || 0 : 0);
+    const message = statusCount > 0
       ? '필터 조건에 맞는 출석 상태 데이터가 없습니다.'
-      : '종료된 회차가 없어 출석 상태 비율을 계산할 수 없습니다.';
+      : '종료되었거나 진행 중인 회차가 없어 출석 상태 비율을 계산할 수 없습니다.';
     setDashboardDonutEmptyState('status', 'dashboardStatusDonutChart', 'dashboardStatusDonutEmpty', message);
   }
 }
@@ -1375,6 +1411,7 @@ function renderAttendanceDashboardCohortDonutChart(payload) {
     values,
     ['#60a5fa', '#34d399', '#94a3b8'],
     {
+      valueUnit: '명',
       meta: [
         { cohortTag: 'OB', label: 'OB' },
         { cohortTag: 'YB', label: 'YB' },
@@ -1491,6 +1528,7 @@ function renderAttendanceDashboardAttendanceCountDonutChart(payload) {
     distribution.values,
     distribution.colors,
     {
+      valueUnit: '명',
       meta: distribution.items,
       onSliceClick(meta) {
         applyAttendanceDashboardAttendanceCountSlice(meta);
@@ -1577,7 +1615,7 @@ function renderAttendanceDashboardEventRateChart(payload) {
               return [
                 `출석률: ${row.attendanceRate || 0}%`,
                 `출석/모수: ${row.attendedCount || 0}/${row.effectiveCount || 0}`,
-                `지각: ${row.lateCount || 0}, 결석: ${row.absentCount || 0}, 유고: ${row.excusedCount || 0}`
+                `지각: ${row.lateCount || 0}회, 결석: ${row.absentCount || 0}회, 유고: ${row.excusedCount || 0}회`
               ];
             }
           }
@@ -1607,7 +1645,8 @@ function renderAttendanceDashboardEventStatusChart(payload) {
     { label: '출석', statusKey: 'on_time', data: rows.map(r => Number(r.onTimeCount || 0)), backgroundColor: 'rgba(74, 222, 128, 0.75)', borderColor: '#4ade80', borderWidth: 1, stack: 'status' },
     { label: '지각', statusKey: 'late', data: rows.map(r => Number(r.lateCount || 0)), backgroundColor: 'rgba(251, 191, 36, 0.75)', borderColor: '#fbbf24', borderWidth: 1, stack: 'status' },
     { label: '결석', statusKey: 'absent', data: rows.map(r => Number(r.absentCount || 0)), backgroundColor: 'rgba(248, 113, 113, 0.75)', borderColor: '#f87171', borderWidth: 1, stack: 'status' },
-    { label: '유고', statusKey: 'excused', data: rows.map(r => Number(r.excusedCount || 0)), backgroundColor: 'rgba(147, 197, 253, 0.75)', borderColor: '#93c5fd', borderWidth: 1, stack: 'status' }
+    { label: '유고', statusKey: 'excused', data: rows.map(r => Number(r.excusedCount || 0)), backgroundColor: 'rgba(147, 197, 253, 0.75)', borderColor: '#93c5fd', borderWidth: 1, stack: 'status' },
+    { label: '미확정', statusKey: 'pending', data: rows.map(r => Number(r.pendingCount || 0)), backgroundColor: 'rgba(148, 163, 184, 0.75)', borderColor: '#94a3b8', borderWidth: 1, stack: 'status' }
   ];
 
   if (
@@ -1642,7 +1681,15 @@ function renderAttendanceDashboardEventStatusChart(payload) {
         x: { stacked: true, ticks: { color: '#bfdbfe', maxRotation: 45, minRotation: 0 }, grid: { color: 'rgba(148, 163, 184, 0.08)' } }
       },
       plugins: {
-        legend: { labels: { color: '#dbeafe' } }
+        legend: { labels: { color: '#dbeafe' } },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = Number(context.raw || 0);
+              return `${context.dataset && context.dataset.label ? context.dataset.label : '상태'}: ${value}회`;
+            }
+          }
+        }
       },
       onClick(event, elements) {
         if (!elements || elements.length === 0) return;
@@ -1736,7 +1783,7 @@ function renderAttendanceDashboardDrilldown(payload) {
     const info = payload.session || {};
     const stat = payload.summary || {};
     title.textContent = `행사 드릴다운: ${info.sessionKey || payload.key}`;
-    summary.textContent = `출석 ${stat.onTimeCount || 0}, 지각 ${stat.lateCount || 0}, 결석 ${stat.absentCount || 0}, 유고 ${stat.excusedCount || 0}`;
+    summary.textContent = `출석 ${stat.onTimeCount || 0}회, 지각 ${stat.lateCount || 0}회, 결석 ${stat.absentCount || 0}회, 유고 ${stat.excusedCount || 0}회, 미확정 ${stat.pendingCount || 0}회`;
 
     if (rows.length === 0) {
       wrap.innerHTML = '<p class="info-text">표시할 멤버 데이터가 없습니다.</p>';
@@ -1781,7 +1828,7 @@ function renderAttendanceDashboardDrilldown(payload) {
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
     const stat = payload.summary || {};
     title.textContent = `개인 드릴다운: ${member.seasonLabel || '-'} ${member.name || payload.key}`;
-    summary.textContent = `출석률 ${stat.attendanceRate || 0}% / 출석 ${stat.attendedCount || 0} / 유효모수 ${stat.effectiveCount || 0} / 유고 ${stat.excusedCount || 0}`;
+    summary.textContent = `출석률 ${stat.attendanceRate || 0}% / 출석 ${stat.attendedCount || 0}회 / 유효모수 ${stat.effectiveCount || 0}회 / 유고 ${stat.excusedCount || 0}회 / 미확정 ${stat.pendingCount || 0}회`;
 
     if (rows.length === 0) {
       wrap.innerHTML = '<p class="info-text">표시할 회차 데이터가 없습니다.</p>';
@@ -1880,7 +1927,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
 
   const stat = payload.summary || {};
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
-  summary.textContent = `현재 대시보드 필터 기준 회차 / 출석 ${stat.attendedCount || 0} / 지각 ${stat.lateCount || 0} / 결석 ${stat.absentCount || 0} / 유고 ${stat.excusedCount || 0}`;
+  summary.textContent = `현재 대시보드 필터 기준 회차 / 출석 ${stat.attendedCount || 0}회 / 지각 ${stat.lateCount || 0}회 / 결석 ${stat.absentCount || 0}회 / 유고 ${stat.excusedCount || 0}회 / 미확정 ${stat.pendingCount || 0}회`;
 
   if (rows.length === 0) {
     body.innerHTML = '<p class="info-text">현재 필터에 포함된 회차 데이터가 없습니다.</p>';
@@ -2184,10 +2231,11 @@ function buildAttendanceDashboardRenderSignature(payload) {
     safePayload.seasonAlias || '',
     String(meta.selectedSessionCount || 0),
     String(meta.closedSessionCount || 0),
+    String(meta.ongoingSessionCount || 0),
     String((safePayload.ranking || []).length),
     String((safePayload.table && safePayload.table.eventTopRows && safePayload.table.eventTopRows.length) || 0),
     rateRows.map(row => `${row.sessionKey}:${row.attendanceRate}`).join('|'),
-    statusRows.map(row => `${row.sessionKey}:${row.onTimeCount}:${row.lateCount}:${row.absentCount}:${row.excusedCount}`).join('|'),
+    statusRows.map(row => `${row.sessionKey}:${row.onTimeCount}:${row.lateCount}:${row.absentCount}:${row.excusedCount}:${row.pendingCount || 0}:${row.isOngoing ? 1 : 0}`).join('|'),
     String(attendanceDashboardState.chartType || 'bar'),
     (attendanceDashboardState.selectedMemberKeys || []).join('|')
   ].join('::');
@@ -2691,7 +2739,7 @@ async function loadAttendanceDashboard(options) {
       data: Array.isArray(attendanceDashboardPayload.ranking) ? attendanceDashboardPayload.ranking : []
     });
     setAttendanceDashboardMetaText(
-      `시즌 ${attendanceDashboardPayload.seasonAlias || season} / 선택 회차 ${attendanceDashboardPayload.meta && attendanceDashboardPayload.meta.selectedSessionCount ? attendanceDashboardPayload.meta.selectedSessionCount : 0} / 종료 회차 ${attendanceDashboardPayload.meta && attendanceDashboardPayload.meta.closedSessionCount ? attendanceDashboardPayload.meta.closedSessionCount : 0} (client-cache)`
+      `시즌 ${attendanceDashboardPayload.seasonAlias || season} / 선택 회차 ${attendanceDashboardPayload.meta && attendanceDashboardPayload.meta.selectedSessionCount ? attendanceDashboardPayload.meta.selectedSessionCount : 0} / 종료 회차 ${attendanceDashboardPayload.meta && attendanceDashboardPayload.meta.closedSessionCount ? attendanceDashboardPayload.meta.closedSessionCount : 0} / 진행중 회차 ${attendanceDashboardPayload.meta && attendanceDashboardPayload.meta.ongoingSessionCount ? attendanceDashboardPayload.meta.ongoingSessionCount : 0} (client-cache)`
     );
     endPerfMark(perfToken, { status: 'memory-cache' });
     return;
@@ -2752,7 +2800,7 @@ async function loadAttendanceDashboard(options) {
       ? ` / 실제출석 ${rangeMeta.minAttendAt} ~ ${rangeMeta.maxAttendAt}`
       : '';
     setAttendanceDashboardMetaText(
-      `시즌 ${response.seasonAlias} / 선택 회차 ${response.meta && response.meta.selectedSessionCount ? response.meta.selectedSessionCount : 0} / 종료 회차 ${response.meta && response.meta.closedSessionCount ? response.meta.closedSessionCount : 0}${rangeLabel}${fromCache}`
+      `시즌 ${response.seasonAlias} / 선택 회차 ${response.meta && response.meta.selectedSessionCount ? response.meta.selectedSessionCount : 0} / 종료 회차 ${response.meta && response.meta.closedSessionCount ? response.meta.closedSessionCount : 0} / 진행중 회차 ${response.meta && response.meta.ongoingSessionCount ? response.meta.ongoingSessionCount : 0}${rangeLabel}${fromCache}`
     );
     endPerfMark(perfToken, { status: 'ok' });
   } catch (error) {
@@ -2765,6 +2813,40 @@ async function loadAttendanceDashboard(options) {
     });
   } finally {
     attendanceDashboardLoading = false;
+  }
+}
+
+function clearAttendanceDashboardAutoRefresh() {
+  if (attendanceDashboardRefreshInterval) {
+    clearInterval(attendanceDashboardRefreshInterval);
+    attendanceDashboardRefreshInterval = null;
+  }
+}
+
+function syncAttendanceDashboardAutoRefresh(options) {
+  const opts = options || {};
+  const shouldRun = getActiveTabName() === 'status'
+    && !document.hidden
+    && !!adminToken
+    && seasonSourceReady;
+
+  if (!shouldRun) {
+    clearAttendanceDashboardAutoRefresh();
+    return;
+  }
+
+  if (!attendanceDashboardRefreshInterval) {
+    attendanceDashboardRefreshInterval = setInterval(() => {
+      if (document.hidden || getActiveTabName() !== 'status') {
+        clearAttendanceDashboardAutoRefresh();
+        return;
+      }
+      refreshStatusDashboardIfVisible();
+    }, ATTENDANCE_DASHBOARD_REFRESH_INTERVAL_MS);
+  }
+
+  if (opts.immediate) {
+    refreshStatusDashboardIfVisible();
   }
 }
 

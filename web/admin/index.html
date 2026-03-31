@@ -2685,6 +2685,7 @@
       background: #93c5fd;
     }
 
+    .dashboard-status-chip.pending,
     .dashboard-status-chip.future,
     .dashboard-status-chip.recorded,
     .dashboard-status-chip.empty {
@@ -3816,21 +3817,21 @@
         <div class="dashboard-chart-grid-primary">
           <div class="dashboard-chart-card">
             <div class="dashboard-chart-title">행사별 출석률</div>
-            <div class="dashboard-chart-subtitle">hover로 상세 수치 확인</div>
+            <div class="dashboard-chart-subtitle">hover로 상세 수치 확인 / 종료 회차 기준</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardEventRateChart"></canvas>
             </div>
           </div>
           <div class="dashboard-chart-card">
             <div class="dashboard-chart-title">행사별 출석/지각/결석/유고 분포</div>
-            <div class="dashboard-chart-subtitle">stacked bar 기준 / 클릭 시 하단 멤버 필터</div>
+            <div class="dashboard-chart-subtitle">stacked bar 기준 / 진행중 회차는 미확정(회색) 포함 / 클릭 시 하단 멤버 필터</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardEventStatusChart"></canvas>
             </div>
           </div>
           <div class="dashboard-chart-card">
             <div class="dashboard-chart-title">필터 대상 평균 출석 시간 추이</div>
-            <div class="dashboard-chart-subtitle">선택 없으면 전체 평균 / 1명 선택 시 개인 추이처럼 해석 / hover로 상세 확인</div>
+            <div class="dashboard-chart-subtitle">선택 없으면 전체 평균 / 1명 선택 시 개인 추이처럼 해석 / 종료 회차 기준 / hover로 상세 확인</div>
             <div class="dashboard-canvas-wrap">
               <canvas id="dashboardMemberTrendChart"></canvas>
             </div>
@@ -3839,7 +3840,7 @@
         <div class="dashboard-chart-grid-secondary">
           <div class="dashboard-chart-card dashboard-chart-card-donut">
             <div class="dashboard-chart-title">출석 상태 비율</div>
-            <div class="dashboard-chart-subtitle">출석/지각/결석/유고 (종료 회차 기준) / 클릭 시 하단 상태별 랭킹</div>
+            <div class="dashboard-chart-subtitle">출석/지각/결석/유고/미확정 (회 기준) / 진행중 미확정만 멤버 목록, 나머지는 상태별 랭킹</div>
             <div class="dashboard-canvas-wrap-square">
               <canvas id="dashboardStatusDonutChart"></canvas>
             </div>
@@ -3867,7 +3868,7 @@
           <div class="dashboard-drilldown-head">
             <div class="dashboard-drilldown-text">
               <div class="dashboard-drilldown-title" id="dashboardDrilldownTitle">대시보드 드릴다운</div>
-              <div class="dashboard-drilldown-summary" id="dashboardDrilldownSummary">출석 상태 비율은 하단 상태별 랭킹, 행사 상태 막대/OB-YB 비율/출석 횟수 분포는 하단 멤버 목록으로 연결됩니다.</div>
+              <div class="dashboard-drilldown-summary" id="dashboardDrilldownSummary">출석 상태 비율은 랭킹(진행중 미확정은 멤버 목록), 행사 상태 막대/OB-YB 비율/출석 횟수 분포는 하단 멤버 목록으로 연결됩니다.</div>
             </div>
             <div class="dashboard-drilldown-actions" id="dashboardDrilldownActions"></div>
           </div>

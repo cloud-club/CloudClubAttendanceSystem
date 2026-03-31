@@ -96,6 +96,7 @@ let attendanceDashboardSessionPickerLastOptionsRef = null;
 let attendanceDashboardMemberPickerLastOptionsRef = null;
 let attendanceDashboardLastRenderSignature = '';
 let attendanceDashboardPendingMemberTrendRender = false;
+let attendanceDashboardRefreshInterval = null;
 let attendanceDashboardState = {
   group: 'all',
   dateFrom: '',
@@ -122,6 +123,7 @@ const ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION = 5;
 const ATTENDANCE_DASHBOARD_SEARCH_DEBOUNCE_MS = 120;
 const ATTENDANCE_DASHBOARD_FRONT_CACHE_TTL_MS = 60000;
 const ATTENDANCE_DASHBOARD_MEMBER_HISTORY_CACHE_TTL_MS = 60000;
+const ATTENDANCE_DASHBOARD_REFRESH_INTERVAL_MS = 30000;
 const FRONT_CACHE_TTL_SCHEDULE_MS = 45000;
 const FRONT_CACHE_TTL_GRADUATION_MS = 45000;
 const FRONT_CACHE_TTL_ADMIN_USERS_MS = 120000;
@@ -138,6 +140,7 @@ const ATTENDANCE_DASHBOARD_STATUS_LABELS = {
   late: '지각',
   absent: '결석',
   excused: '유고',
+  pending: '미확정',
   future: '예정'
 };
 const MANUAL_APPROVE_BATCH_CHUNK_SIZE = 100;

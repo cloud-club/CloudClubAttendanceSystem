@@ -13,10 +13,23 @@ function getAttendanceDashboardSummary(params) {
     }).slice().sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
     const filters = normalizeAttendanceDashboardFilters(params, sessions);
+    const selectedSessions = filterSessionsForDashboard(sessions, filters);
+    const selectedSessionSet = {};
+    selectedSessions.forEach(session => {
+      selectedSessionSet[session.sessionKey] = true;
+    });
+
+    const closedSelectedSessions = selectedSessions.filter(session => session.lateDeadline <= now);
+    const ongoingSelectedSessions = selectedSessions.filter(session => isDashboardSessionOngoing(session, now));
+    const statusSelectedSessions = selectedSessions.filter(session => {
+      return session.lateDeadline <= now || isDashboardSessionOngoing(session, now);
+    });
+    const statusSessionKeys = statusSelectedSessions.map(session => session.sessionKey);
     const disableCache = parseDashboardBooleanParam(params.disableCache);
     const cacheKey = buildAttendanceDashboardCacheKey(seasonAlias, filters);
+    const canUseCache = !disableCache && ongoingSelectedSessions.length === 0;
 
-    if (!disableCache) {
+    if (canUseCache) {
       const cached = readAttendanceDashboardCache(cacheKey);
       if (cached) {
         cached.meta = cached.meta || {};
@@ -25,17 +38,11 @@ function getAttendanceDashboardSummary(params) {
       }
     }
 
-    const selectedSessions = filterSessionsForDashboard(sessions, filters);
-    const selectedSessionSet = {};
-    selectedSessions.forEach(session => {
-      selectedSessionSet[session.sessionKey] = true;
-    });
-
-    const closedSelectedSessions = selectedSessions.filter(session => session.lateDeadline <= now);
-    const quickFilterClosedSessionKeys = closedSelectedSessions.map(session => session.sessionKey);
-    const closedSessionMap = {};
-    closedSelectedSessions.forEach(session => {
-      closedSessionMap[session.sessionKey] = {
+    const statusSessionMap = {};
+    statusSelectedSessions.forEach(session => {
+      const isClosed = session.lateDeadline <= now;
+      const isOngoing = !isClosed && isDashboardSessionOngoing(session, now);
+      statusSessionMap[session.sessionKey] = {
         sessionKey: session.sessionKey,
         date: formatDateTimeMinute(session.startTime),
         dateKey: formatDateKey(session.startTime),
@@ -44,9 +51,12 @@ function getAttendanceDashboardSummary(params) {
         late: 0,
         absent: 0,
         excused: 0,
+        pending: 0,
         attended: 0,
         effective: 0,
-        participants: 0
+        participants: 0,
+        isClosed: isClosed,
+        isOngoing: isOngoing
       };
     });
 
@@ -82,6 +92,7 @@ function getAttendanceDashboardSummary(params) {
       let lateCount = 0;
       let absentCount = 0;
       let excusedCount = 0;
+      let pendingCount = 0;
       let effectiveCount = 0;
       let totalAttendOffsetSeconds = 0;
       let validOffsetCount = 0;
@@ -91,45 +102,71 @@ function getAttendanceDashboardSummary(params) {
       let lateOffsetValidCount = 0;
       const sessionCodes = [];
 
-      closedSelectedSessions.forEach(session => {
+      statusSelectedSessions.forEach(session => {
         const cellValue = values[i][session.colIndex];
-        const status = getAttendanceDetailType(cellValue, session, now);
+        const status = getDashboardAttendanceStatus(cellValue, session, now);
         sessionCodes.push(getDashboardQuickFilterStatusCode(status));
-        const eventCounter = closedSessionMap[session.sessionKey];
+        const eventCounter = statusSessionMap[session.sessionKey];
         if (!eventCounter) return;
 
+        if (status === 'pending') {
+          pendingCount++;
+          eventCounter.pending++;
+          return;
+        }
+
         if (status === 'excused') {
-          excusedCount++;
           eventCounter.excused++;
           eventCounter.participants++;
+          if (eventCounter.isClosed) {
+            excusedCount++;
+          }
           return;
         }
 
         if (status === 'on_time' || status === 'late' || status === 'absent') {
-          effectiveCount++;
           eventCounter.effective++;
+          if (eventCounter.isClosed) {
+            effectiveCount++;
+          }
         }
 
         if (status === 'on_time' || status === 'late') {
-          attendedCount++;
           eventCounter.attended++;
           eventCounter.participants++;
 
           if (status === 'late') {
-            lateCount++;
             eventCounter.late++;
           } else {
             eventCounter.onTime++;
           }
 
           const attendTime = parseAttendanceTime(cellValue);
-          if (!attendTime || isNaN(attendTime.getTime())) return;
+          if (!attendTime || isNaN(attendTime.getTime())) {
+            if (eventCounter.isClosed) {
+              if (status === 'late') {
+                lateCount++;
+              }
+              attendedCount++;
+            }
+            return;
+          }
+
           const attendMs = attendTime.getTime();
           if (minActualAttendanceMs === null || attendMs < minActualAttendanceMs) {
             minActualAttendanceMs = attendMs;
           }
           if (maxActualAttendanceMs === null || attendMs > maxActualAttendanceMs) {
             maxActualAttendanceMs = attendMs;
+          }
+
+          if (!eventCounter.isClosed) {
+            return;
+          }
+
+          attendedCount++;
+          if (status === 'late') {
+            lateCount++;
           }
 
           const diffSec = Math.floor((attendTime - session.startTime) / 1000);
@@ -150,8 +187,10 @@ function getAttendanceDashboardSummary(params) {
         }
 
         if (status === 'absent') {
-          absentCount++;
           eventCounter.absent++;
+          if (eventCounter.isClosed) {
+            absentCount++;
+          }
         }
       });
 
@@ -181,6 +220,7 @@ function getAttendanceDashboardSummary(params) {
         lateCount: lateCount,
         absentCount: absentCount,
         excusedCount: excusedCount,
+        pendingCount: pendingCount,
         effectiveCount: effectiveCount,
         attendanceRate: attendanceRate,
         lateRate: lateRate,
@@ -206,6 +246,7 @@ function getAttendanceDashboardSummary(params) {
         lateCount: lateCount,
         absentCount: absentCount,
         excusedCount: excusedCount,
+        pendingCount: pendingCount,
         onTimeAvgOffsetSeconds: onTimeAvgOffsetSeconds,
         onTimeAvgOffset: onTimeAvgOffset,
         lateAvgOffsetSeconds: lateAvgOffsetSeconds,
@@ -214,11 +255,12 @@ function getAttendanceDashboardSummary(params) {
     }
 
     const sessionRows = closedSelectedSessions.map(session => {
-      const counter = closedSessionMap[session.sessionKey] || {
+      const counter = statusSessionMap[session.sessionKey] || {
         onTime: 0,
         late: 0,
         absent: 0,
         excused: 0,
+        pending: 0,
         attended: 0,
         effective: 0,
         participants: 0
@@ -246,9 +288,43 @@ function getAttendanceDashboardSummary(params) {
         lateCount: counter.late,
         absentCount: counter.absent,
         excusedCount: counter.excused,
+        pendingCount: 0,
         attendedCount: counter.attended,
         effectiveCount: counter.effective,
-        participantCount: counter.participants
+        participantCount: counter.participants,
+        isClosed: true,
+        isOngoing: false
+      };
+    });
+
+    const statusDistributionRows = statusSelectedSessions.map(session => {
+      const counter = statusSessionMap[session.sessionKey] || {
+        onTime: 0,
+        late: 0,
+        absent: 0,
+        excused: 0,
+        pending: 0,
+        attended: 0,
+        effective: 0,
+        participants: 0,
+        isClosed: false,
+        isOngoing: false
+      };
+      return {
+        sessionKey: session.sessionKey,
+        date: formatDateTimeMinute(session.startTime),
+        dateKey: formatDateKey(session.startTime),
+        startTime: session.startTime.getTime(),
+        onTimeCount: counter.onTime,
+        lateCount: counter.late,
+        absentCount: counter.absent,
+        excusedCount: counter.excused,
+        pendingCount: counter.pending,
+        attendedCount: counter.attended,
+        effectiveCount: counter.effective,
+        participantCount: counter.participants,
+        isClosed: !!counter.isClosed,
+        isOngoing: !!counter.isOngoing
       };
     });
 
@@ -284,10 +360,11 @@ function getAttendanceDashboardSummary(params) {
       attendedCount: item.attendedCount
     }));
 
-    const totalOnTime = sessionRows.reduce((sum, row) => sum + Number(row.onTimeCount || 0), 0);
-    const totalLateCount = sessionRows.reduce((sum, row) => sum + Number(row.lateCount || 0), 0);
-    const totalAbsentCount = sessionRows.reduce((sum, row) => sum + Number(row.absentCount || 0), 0);
-    const totalExcusedCount = sessionRows.reduce((sum, row) => sum + Number(row.excusedCount || 0), 0);
+    const totalOnTime = statusDistributionRows.reduce((sum, row) => sum + Number(row.onTimeCount || 0), 0);
+    const totalLateCount = statusDistributionRows.reduce((sum, row) => sum + Number(row.lateCount || 0), 0);
+    const totalAbsentCount = statusDistributionRows.reduce((sum, row) => sum + Number(row.absentCount || 0), 0);
+    const totalExcusedCount = statusDistributionRows.reduce((sum, row) => sum + Number(row.excusedCount || 0), 0);
+    const totalPendingCount = statusDistributionRows.reduce((sum, row) => sum + Number(row.pendingCount || 0), 0);
     const selectedSessionDateRange = buildDashboardDateRangeFromSessions(selectedSessions);
     const closedSessionDateRange = buildDashboardDateRangeFromSessions(closedSelectedSessions);
 
@@ -332,19 +409,23 @@ function getAttendanceDashboardSummary(params) {
       },
       charts: {
         attendanceRateBySession: sessionRows,
-        statusDistributionBySession: sessionRows.map(row => ({
+        statusDistributionBySession: statusDistributionRows.map(row => ({
           sessionKey: row.sessionKey,
           date: row.date,
           onTimeCount: row.onTimeCount,
           lateCount: row.lateCount,
           absentCount: row.absentCount,
-          excusedCount: row.excusedCount
+          excusedCount: row.excusedCount,
+          pendingCount: row.pendingCount,
+          isClosed: row.isClosed,
+          isOngoing: row.isOngoing
         })),
         totals: {
           onTimeCount: totalOnTime,
           lateCount: totalLateCount,
           absentCount: totalAbsentCount,
-          excusedCount: totalExcusedCount
+          excusedCount: totalExcusedCount,
+          pendingCount: totalPendingCount
         },
         donut: {
           statusRatio: {
@@ -352,7 +433,8 @@ function getAttendanceDashboardSummary(params) {
             lateCount: totalLateCount,
             absentCount: totalAbsentCount,
             excusedCount: totalExcusedCount,
-            totalCount: totalOnTime + totalLateCount + totalAbsentCount + totalExcusedCount
+            pendingCount: totalPendingCount,
+            totalCount: totalOnTime + totalLateCount + totalAbsentCount + totalExcusedCount + totalPendingCount
           },
           cohortRatio: {
             obCount: obMembers,
@@ -368,13 +450,21 @@ function getAttendanceDashboardSummary(params) {
       },
       meta: {
         closedSessionCount: closedSelectedSessions.length,
+        ongoingSessionCount: ongoingSelectedSessions.length,
+        statusSessionCount: statusSelectedSessions.length,
         selectedSessionCount: selectedSessions.length,
         selectedClosedSessionKeys: closedSelectedSessions.map(session => session.sessionKey),
+        selectedOngoingSessionKeys: ongoingSelectedSessions.map(session => session.sessionKey),
+        statusSessionKeys: statusSessionKeys,
         availableSessions: sessions.map(session => ({
           sessionKey: session.sessionKey,
           date: formatDateTimeMinute(session.startTime),
           dateKey: formatDateKey(session.startTime),
           isClosed: session.lateDeadline <= now,
+          isOngoing: isDashboardSessionOngoing(session, now),
+          phase: session.lateDeadline <= now
+            ? 'closed'
+            : (isDashboardSessionOngoing(session, now) ? 'ongoing' : 'future'),
           isSelected: !!selectedSessionSet[session.sessionKey]
         })),
         memberOptions: memberOptions,
@@ -387,8 +477,10 @@ function getAttendanceDashboardSummary(params) {
           maxAttendAt: maxActualAttendanceMs === null ? '' : formatDateTimeMinute(new Date(maxActualAttendanceMs))
         },
         quickFilter: {
-          version: 2,
-          closedSessionKeys: quickFilterClosedSessionKeys,
+          version: 3,
+          sessionKeys: statusSessionKeys,
+          closedSessionKeys: closedSelectedSessions.map(session => session.sessionKey),
+          ongoingSessionKeys: ongoingSelectedSessions.map(session => session.sessionKey),
           members: quickFilterMembers
         },
         defaultDateRange: {
@@ -400,7 +492,7 @@ function getAttendanceDashboardSummary(params) {
       }
     };
 
-    if (!disableCache) {
+    if (canUseCache) {
       writeAttendanceDashboardCache(cacheKey, payload);
     }
 
@@ -446,7 +538,7 @@ function getAttendanceDashboardDrilldown(params) {
       }
 
       const rows = [];
-      const summary = { onTimeCount: 0, lateCount: 0, absentCount: 0, excusedCount: 0, participants: 0, effectiveCount: 0 };
+      const summary = { onTimeCount: 0, lateCount: 0, absentCount: 0, excusedCount: 0, pendingCount: 0, participants: 0, effectiveCount: 0 };
 
       for (let i = 1; i < values.length; i++) {
         const member = readMemberFromRow(values[i], memberSchema);
@@ -456,7 +548,7 @@ function getAttendanceDashboardDrilldown(params) {
         if (!isDashboardGroupAllowed(filters.group, cohortTag)) continue;
 
         const cellValue = values[i][targetSession.colIndex];
-        const status = getAttendanceDetailType(cellValue, targetSession, now);
+        const status = getDashboardAttendanceStatus(cellValue, targetSession, now);
         const note = getDashboardNoteValue(notesMatrix, i, targetSession.colIndex, sessionStartCol);
         const attendTime = status === 'on_time' || status === 'late'
           ? getDashboardAttendTimeText(cellValue)
@@ -476,6 +568,8 @@ function getAttendanceDashboardDrilldown(params) {
         } else if (status === 'excused') {
           summary.excusedCount++;
           summary.participants++;
+        } else if (status === 'pending') {
+          summary.pendingCount++;
         }
 
         rows.push({
@@ -541,6 +635,7 @@ function getAttendanceDashboardDrilldown(params) {
         lateCount: 0,
         absentCount: 0,
         excusedCount: 0,
+        pendingCount: 0,
         futureCount: 0,
         effectiveCount: 0,
         attendedCount: 0
@@ -548,7 +643,7 @@ function getAttendanceDashboardDrilldown(params) {
 
       selectedSessions.forEach(session => {
         const cellValue = values[targetRowIndex][session.colIndex];
-        const status = getAttendanceDetailType(cellValue, session, now);
+        const status = getDashboardAttendanceStatus(cellValue, session, now);
         const note = getDashboardNoteValue(notesMatrix, targetRowIndex, session.colIndex, sessionStartCol);
         const attendTime = status === 'on_time' || status === 'late'
           ? getDashboardAttendTimeText(cellValue)
@@ -573,6 +668,8 @@ function getAttendanceDashboardDrilldown(params) {
           summary.effectiveCount++;
         } else if (status === 'excused') {
           summary.excusedCount++;
+        } else if (status === 'pending') {
+          summary.pendingCount++;
         } else {
           summary.futureCount++;
         }
@@ -616,6 +713,7 @@ function getAttendanceDashboardDrilldown(params) {
           lateCount: summary.lateCount,
           absentCount: summary.absentCount,
           excusedCount: summary.excusedCount,
+          pendingCount: summary.pendingCount,
           futureCount: summary.futureCount,
           effectiveCount: summary.effectiveCount,
           attendedCount: summary.attendedCount,
@@ -890,9 +988,10 @@ function getDashboardStatusOrder(status) {
   switch (status) {
     case 'on_time': return 0;
     case 'late': return 1;
-    case 'excused': return 2;
-    case 'absent': return 3;
-    default: return 4;
+    case 'pending': return 2;
+    case 'excused': return 3;
+    case 'absent': return 4;
+    default: return 5;
   }
 }
 
@@ -902,8 +1001,25 @@ function getDashboardQuickFilterStatusCode(status) {
     case 'late': return 'L';
     case 'absent': return 'A';
     case 'excused': return 'E';
+    case 'pending': return 'P';
     default: return '-';
   }
+}
+
+function isDashboardSessionOngoing(session, now) {
+  if (!session || !session.openTime || !session.lateDeadline) return false;
+  const nowDate = now instanceof Date ? now : new Date(now);
+  const nowMs = nowDate.getTime();
+  if (isNaN(nowMs)) return false;
+  return session.openTime.getTime() <= nowMs && nowMs < session.lateDeadline.getTime();
+}
+
+function getDashboardAttendanceStatus(cellValue, session, now) {
+  const status = getAttendanceDetailType(cellValue, session, now);
+  if (status === 'future' && isDashboardSessionOngoing(session, now)) {
+    return 'pending';
+  }
+  return status;
 }
 
 function compareAttendanceRankingRows(a, b) {

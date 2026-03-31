@@ -71,6 +71,9 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(countdownInterval);
         countdownInterval = null;
       }
+      if (typeof clearAttendanceDashboardAutoRefresh === 'function') {
+        clearAttendanceDashboardAutoRefresh();
+      }
       if (isAdminPerfUiEnabled()) {
         pauseCloudAnimations();
       }
@@ -87,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (typeof refreshStatusDashboardIfVisible === 'function' && adminToken && seasonSourceReady) {
       refreshStatusDashboardIfVisible();
+    }
+    if (typeof syncAttendanceDashboardAutoRefresh === 'function') {
+      syncAttendanceDashboardAutoRefresh({ immediate: false });
     }
   });
 

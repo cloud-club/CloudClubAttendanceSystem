@@ -101,6 +101,9 @@ function resetAdminAuthState(options) {
   seasonSourceBlockMessage = '';
   adminUsersCache = [];
   adminUsersEditingEmail = '';
+  if (typeof clearAttendanceDashboardAutoRefresh === 'function') {
+    clearAttendanceDashboardAutoRefresh();
+  }
   if (!opts.preserveSessionToken) {
     sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
   }

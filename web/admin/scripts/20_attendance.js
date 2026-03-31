@@ -411,6 +411,9 @@ function renderCountdown(session) {
       countdownTitle.textContent = '출석 시간 종료';
       countdownDiv.textContent = '00분 00초';
       disableAttend('<i class="fas fa-times"></i> <span>출석 마감</span>');
+      if (typeof refreshStatusDashboardIfVisible === 'function' && getActiveTabName() === 'status') {
+        refreshStatusDashboardIfVisible();
+      }
       return;
     }
 
@@ -444,9 +447,15 @@ async function checkAttendanceSession() {
   try {
     const session = await CloudClubApi.call('session', buildSeasonScopedAdminParams());
     renderCountdown(session);
+    if (typeof syncAttendanceDashboardAutoRefresh === 'function') {
+      syncAttendanceDashboardAutoRefresh({ immediate: false });
+    }
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     renderCountdown({ active: false, message: getDisplayErrorMessage(error, '세션 정보를 불러올 수 없습니다.') });
+    if (typeof syncAttendanceDashboardAutoRefresh === 'function') {
+      syncAttendanceDashboardAutoRefresh({ immediate: false });
+    }
   }
 }
 
@@ -476,8 +485,12 @@ function openTab(tabName, evt) {
     }
   }
 
+  if (typeof syncAttendanceDashboardAutoRefresh === 'function') {
+    syncAttendanceDashboardAutoRefresh({ immediate: false });
+  }
+
   if (tabName === 'status') {
-    loadAttendanceDashboard({ forceReload: false });
+    loadAttendanceDashboard({ forceReload: !!isAttendanceActive });
     if (typeof flushAttendanceDashboardDeferredWork === 'function') {
       runWhenBrowserIdle(() => flushAttendanceDashboardDeferredWork(), 120);
     }
