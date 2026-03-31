@@ -568,7 +568,16 @@ async function applyAttendanceDashboardStatusRankingSlice(statusKey, options) {
   }, rankingRows);
 }
 
-function renderAttendanceDashboardSliceLoading(filter, message) {
+function renderAttendanceDashboardSliceLoading(filter, message, options) {
+  const opts = options || {};
+  if (opts.preserveExistingTable && attendanceDashboardActiveSliceFilter && getAttendanceDashboardDrilldownMode() === 'memberList') {
+    attendanceDashboardActiveSliceFilter = Object.assign({}, attendanceDashboardActiveSliceFilter, filter || {}, {
+      summary: String(message || '드릴다운 데이터를 새로 불러오는 중입니다.').trim()
+    });
+    renderAttendanceDashboardSliceMembers();
+    return;
+  }
+
   attendanceDashboardActiveSliceFilter = filter || null;
   attendanceDashboardActiveSliceMembers = [];
   attendanceDashboardActiveStatusRankingRows = [];
@@ -592,12 +601,19 @@ function renderAttendanceDashboardSliceLoading(filter, message) {
   wrap.innerHTML = `<p class="info-text">${escapeHtml(message || '드릴다운 데이터를 불러오는 중입니다...')}</p>`;
 }
 
-async function loadAttendanceDashboardEventStatusMembers(sessionKey, statusKey) {
+function isAttendanceDashboardSessionOngoingByKey(sessionKey, payload) {
+  const meta = getAttendanceDashboardSessionMetaByKey(sessionKey, payload);
+  return !!(meta && meta.isOngoing);
+}
+
+async function loadAttendanceDashboardEventStatusMembers(sessionKey, statusKey, options) {
+  const opts = options || {};
   const cacheKey = buildAttendanceDashboardEventSliceCacheKey(sessionKey);
   const cached = attendanceDashboardEventDrilldownCache[cacheKey];
   let payload = null;
+  const isOngoing = isAttendanceDashboardSessionOngoingByKey(sessionKey, opts.payload);
 
-  if (cached && cached.expiresAt > Date.now()) {
+  if (cached && (cached.isStable || (!opts.forceRefresh && cached.expiresAt > Date.now()))) {
     payload = cached.payload;
   } else {
     const season = getSelectedSeasonAlias();
@@ -614,7 +630,8 @@ async function loadAttendanceDashboardEventStatusMembers(sessionKey, statusKey) 
     payload = await CloudClubApi.call('attendanceDashboardDrilldown', params);
     attendanceDashboardEventDrilldownCache[cacheKey] = {
       payload: payload,
-      expiresAt: Date.now() + ATTENDANCE_DASHBOARD_MEMBER_HISTORY_CACHE_TTL_MS
+      expiresAt: Date.now() + ATTENDANCE_DASHBOARD_MEMBER_HISTORY_CACHE_TTL_MS,
+      isStable: !isOngoing
     };
   }
 
@@ -632,6 +649,68 @@ async function loadAttendanceDashboardEventStatusMembers(sessionKey, statusKey) 
         attendTimeHHMM: formatDashboardAttendClockText(row.attendTime)
       });
     });
+}
+
+async function updateAttendanceDashboardEventStatusSlice(filter, options) {
+  const opts = options || {};
+  const sessionKey = String(filter && filter.sessionKey || '').trim();
+  const statusKey = String(filter && filter.statusKey || '').trim();
+  if (!sessionKey || !statusKey) return;
+
+  const previousMembers = Array.isArray(attendanceDashboardActiveSliceMembers)
+    ? attendanceDashboardActiveSliceMembers.slice()
+    : [];
+  const previousFilter = attendanceDashboardActiveSliceFilter
+    ? Object.assign({}, attendanceDashboardActiveSliceFilter)
+    : null;
+
+  renderAttendanceDashboardSliceLoading(
+    filter,
+    opts.loadingMessage || `${sessionKey} / ${formatDashboardStatus(statusKey)} 멤버 목록을 불러오는 중입니다...`,
+    { preserveExistingTable: !!opts.preserveExistingTable }
+  );
+
+  try {
+    const matchedMembers = await loadAttendanceDashboardEventStatusMembers(sessionKey, statusKey, {
+      forceRefresh: !!opts.forceRefresh,
+      payload: opts.payload || attendanceDashboardPayload
+    });
+    updateAttendanceDashboardEventStatusSliceCache(filter, matchedMembers);
+  } catch (error) {
+    if (handleUnauthorizedError(error)) return;
+    if (opts.preserveExistingTable && previousFilter && previousMembers.length > 0) {
+      attendanceDashboardActiveSliceFilter = Object.assign({}, previousFilter, {
+        summary: `${previousFilter.summary || filter.summary || ''} / 최신 데이터 갱신 실패: ${getDisplayErrorMessage(error, '드릴다운 조회 실패')}`
+      });
+      attendanceDashboardActiveSliceMembers = previousMembers;
+      attendanceDashboardActiveStatusRankingRows = [];
+      attendanceDashboardActiveDrilldownMode = 'memberList';
+      renderAttendanceDashboardSliceMembers();
+      return;
+    }
+    resetAttendanceDashboardSliceUiState({ render: false });
+    const wrap = document.getElementById('dashboardDrilldownTableWrap');
+    const title = document.getElementById('dashboardDrilldownTitle');
+    const summary = document.getElementById('dashboardDrilldownSummary');
+    const actions = document.getElementById('dashboardDrilldownActions');
+    if (title) title.textContent = filter.label || '대시보드 드릴다운';
+    if (summary) summary.textContent = getDisplayErrorMessage(error, '드릴다운 조회 실패');
+    if (actions) actions.innerHTML = '';
+    if (wrap) wrap.innerHTML = '<p class="info-text">드릴다운 데이터를 불러오지 못했습니다.</p>';
+  }
+}
+
+function updateAttendanceDashboardEventStatusSliceCache(filter, matchedMembers) {
+  attendanceDashboardActiveSliceFilter = Object.assign({}, filter, {
+    summary: filter.statusKey === 'pending'
+      ? `회차 ${filter.sessionKey}에서 아직 출석하지 않은 멤버 ${matchedMembers.length}명`
+      : `회차 ${filter.sessionKey}에서 ${formatDashboardStatus(filter.statusKey)}로 집계된 멤버 ${matchedMembers.length}명`
+  });
+  attendanceDashboardActiveSliceMembers = sortAttendanceDashboardSliceMembers(matchedMembers);
+  attendanceDashboardActiveStatusRankingRows = [];
+  attendanceDashboardActiveDrilldownMode = 'memberList';
+  closeAttendanceDashboardMemberHistoryModal();
+  renderAttendanceDashboardSliceMembers();
 }
 
 async function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
@@ -663,32 +742,7 @@ async function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
     resetAttendanceDashboardSliceUiState();
     return;
   }
-
-  renderAttendanceDashboardSliceLoading(filter, `${sessionKey} / ${statusLabel} 멤버 목록을 불러오는 중입니다...`);
-  try {
-    const matchedMembers = await loadAttendanceDashboardEventStatusMembers(sessionKey, statusKey);
-    attendanceDashboardActiveSliceFilter = Object.assign({}, filter, {
-      summary: statusKey === 'pending'
-        ? `회차 ${sessionKey}에서 아직 출석하지 않은 멤버 ${matchedMembers.length}명`
-        : `회차 ${sessionKey}에서 ${statusLabel}로 집계된 멤버 ${matchedMembers.length}명`
-    });
-    attendanceDashboardActiveSliceMembers = sortAttendanceDashboardSliceMembers(matchedMembers);
-    attendanceDashboardActiveStatusRankingRows = [];
-    attendanceDashboardActiveDrilldownMode = 'memberList';
-    closeAttendanceDashboardMemberHistoryModal();
-    renderAttendanceDashboardSliceMembers();
-  } catch (error) {
-    if (handleUnauthorizedError(error)) return;
-    resetAttendanceDashboardSliceUiState({ render: false });
-    const wrap = document.getElementById('dashboardDrilldownTableWrap');
-    const title = document.getElementById('dashboardDrilldownTitle');
-    const summary = document.getElementById('dashboardDrilldownSummary');
-    const actions = document.getElementById('dashboardDrilldownActions');
-    if (title) title.textContent = filter.label || '대시보드 드릴다운';
-    if (summary) summary.textContent = getDisplayErrorMessage(error, '드릴다운 조회 실패');
-    if (actions) actions.innerHTML = '';
-    if (wrap) wrap.innerHTML = '<p class="info-text">드릴다운 데이터를 불러오지 못했습니다.</p>';
-  }
+  await updateAttendanceDashboardEventStatusSlice(filter);
 }
 
 function applyAttendanceDashboardCohortSlice(cohortTag) {
@@ -769,7 +823,16 @@ function restoreAttendanceDashboardActiveSliceSnapshot(snapshot) {
     return true;
   }
   if (snapshot.type === 'eventStatus' && snapshot.sessionKey && snapshot.statusKey) {
-    applyAttendanceDashboardEventStatusSlice(snapshot.sessionKey, snapshot.statusKey);
+    const isOngoing = isAttendanceDashboardSessionOngoingByKey(snapshot.sessionKey);
+    if (isOngoing) {
+      void updateAttendanceDashboardEventStatusSlice(buildAttendanceDashboardEventStatusFilter(snapshot.sessionKey, snapshot.statusKey, attendanceDashboardActiveSliceMembers.length), {
+        preserveExistingTable: true,
+        forceRefresh: true,
+        loadingMessage: `${snapshot.sessionKey} / ${formatDashboardStatus(snapshot.statusKey)} 멤버 목록을 업데이트하는 중입니다...`
+      });
+      return true;
+    }
+    renderAttendanceDashboardSliceMembers();
     return true;
   }
   if (snapshot.type === 'cohort' && snapshot.cohortTag) {
@@ -2059,6 +2122,45 @@ function formatDashboardAttendClockText(value) {
   return '-';
 }
 
+function getAttendanceDashboardSessionMetaByKey(sessionKey, payload) {
+  const targetKey = String(sessionKey || '').trim();
+  if (!targetKey) return null;
+  const sourcePayload = payload || attendanceDashboardPayload || null;
+  const availableSessions = sourcePayload && sourcePayload.meta && Array.isArray(sourcePayload.meta.availableSessions)
+    ? sourcePayload.meta.availableSessions
+    : [];
+  return availableSessions.find(item => String(item && item.sessionKey || '').trim() === targetKey) || null;
+}
+
+function buildAttendanceDashboardEventStatusFilter(sessionKey, statusKey, matchedCount) {
+  const normalizedSessionKey = String(sessionKey || '').trim();
+  const normalizedStatusKey = String(statusKey || '').trim();
+  const statusLabel = formatDashboardStatus(normalizedStatusKey);
+  const count = Number(matchedCount || 0);
+  return {
+    id: `event-status:${normalizedSessionKey}:${normalizedStatusKey}`,
+    type: 'eventStatus',
+    sessionKey: normalizedSessionKey,
+    statusKey: normalizedStatusKey,
+    label: `${normalizedSessionKey} / ${statusLabel}`,
+    summary: normalizedStatusKey === 'pending'
+      ? `회차 ${normalizedSessionKey}에서 아직 출석하지 않은 멤버 ${count}명`
+      : `회차 ${normalizedSessionKey}에서 ${statusLabel}로 집계된 멤버 ${count}명`
+  };
+}
+
+function updateAttendanceDashboardEventStatusSlice(filter, members, options) {
+  const opts = options || {};
+  attendanceDashboardActiveSliceFilter = filter || null;
+  attendanceDashboardActiveSliceMembers = sortAttendanceDashboardSliceMembers(members);
+  attendanceDashboardActiveStatusRankingRows = [];
+  attendanceDashboardActiveDrilldownMode = filter ? 'memberList' : '';
+  if (opts.closeModal !== false) {
+    closeAttendanceDashboardMemberHistoryModal();
+  }
+  renderAttendanceDashboardSliceMembers();
+}
+
 function getDashboardStatusChipMarkup(status) {
   const normalized = String(status || '').toLowerCase();
   return `<span class="dashboard-status-chip ${escapeHtml(normalized)}">${escapeHtml(formatDashboardStatus(normalized))}</span>`;
@@ -2963,14 +3065,7 @@ async function loadAttendanceDashboard(options) {
   const preserveSlice = opts.preserveSlice !== false;
   const sliceSnapshot = preserveSlice ? captureAttendanceDashboardActiveSliceSnapshot() : null;
   if (opts.forceReload || (attendanceDashboardLastFetchKey && attendanceDashboardLastFetchKey !== fetchKey)) {
-    if (sliceSnapshot) {
-      attendanceDashboardActiveSliceFilter = null;
-      attendanceDashboardActiveSliceMembers = [];
-      attendanceDashboardActiveStatusRankingRows = [];
-      attendanceDashboardActiveDrilldownMode = '';
-      clearAttendanceDashboardMemberHistoryCache();
-      closeAttendanceDashboardMemberHistoryModal();
-    } else {
+    if (!sliceSnapshot) {
       resetAttendanceDashboardSliceUiState({ render: true });
     }
   }
@@ -3043,7 +3138,6 @@ async function loadAttendanceDashboard(options) {
     attendanceDashboardPayload = response;
     attendanceDashboardDrilldownPayload = null;
     attendanceDashboardMemberSeriesCache = {};
-    attendanceDashboardEventDrilldownCache = {};
     attendanceDashboardLastFetchKey = fetchKey;
     attendanceDashboardLastFetchedAt = Date.now();
     attendanceDashboardLastRenderSignature = '';

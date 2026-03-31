@@ -147,6 +147,8 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 21. [ ] 진행 중 회차가 `lateDeadline`을 지나면 회색 `미확정`이 결석으로 전환되고, 상태 비율에는 여전히 `미확정`이 노출되지 않음
 22. [ ] 같은 날 미래 일정이 미리 등록되어 있어도 기본 그래프는 처음 회차부터 오늘 기준 완료 회차 + 현재 활성 회차까지만 보여주고, 사용자가 날짜/회차 필터를 직접 바꾸면 그 선택을 우선함
 23. [ ] 진행 중 회차의 상태 bar slice를 클릭해 하단 멤버 목록을 열어둔 상태에서 자동 새로고침이 돌아와도 기본 안내로 풀리지 않고 같은 slice가 최신 데이터로 갱신됨
+24. [ ] 이미 지난 회차의 상태 bar slice를 열어둔 상태에서 자동 새로고침이 돌아와도 해당 표를 다시 비우거나 재조회하지 않고 그대로 유지함
+25. [ ] 활성 회차 slice 재조회가 timeout 되어도 하단 표는 직전 데이터가 유지되고, 비파괴적 오류 안내만 보임
 
 ### super
 1. [ ] variables/seasonImport/adminUsers 기존 동작 정상

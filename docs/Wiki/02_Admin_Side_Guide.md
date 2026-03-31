@@ -136,6 +136,8 @@ flowchart LR
 
 최근 기준에서는 `행사별 출석/지각/결석/유고 분포`의 막대를 눌렀을 때 하단 멤버 목록에 **`출석 시간` 컬럼이 추가로 보이는 것**도 운영상 중요합니다. 이 컬럼은 full timestamp가 아니라 `HH:MM`만 보여주며, 이미 날짜 정보는 회차/일시 영역에 있으므로 현장에서 “누가 몇 시쯤 들어왔는지”를 빠르게 읽게 하는 용도입니다. 실제 출석 기록이 없는 `결석/유고/미확정` 행은 `-`로 보이는 것이 맞고, `출석/지각`만 시간값을 가진다고 이해하면 됩니다.
 
+또 하나 중요한 운영 기준은 **실시간 새로고침이 전체 드릴다운을 다시 비우지 않는 것**입니다. 이미 지난 회차는 불변으로 보고, 30초 자동 새로고침이 돌아가더라도 현재 열려 있는 드릴다운이 과거 회차라면 그대로 유지하는 것이 맞습니다. 반대로 현재 활성 회차를 열어둔 경우에만 그 회차의 하단 목록을 최신 데이터로 다시 가져오고, 이때도 표 전체를 비우는 대신 **기존 표를 유지한 채 조용히 업데이트**해야 운영자가 현장에서 덜 불편합니다.
+
 #### 수정 시 확인 파일
 - [web/admin/index.html](../../web/admin/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/index.html)
 - [web/admin/scripts/20_attendance.js](../../web/admin/scripts/20_attendance.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/admin/scripts/20_attendance.js)
