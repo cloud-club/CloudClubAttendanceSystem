@@ -57,7 +57,7 @@ flowchart LR
 - 023은 구조분할/긴급복구 기준
 - 024는 컬럼 유연화 이후에도 **공개 API 불변과 시즌업데이트 리스크 분리** 원칙을 명시한 기준
 - 025는 평균 출석시간 추이 전환 + 그래프 클릭형 빠른 멤버 필터 기준
-- 026은 진행 중 회차의 회색 `pending(미확정)` 표시, 상태 비율의 `회` 기준 해석, 30초 자동 갱신 기준을 기록한 문서입니다.
+- 026은 진행 중 회차의 회색 `pending(미확정)` 표시, 행사별 출석률/평균 추이의 실시간 반영, 상태 비율의 `회` 기준 해석 조정, 30초 자동 갱신 기준을 기록한 문서입니다.
 
 - [docs/History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md](../History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/023_%EA%B4%80%EB%A6%AC%EC%9E%90%EB%B0%B1%EC%97%94%EB%93%9C_%EA%B5%AC%EC%A1%B0%EB%B6%84%ED%95%A0_%EB%B0%8F_%EC%B6%9C%EC%84%9D%EC%9D%B8%EC%A6%9D%EB%B6%88%EC%9D%BC%EC%B9%98_%EA%B8%B4%EA%B8%89%EB%B3%B5%EA%B5%AC_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-02-20.md)
 - [docs/History/024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md](../History/024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/024_%EC%BB%AC%EB%9F%BC%EC%9C%A0%EC%97%B0%ED%99%94_%ED%97%A4%EB%8D%94%EA%B8%B0%EB%B0%98%EC%8A%A4%ED%82%A4%EB%A7%88_%EB%AC%B4%EC%B2%B4%EA%B0%90%EC%95%88%EC%A0%95%ED%99%94_2026-03-03.md)

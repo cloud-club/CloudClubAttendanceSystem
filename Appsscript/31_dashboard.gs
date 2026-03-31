@@ -254,7 +254,7 @@ function getAttendanceDashboardSummary(params) {
       });
     }
 
-    const sessionRows = closedSelectedSessions.map(session => {
+    const sessionRows = statusSelectedSessions.map(session => {
       const counter = statusSessionMap[session.sessionKey] || {
         onTime: 0,
         late: 0,
@@ -266,13 +266,17 @@ function getAttendanceDashboardSummary(params) {
         participants: 0
       };
 
-      const attendanceRate = counter.effective > 0
-        ? Math.round((counter.attended / counter.effective) * 100)
+      const isClosed = !!counter.isClosed;
+      const rateBaseCount = isClosed
+        ? Number(counter.effective || 0)
+        : Number(totalMembers || 0);
+      const attendanceRate = rateBaseCount > 0
+        ? Math.round(((isClosed ? Number(counter.attended || 0) : Number(counter.participants || 0)) / rateBaseCount) * 100)
         : 0;
-      const lateRate = counter.effective > 0
+      const lateRate = isClosed && counter.effective > 0
         ? Math.round((counter.late / counter.effective) * 100)
         : 0;
-      const absenceRate = counter.effective > 0
+      const absenceRate = isClosed && counter.effective > 0
         ? Math.round((counter.absent / counter.effective) * 100)
         : 0;
 
@@ -282,18 +286,20 @@ function getAttendanceDashboardSummary(params) {
         dateKey: formatDateKey(session.startTime),
         startTime: session.startTime.getTime(),
         attendanceRate: attendanceRate,
+        rateBaseCount: rateBaseCount,
+        rateMode: isClosed ? 'closed' : 'live',
         lateRate: lateRate,
         absenceRate: absenceRate,
         onTimeCount: counter.onTime,
         lateCount: counter.late,
-        absentCount: counter.absent,
+        absentCount: isClosed ? counter.absent : 0,
         excusedCount: counter.excused,
-        pendingCount: 0,
+        pendingCount: counter.pending,
         attendedCount: counter.attended,
         effectiveCount: counter.effective,
         participantCount: counter.participants,
-        isClosed: true,
-        isOngoing: false
+        isClosed: isClosed,
+        isOngoing: !!counter.isOngoing
       };
     });
 
@@ -328,7 +334,7 @@ function getAttendanceDashboardSummary(params) {
       };
     });
 
-    const sortedEventRows = sortDashboardEventRows(sessionRows, filters.sortBy);
+    const sortedEventRows = sortDashboardEventRows(sessionRows.filter(row => row.isClosed), filters.sortBy);
     const topEventRows = sortedEventRows.slice(0, filters.topN);
 
     const rankings = memberRows.slice().sort(compareAttendanceRankingRows).map((item, idx) => ({
@@ -433,8 +439,7 @@ function getAttendanceDashboardSummary(params) {
             lateCount: totalLateCount,
             absentCount: totalAbsentCount,
             excusedCount: totalExcusedCount,
-            pendingCount: totalPendingCount,
-            totalCount: totalOnTime + totalLateCount + totalAbsentCount + totalExcusedCount + totalPendingCount
+            totalCount: totalOnTime + totalLateCount + totalAbsentCount + totalExcusedCount
           },
           cohortRatio: {
             obCount: obMembers,
@@ -734,14 +739,19 @@ function getAttendanceDashboardDrilldown(params) {
       });
       const hasMemberFilter = requestedMemberKeys.length > 0;
 
-      const sessionRows = closedSelectedSessions.map(session => ({
+      const trendSessions = selectedSessions.filter(session => {
+        return session.lateDeadline <= now || isDashboardSessionOngoing(session, now);
+      });
+      const sessionRows = trendSessions.map(session => ({
         sessionKey: session.sessionKey,
         date: formatDateTimeMinute(session.startTime),
         startTime: session.startTime.getTime(),
         averageOffsetSeconds: null,
         averageOffsetLabel: '',
         averageAttendTime: '',
-        validAttendanceCount: 0
+        validAttendanceCount: 0,
+        isClosed: session.lateDeadline <= now,
+        isOngoing: isDashboardSessionOngoing(session, now)
       }));
       const sessionRowMap = {};
       sessionRows.forEach(row => {
@@ -763,12 +773,12 @@ function getAttendanceDashboardDrilldown(params) {
 
         targetedMemberCount++;
 
-        closedSelectedSessions.forEach(session => {
+        trendSessions.forEach(session => {
           const row = sessionRowMap[session.sessionKey];
           if (!row) return;
 
           const cellValue = values[i][session.colIndex];
-          const status = getAttendanceDetailType(cellValue, session, now);
+          const status = getDashboardAttendanceStatus(cellValue, session, now);
           if (status !== 'on_time' && status !== 'late') return;
 
           const attendTime = parseAttendanceTime(cellValue);
@@ -810,6 +820,7 @@ function getAttendanceDashboardDrilldown(params) {
           filteredMemberCount: targetedMemberCount,
           selectedMemberCount: requestedMemberKeys.length,
           closedSessionCount: closedSelectedSessions.length,
+          ongoingSessionCount: trendSessions.filter(session => isDashboardSessionOngoing(session, now)).length,
           sessionsWithAverage: sessionsWithAverage,
           hasMemberFilter: hasMemberFilter
         }

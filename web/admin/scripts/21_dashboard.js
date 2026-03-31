@@ -560,23 +560,6 @@ async function applyAttendanceDashboardStatusRankingSlice(statusKey, options) {
   }, rankingRows);
 }
 
-function applyAttendanceDashboardPendingSlice() {
-  if (!getAttendanceDashboardQuickFilterMeta()) {
-    showToast('<i class="fas fa-info-circle"></i> 빠른 필터 인덱스를 찾을 수 없습니다. Apps Script를 먼저 배포했는지 확인해주세요.', true);
-    return;
-  }
-
-  const matchedMembers = getAttendanceDashboardQuickFilterMembers().filter(member => {
-    return Number(member && member.pendingCount || 0) > 0;
-  });
-  toggleAttendanceDashboardActiveSlice({
-    id: 'status-pending',
-    type: 'pending',
-    label: '진행중 미확정 멤버',
-    summary: `진행 중 회차에서 아직 출석하지 않은 멤버 ${matchedMembers.length}명`
-  }, matchedMembers);
-}
-
 function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
   const meta = getAttendanceDashboardQuickFilterMeta();
   const sessionKeys = meta && Array.isArray(meta.sessionKeys) && meta.sessionKeys.length > 0
@@ -671,9 +654,9 @@ function renderAttendanceDashboardSliceMembers() {
 
   if (!activeFilter || !activeMode) {
     title.textContent = '대시보드 드릴다운';
-    summary.textContent = '출석 상태 비율은 랭킹(진행중 미확정은 멤버 목록), 행사 상태 막대/OB-YB 비율/출석 횟수 분포는 하단 멤버 목록으로 연결됩니다.';
+    summary.textContent = '출석 상태 비율은 상태별 랭킹, 행사 상태 막대/OB-YB 비율/출석 횟수 분포는 하단 멤버 목록으로 연결됩니다.';
     actions.innerHTML = '';
-    wrap.innerHTML = '<p class="info-text">활성 그래프 조각이 없습니다. 상태 비율은 랭킹(진행중 미확정은 멤버 목록), 나머지 그래프는 멤버 목록으로 바로 확인할 수 있습니다.</p>';
+    wrap.innerHTML = '<p class="info-text">활성 그래프 조각이 없습니다. 상태 비율은 랭킹, 나머지 그래프는 멤버 목록으로 바로 확인할 수 있습니다.</p>';
     return;
   }
 
@@ -1354,31 +1337,25 @@ function renderAttendanceDashboardStatusDonutChart(payload) {
     Number(statusRatio.onTimeCount || 0),
     Number(statusRatio.lateCount || 0),
     Number(statusRatio.absentCount || 0),
-    Number(statusRatio.excusedCount || 0),
-    Number(statusRatio.pendingCount || 0)
+    Number(statusRatio.excusedCount || 0)
   ];
   const hasValue = renderDashboardDonutChart(
     'status',
     'dashboardStatusDonutChart',
     'dashboardStatusDonutEmpty',
-    ['출석', '지각', '결석', '유고', '미확정'],
+    ['출석', '지각', '결석', '유고'],
     values,
-    ['#4ade80', '#fbbf24', '#f87171', '#93c5fd', '#94a3b8'],
+    ['#4ade80', '#fbbf24', '#f87171', '#93c5fd'],
     {
       valueUnit: '회',
       meta: [
         { statusKey: 'on_time', label: '출석', drilldownMode: 'statusRanking' },
         { statusKey: 'late', label: '지각', drilldownMode: 'statusRanking' },
         { statusKey: 'absent', label: '결석', drilldownMode: 'statusRanking' },
-        { statusKey: 'excused', label: '유고', drilldownMode: 'statusRanking' },
-        { statusKey: 'pending', label: '미확정', drilldownMode: 'memberList' }
+        { statusKey: 'excused', label: '유고', drilldownMode: 'statusRanking' }
       ],
       onSliceClick(meta) {
         if (!meta || !meta.statusKey) return;
-        if (meta.drilldownMode === 'memberList') {
-          applyAttendanceDashboardPendingSlice();
-          return;
-        }
         applyAttendanceDashboardStatusRankingSlice(meta.statusKey);
       }
     }
@@ -1386,8 +1363,11 @@ function renderAttendanceDashboardStatusDonutChart(payload) {
 
   if (!hasValue) {
     const statusCount = Number(payload && payload.meta ? payload.meta.statusSessionCount || 0 : 0);
+    const ongoingCount = Number(payload && payload.meta ? payload.meta.ongoingSessionCount || 0 : 0);
     const message = statusCount > 0
-      ? '필터 조건에 맞는 출석 상태 데이터가 없습니다.'
+      ? (ongoingCount > 0
+        ? '진행 중 회차에는 아직 기록된 출석 상태가 없어 상태 비율을 계산할 수 없습니다.'
+        : '필터 조건에 맞는 출석 상태 데이터가 없습니다.')
       : '종료되었거나 진행 중인 회차가 없어 출석 상태 비율을 계산할 수 없습니다.';
     setDashboardDonutEmptyState('status', 'dashboardStatusDonutChart', 'dashboardStatusDonutEmpty', message);
   }
@@ -1612,6 +1592,13 @@ function renderAttendanceDashboardEventRateChart(payload) {
             label(context) {
               const chartRows = context.chart && context.chart.$ccRows ? context.chart.$ccRows : [];
               const row = chartRows[context.dataIndex] || {};
+              if (row.rateMode === 'live') {
+                return [
+                  `현재 진행률: ${row.attendanceRate || 0}%`,
+                  `현재 반영: ${row.participantCount || 0}/${row.rateBaseCount || 0}`,
+                  `출석: ${row.attendedCount || 0}회, 유고: ${row.excusedCount || 0}회, 미확정: ${row.pendingCount || 0}회`
+                ];
+              }
               return [
                 `출석률: ${row.attendanceRate || 0}%`,
                 `출석/모수: ${row.attendedCount || 0}/${row.effectiveCount || 0}`,
@@ -2184,6 +2171,9 @@ async function renderAttendanceDashboardMemberTrendChart() {
                 `평균 출석일시: ${pointMeta.averageAttendTime || '-'}`,
                 `유효 출석자: ${Number(pointMeta.validAttendanceCount || 0)}명`
               ];
+              if (pointMeta.isOngoing) {
+                lines.push('진행중 회차: 현재까지 기록된 출석자 평균');
+              }
               if (typeof summaryMeta.filteredMemberCount === 'number' && summaryMeta.filteredMemberCount > 0) {
                 lines.push(`대상 인원: ${summaryMeta.filteredMemberCount}명`);
               }
