@@ -393,26 +393,6 @@ async function initializeDashboard() {
   }
 
   if (firstInit) {
-    const scheduleSelect = document.getElementById('scheduleSessionSelect');
-    if (scheduleSelect) {
-      scheduleSelect.addEventListener('change', handleScheduleSelectionChange);
-    }
-    const scheduleDateInput = document.getElementById('scheduleDateInput');
-    const scheduleStartTimeInput = document.getElementById('scheduleStartTimeInput');
-    const scheduleEndInput = document.getElementById('scheduleEndInput');
-    if (scheduleDateInput) {
-      scheduleDateInput.addEventListener('change', updateSchedulePreview);
-    }
-    if (scheduleStartTimeInput) {
-      scheduleStartTimeInput.addEventListener('change', onScheduleStartTimeChanged);
-    }
-    if (scheduleEndInput) {
-      scheduleEndInput.addEventListener('input', () => {
-        scheduleEndAutoManaged = false;
-        updateSchedulePreview();
-      });
-    }
-
     const statusPhoneInput = document.getElementById('statusPhoneInput');
     if (statusPhoneInput) {
       statusPhoneInput.addEventListener('click', function () {
@@ -427,8 +407,6 @@ async function initializeDashboard() {
   if (!calendarSelectedDateKey) {
     calendarSelectedDateKey = getDateKeyFromDate(new Date());
   }
-
-  resetScheduleForm();
   syncImportSeasonInputByCurrentSelection();
   resetImportFlow(false);
   updateImportModeHintFromInput();

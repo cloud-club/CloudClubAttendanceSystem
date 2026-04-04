@@ -458,6 +458,19 @@
       color: #fff;
     }
 
+    .schedule-management-header {
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .schedule-management-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+    }
+
     .card-subtitle {
       font-size: 12px;
       font-weight: 700;
@@ -1150,32 +1163,6 @@
     .manual-detail-table td {
       color: #dbeafe;
       word-break: break-word;
-    }
-
-    .schedule-form-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .schedule-form-grid .form-group {
-      margin: 0;
-      max-width: 100%;
-      text-align: left;
-    }
-
-    .schedule-form-grid .form-label {
-      font-size: 14px;
-      margin-bottom: 8px;
-    }
-
-    .schedule-form-grid .form-input,
-    .schedule-form-grid .sheet-select {
-      font-size: 15px;
-      letter-spacing: 0;
-      padding: 12px 14px;
-      text-align: left;
     }
 
     .schedule-preview {
@@ -3921,59 +3908,21 @@
     <!-- 일정 관리 탭 -->
     <div id="schedule" class="tab-content">
       <div class="card">
-        <div class="card-header">
-          <i class="fas fa-calendar-plus card-icon"></i>
-          <h2 class="card-title">시즌 일정 등록/수정</h2>
-        </div>
-        <p class="info-text">캘린더에서 날짜를 고르고 시간을 입력하면 회차 키를 자동으로 생성합니다. 종료 시각은 시작 시각과 변수값을 기준으로 자동 제안됩니다.</p>
-        <form onsubmit="saveSchedule(event)">
-          <div class="schedule-form-grid">
-            <div class="form-group">
-              <label class="form-label" for="scheduleSessionSelect">수정 대상 회차</label>
-              <select id="scheduleSessionSelect" class="sheet-select">
-                <option value="">새 회차 추가</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="scheduleDateInput">행사 날짜</label>
-              <input id="scheduleDateInput" type="date" class="form-input" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="scheduleStartTimeInput">시작 시간</label>
-              <input id="scheduleStartTimeInput" type="time" class="form-input" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="scheduleEndInput">종료 시간 (선택)</label>
-              <input id="scheduleEndInput" type="time" class="form-input">
-            </div>
+        <div class="card-header schedule-management-header">
+          <div class="schedule-management-title">
+            <i class="fas fa-list card-icon"></i>
+            <h2 class="card-title">현재 시즌 일정 관리</h2>
           </div>
-          <div class="schedule-preview" id="scheduleComputedPreview">회차 키와 마감 계산 정보가 여기에 표시됩니다.</div>
-          <div class="sheet-actions">
-            <button type="submit" class="btn" id="scheduleSaveBtn">
-              <i class="fas fa-save"></i>
-              <span>일정 추가</span>
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="deleteSelectedSchedule()">
-              <i class="fas fa-trash"></i>
-              <span>선택 회차 삭제</span>
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="resetScheduleForm()">
-              <i class="fas fa-eraser"></i>
-              <span>입력 초기화</span>
-            </button>
-          </div>
-        </form>
-        <div id="scheduleActionResult" style="display:none;"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <i class="fas fa-list card-icon"></i>
-          <h2 class="card-title">현재 시즌 일정 목록</h2>
+          <button type="button" class="btn" onclick="openTodayScheduleCalendarModal()">
+            <i class="fas fa-plus"></i>
+            <span>새 일정</span>
+          </button>
         </div>
+        <p class="info-text">목록에서 회차를 확인하고, `새 일정` 또는 `수정`으로 같은 일정 모달에서 추가/수정/삭제를 처리합니다.</p>
         <div class="table-wrap" id="scheduleTableWrap">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
+        <div id="scheduleActionResult" style="display:none;"></div>
       </div>
 
       <div class="card">

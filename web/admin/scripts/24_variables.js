@@ -377,10 +377,10 @@ function onVariableInputChanged(index) {
     renderVariableHelpPanel(variableItems[index] || null);
   }
   if (variableItems[index] && variableItems[index].key === 'absence_threshold_min') {
-    updateSchedulePreview();
+    updateScheduleCalendarModalPreview();
   }
   if (variableItems[index] && variableItems[index].key === 'attendance_open_offset_min') {
-    updateSchedulePreview();
+    updateScheduleCalendarModalPreview();
   }
 }
 
@@ -490,7 +490,7 @@ async function loadVariables() {
     } else {
       renderVariableHelpPanel(null);
     }
-    updateSchedulePreview();
+    updateScheduleCalendarModalPreview();
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     if (error && error.code === 'UNSUPPORTED_ACTION') {

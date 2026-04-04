@@ -24,7 +24,6 @@ let excuseOverrideState = null;
 let graduationVisibleCount = 20;
 let graduationSortState = { key: 'attendedCount', direction: 'desc' };
 let scheduleDeleteForceState = null;
-let scheduleEndAutoManaged = true;
 let scheduleDefaults = {};
 let scheduleByDateMap = {};
 let scheduleDateConflicts = [];

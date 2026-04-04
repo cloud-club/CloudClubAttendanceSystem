@@ -1,63 +1,3 @@
-function updateScheduleSaveButtonLabel() {
-  const btn = document.getElementById('scheduleSaveBtn');
-  const select = document.getElementById('scheduleSessionSelect');
-  if (!btn || !select) return;
-
-  const isEdit = !!String(select.value || '').trim();
-  btn.innerHTML = `<i class="fas fa-save"></i> <span>${isEdit ? '일정 수정' : '일정 추가'}</span>`;
-}
-
-function resetScheduleForm() {
-  const select = document.getElementById('scheduleSessionSelect');
-  const dateInput = document.getElementById('scheduleDateInput');
-  const startTimeInput = document.getElementById('scheduleStartTimeInput');
-  const endInput = document.getElementById('scheduleEndInput');
-
-  if (select) select.value = '';
-
-  const now = new Date();
-  if (dateInput) {
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    dateInput.value = `${yyyy}-${mm}-${dd}`;
-  }
-
-  if (startTimeInput) {
-    startTimeInput.value = getDefaultScheduleStartTime();
-  }
-
-  scheduleEndAutoManaged = true;
-  if (endInput) {
-    endInput.value = suggestScheduleEndTime(startTimeInput ? startTimeInput.value : '');
-  }
-
-  updateSchedulePreview();
-  updateScheduleSaveButtonLabel();
-}
-
-function populateScheduleSelect(items) {
-  const select = document.getElementById('scheduleSessionSelect');
-  if (!select) return;
-
-  const prevValue = select.value;
-
-  select.innerHTML = '<option value="">새 회차 추가</option>';
-
-  items.forEach(item => {
-    const option = document.createElement('option');
-    option.value = item.sessionKey;
-    option.textContent = `${item.sessionKey} (${item.startLabel})`;
-    select.appendChild(option);
-  });
-
-  if (prevValue && items.some(item => item.sessionKey === prevValue)) {
-    select.value = prevValue;
-  }
-
-  updateScheduleSaveButtonLabel();
-}
-
 function getScheduleItemDateKey(item) {
   if (!item) return '';
   return String(item.dateKey || getDateKeyFromMs(item.startTime) || '').trim();
@@ -121,38 +61,6 @@ function renderScheduleTable(items) {
   `;
 }
 
-function handleScheduleSelectionChange() {
-  const key = document.getElementById('scheduleSessionSelect').value;
-  const dateInput = document.getElementById('scheduleDateInput');
-  const startTimeInput = document.getElementById('scheduleStartTimeInput');
-  const endInput = document.getElementById('scheduleEndInput');
-
-  if (!key) {
-    resetScheduleForm();
-    return;
-  }
-
-  const found = scheduleItems.find(item => item.sessionKey === key);
-  if (!found) return;
-
-  const date = new Date(found.startTime);
-  if (dateInput) {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    dateInput.value = `${yyyy}-${mm}-${dd}`;
-  }
-  if (startTimeInput) {
-    startTimeInput.value = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  }
-  if (endInput) {
-    endInput.value = found.explicitEndAt || suggestScheduleEndTime(startTimeInput ? startTimeInput.value : '');
-  }
-  scheduleEndAutoManaged = !found.explicitEndAt;
-  updateSchedulePreview();
-  updateScheduleSaveButtonLabel();
-}
-
 function selectScheduleForEdit(encodedSessionKey) {
   const key = decodeURIComponent(encodedSessionKey || '');
   const item = findScheduleItemBySessionKey(key);
@@ -204,15 +112,8 @@ async function loadScheduleList(options) {
     scheduleItems = response.items || [];
     buildScheduleCalendarModel(scheduleItems, response.dateConflicts || []);
     renderScheduleTable(scheduleItems);
-    populateScheduleSelect(scheduleItems);
     populateManualSessionSelect(scheduleItems);
     renderScheduleCalendar();
-    if (!document.getElementById('scheduleSessionSelect').value) {
-      resetScheduleForm();
-    } else {
-      updateSchedulePreview();
-      updateScheduleSaveButtonLabel();
-    }
 
     if (getActiveTabName() === 'attend') {
       try {
@@ -464,6 +365,10 @@ function openScheduleCalendarModal(dateKey) {
   });
 }
 
+function openTodayScheduleCalendarModal() {
+  openScheduleCalendarModal(getDateKeyFromDate(new Date()));
+}
+
 function closeScheduleCalendarModal() {
   const modal = document.getElementById('scheduleCalendarModal');
   if (modal) {
@@ -538,66 +443,6 @@ async function requestScheduleSave(options) {
   });
 }
 
-async function saveSchedule(event) {
-  event.preventDefault();
-
-  const season = getSelectedSeasonAlias();
-  const sessionKey = document.getElementById('scheduleSessionSelect').value;
-  const isEditMode = !!String(sessionKey || '').trim();
-  const actionNoun = isEditMode ? '수정' : '추가';
-  const startAt = composeScheduleStartAt();
-  const endAt = document.getElementById('scheduleEndInput').value;
-
-  if (!season) {
-    alert('시즌 정보가 없습니다.');
-    return;
-  }
-
-  if (!startAt) {
-    alert('시작 시각을 입력해주세요.');
-    return;
-  }
-
-  const btn = document.getElementById('scheduleSaveBtn');
-  btn.disabled = true;
-  btn.innerHTML = `<span class="loader"></span> <span>${actionNoun} 중...</span>`;
-
-  try {
-    const response = await requestScheduleSave({
-      season,
-      sessionKey,
-      startAt,
-      endAt
-    });
-
-    if (!response.success) {
-      const duplicateInfo = response.errorCode === 'SCHEDULE_DATE_DUPLICATE'
-        ? ` (충돌: ${response.conflictDateKey || '-'} / ${response.conflictSessionKey || '-'})`
-        : '';
-      showBoxMessage('scheduleActionResult', `❌ ${escapeHtml((response.message || `일정 ${actionNoun} 실패`) + duplicateInfo)}`, false);
-      return;
-    }
-
-    showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || `일정 ${actionNoun} 완료`)}`, true);
-    showToast(`<i class="fas fa-check-circle"></i> 일정 ${actionNoun} 완료`, true);
-    invalidateSeasonOperationalCaches(season);
-
-    await Promise.all([
-      loadScheduleList({ forceReload: true }),
-      checkAttendanceSession(),
-      loadGraduationReport({ forceReload: true })
-    ]);
-
-    resetScheduleForm();
-  } catch (error) {
-    if (handleUnauthorizedError(error)) return;
-    showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, `일정 ${actionNoun} 중 오류`))}`, false);
-  } finally {
-    btn.disabled = false;
-    updateScheduleSaveButtonLabel();
-  }
-}
-
 async function submitScheduleCalendarModal() {
   if (!scheduleCalendarModalState) return;
 
@@ -631,10 +476,11 @@ async function submitScheduleCalendarModal() {
       const duplicateInfo = response.errorCode === 'SCHEDULE_DATE_DUPLICATE'
         ? ` (충돌: ${response.conflictDateKey || '-'} / ${response.conflictSessionKey || '-'})`
         : '';
-      alert((response.message || '일정 저장 실패') + duplicateInfo);
+      showBoxMessage('scheduleActionResult', `❌ ${escapeHtml((response.message || `일정 ${actionNoun} 실패`) + duplicateInfo)}`, false);
       return;
     }
 
+    showBoxMessage('scheduleActionResult', `✅ ${escapeHtml(response.message || `일정 ${actionNoun} 완료`)}`, true);
     showToast(`<i class="fas fa-check-circle"></i> 일정 ${actionNoun} 완료`, true);
     closeScheduleCalendarModal();
     invalidateSeasonOperationalCaches(season);
@@ -643,10 +489,9 @@ async function submitScheduleCalendarModal() {
       checkAttendanceSession(),
       loadGraduationReport({ forceReload: true })
     ]);
-    resetScheduleForm();
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
-    alert(getDisplayErrorMessage(error, `일정 ${actionNoun} 중 오류`));
+    showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, `일정 ${actionNoun} 중 오류`))}`, false);
   } finally {
     saveBtn.disabled = false;
     saveBtn.innerHTML = `<i class="fas fa-save"></i> <span>${scheduleCalendarModalState && scheduleCalendarModalState.isEdit ? '일정 수정' : '일정 추가'}</span>`;
@@ -669,36 +514,6 @@ async function deleteFromCalendarModal() {
   }
 
   closeScheduleCalendarModal();
-  await requestScheduleDelete({
-    season,
-    sessionKey,
-    forceDelete: false,
-    confirmSessionKey: ''
-  });
-}
-
-async function deleteSelectedSchedule() {
-  const season = getSelectedSeasonAlias();
-  const sessionKey = document.getElementById('scheduleSessionSelect').value;
-
-  if (!season) {
-    alert('시즌 정보가 없습니다.');
-    return;
-  }
-
-  if (!sessionKey) {
-    alert('삭제할 회차를 선택해주세요.');
-    return;
-  }
-
-  if (!confirm(`${sessionKey} 회차를 삭제하시겠습니까?`)) {
-    return;
-  }
-
-  if (!confirm(`삭제를 진행하면 해당 회차 열이 시트에서 제거됩니다.\n정말 삭제하시겠습니까?`)) {
-    return;
-  }
-
   await requestScheduleDelete({
     season,
     sessionKey,
@@ -739,57 +554,6 @@ function suggestScheduleEndTime(startTimeText) {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
-function composeScheduleStartAt() {
-  const date = document.getElementById('scheduleDateInput').value;
-  const time = document.getElementById('scheduleStartTimeInput').value;
-
-  if (!date || !time) return '';
-  return `${date}T${time}`;
-}
-
-function onScheduleStartTimeChanged() {
-  const startTimeInput = document.getElementById('scheduleStartTimeInput');
-  const endInput = document.getElementById('scheduleEndInput');
-  if (!startTimeInput || !endInput) return;
-
-  if (scheduleEndAutoManaged || !endInput.value) {
-    endInput.value = suggestScheduleEndTime(startTimeInput.value);
-    scheduleEndAutoManaged = true;
-  }
-
-  updateSchedulePreview();
-}
-
-function updateSchedulePreview() {
-  const preview = document.getElementById('scheduleComputedPreview');
-  if (!preview) return;
-
-  const startAt = composeScheduleStartAt();
-  const endAt = document.getElementById('scheduleEndInput').value;
-  if (!startAt) {
-    preview.textContent = '회차 키와 마감 계산 정보가 여기에 표시됩니다.';
-    return;
-  }
-
-  const key = startAt.replace('T', '-');
-  const liveOpenOffset = Number(getVariableValueByKey('attendance_open_offset_min'));
-  const openOffsetMin = Number(
-    (!Number.isNaN(liveOpenOffset) ? liveOpenOffset : '') ||
-    (variableConfig && variableConfig.attendance_open_offset_min) ||
-    (scheduleDefaults && scheduleDefaults.attendance_open_offset_min) ||
-    -30
-  );
-  const start = new Date(startAt);
-  const open = new Date(start.getTime() + openOffsetMin * 60 * 1000);
-  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-
-  preview.innerHTML = `
-    회차 키: <strong>${escapeHtml(key)}</strong><br>
-    출석 오픈: ${escapeHtml(fmt(open))} (${openOffsetMin}분)<br>
-    종료 입력: ${endAt ? escapeHtml(endAt) : '미입력(기본 마감 규칙 적용)'}
-  `;
-}
-
 async function requestScheduleDelete(options) {
   try {
     const response = await CloudClubApi.call('scheduleDelete', {
@@ -824,8 +588,6 @@ async function requestScheduleDelete(options) {
       checkAttendanceSession(),
       loadGraduationReport({ forceReload: true })
     ]);
-
-    resetScheduleForm();
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
     showBoxMessage('scheduleActionResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '일정 삭제 중 오류'))}`, false);
