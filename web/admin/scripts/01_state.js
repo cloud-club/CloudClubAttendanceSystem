@@ -98,6 +98,7 @@ let attendanceDashboardMemberPickerLastOptionsRef = null;
 let attendanceDashboardLastRenderSignature = '';
 let attendanceDashboardPendingMemberTrendRender = false;
 let attendanceDashboardRefreshInterval = null;
+let attendanceDashboardEventStatusRequestSeq = 0;
 let attendanceDashboardState = {
   group: 'all',
   dateFrom: '',

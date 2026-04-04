@@ -50,7 +50,8 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_static_guard.j
 3. 운세 탭 삽입 위치/스크립트 로딩/핸들러 연결
 4. `ACTION_ACCESS_LEVELS` fortune 액션이 admin 레벨
 5. 학생 운세 escape 적용
-6. 핵심 수정 파일 문법 체크
+6. 출석현황 event-status drilldown helper 중복 선언 금지
+7. 핵심 수정 파일 문법 체크
 
 ### 컬럼 가변 회귀 시나리오(필수)
 1. [ ] 프로필 커스텀 칼럼(예: `클둥대백과 작성`)을 중간 삽입해도 필수 헤더 매핑이 유지되는지 확인
@@ -148,8 +149,10 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 22. [ ] 진행 중 회차가 `lateDeadline`을 지나면 회색 `미확정`이 결석으로 전환되고, 상태 비율에는 여전히 `미확정`이 노출되지 않음
 23. [ ] 같은 날 미래 일정이 미리 등록되어 있어도 기본 그래프는 처음 회차부터 오늘 기준 완료 회차 + 현재 활성 회차까지만 보여주고, 사용자가 날짜/회차 필터를 직접 바꾸면 그 선택을 우선함
 24. [ ] 진행 중 회차의 상태 bar slice를 클릭해 하단 멤버 목록을 열어둔 상태에서 자동 새로고침이 돌아와도 기본 안내로 풀리지 않고 같은 slice가 최신 데이터로 갱신됨
-25. [ ] 이미 지난 회차의 상태 bar slice를 열어둔 상태에서 자동 새로고침이 돌아와도 해당 표를 다시 비우거나 재조회하지 않고 그대로 유지함
-26. [ ] 활성 회차 slice 재조회가 timeout 되어도 하단 표는 직전 데이터가 유지되고, 비파괴적 오류 안내만 보임
+25. [ ] 이미 지난 회차의 상태 bar slice를 클릭했을 때 `0명` 또는 `선택한 조건에 해당하는 멤버가 없습니다.`로 비지 않고 실제 멤버 목록이 즉시 보임
+26. [ ] 이미 지난 회차의 상태 bar slice를 열어둔 상태에서 자동 새로고침이 돌아와도 해당 표를 다시 비우거나 재조회하지 않고 그대로 유지함
+27. [ ] 활성 회차 slice 재조회가 timeout 되어도 하단 표는 직전 데이터가 유지되고, 비파괴적 오류 안내만 보임
+28. [ ] 상태 bar slice를 열어둔 채 날짜/회차 필터를 바꾸면 새 범위 밖 회차는 잘못 복원되지 않고, 범위 안 slice만 유지됨
 
 ### super
 1. [ ] variables/seasonImport/adminUsers 기존 동작 정상
