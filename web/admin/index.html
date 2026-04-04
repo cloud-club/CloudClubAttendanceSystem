@@ -1357,6 +1357,35 @@
       margin-top: 10px;
     }
 
+    .schedule-calendar-modal-date-row {
+      margin-top: 10px;
+    }
+
+    .schedule-calendar-modal-date-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .schedule-calendar-modal-date-field .form-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      text-align: left;
+      letter-spacing: 0;
+      padding: 10px 12px;
+      font-size: 15px;
+      min-height: 40px;
+    }
+
+    .schedule-calendar-date-picker-btn {
+      flex: 0 0 auto;
+      min-width: 44px;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      justify-content: center;
+    }
+
     .schedule-calendar-modal-grid .form-label {
       font-size: 13px;
       margin-bottom: 6px;
@@ -4434,6 +4463,17 @@
       <h3 id="scheduleCalendarModalTitle">새 회차 추가</h3>
       <p id="scheduleCalendarModalTargetDate">-</p>
       <p id="scheduleCalendarModalSessionInfo">해당 날짜에 등록된 회차가 없습니다.</p>
+      <div class="schedule-calendar-modal-date-row">
+        <div>
+          <label class="form-label" for="scheduleCalendarModalDateInput">행사 날짜</label>
+          <div class="schedule-calendar-modal-date-field">
+            <input id="scheduleCalendarModalDateInput" type="date" class="form-input" onchange="onScheduleCalendarDateChanged()">
+            <button type="button" class="btn btn-secondary schedule-calendar-date-picker-btn" onclick="openScheduleCalendarDatePicker(event)" aria-label="날짜 선택" title="날짜 선택">
+              <i class="fas fa-calendar-days"></i>
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="schedule-calendar-modal-grid">
         <div>
           <label class="form-label" for="scheduleCalendarModalStartTimeInput">시작 시간</label>

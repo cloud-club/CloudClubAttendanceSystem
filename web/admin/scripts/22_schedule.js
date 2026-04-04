@@ -9,6 +9,60 @@ function findScheduleItemBySessionKey(sessionKey) {
   return scheduleItems.find(item => String(item.sessionKey || '').trim() === key) || null;
 }
 
+function normalizeDateKey(dateKey) {
+  const value = String(dateKey || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+}
+
+function setScheduleCalendarModalDate(dateKey, options) {
+  const opts = options || {};
+  const normalizedDateKey = normalizeDateKey(dateKey);
+  if (!normalizedDateKey) return '';
+
+  const dateInput = document.getElementById('scheduleCalendarModalDateInput');
+  const targetDate = document.getElementById('scheduleCalendarModalTargetDate');
+
+  if (dateInput && dateInput.value !== normalizedDateKey) {
+    dateInput.value = normalizedDateKey;
+  }
+  if (scheduleCalendarModalState) {
+    scheduleCalendarModalState.dateKey = normalizedDateKey;
+  }
+  if (targetDate) {
+    targetDate.textContent = formatDateKeyLabel(normalizedDateKey);
+  }
+
+  const selectedDate = parseDateKeyToDate(normalizedDateKey);
+  if (selectedDate) {
+    calendarSelectedDateKey = normalizedDateKey;
+    calendarCursorYear = selectedDate.getFullYear();
+    calendarCursorMonth = selectedDate.getMonth();
+  }
+
+  if (opts.renderCalendar !== false) {
+    renderScheduleCalendar();
+  }
+  if (opts.updatePreview !== false) {
+    updateScheduleCalendarModalPreview();
+  }
+
+  return normalizedDateKey;
+}
+
+function openScheduleCalendarDatePicker(event) {
+  if (event) {
+    event.preventDefault();
+  }
+  const input = document.getElementById('scheduleCalendarModalDateInput');
+  if (!input) return;
+  if (typeof input.showPicker === 'function') {
+    input.showPicker();
+    return;
+  }
+  input.focus();
+  input.click();
+}
+
 function renderScheduleTable(items) {
   const wrap = document.getElementById('scheduleTableWrap');
   if (!wrap) return;
@@ -321,11 +375,12 @@ function openScheduleCalendarModalForItem(item, options) {
   const title = document.getElementById('scheduleCalendarModalTitle');
   const targetDate = document.getElementById('scheduleCalendarModalTargetDate');
   const sessionInfo = document.getElementById('scheduleCalendarModalSessionInfo');
+  const dateInput = document.getElementById('scheduleCalendarModalDateInput');
   const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
   const endInput = document.getElementById('scheduleCalendarModalEndInput');
   const saveBtn = document.getElementById('scheduleCalendarModalSaveBtn');
   const deleteBtn = document.getElementById('scheduleCalendarModalDeleteBtn');
-  if (!modal || !title || !targetDate || !sessionInfo || !startInput || !endInput || !saveBtn || !deleteBtn) return;
+  if (!modal || !title || !targetDate || !sessionInfo || !dateInput || !startInput || !endInput || !saveBtn || !deleteBtn) return;
 
   scheduleCalendarModalState = {
     dateKey: dateKey,
@@ -341,10 +396,10 @@ function openScheduleCalendarModalForItem(item, options) {
   }
 
   title.textContent = item ? '일정 수정' : '새 회차 추가';
-  targetDate.textContent = formatDateKeyLabel(dateKey);
   sessionInfo.textContent = item
     ? `기존 회차: ${item.sessionKey}`
     : '해당 날짜에 등록된 회차가 없습니다.';
+  setScheduleCalendarModalDate(dateKey, { renderCalendar: false, updatePreview: false });
   startInput.value = item ? (item.startHhmm || formatHhmmFromMs(item.startTime)) : getDefaultScheduleStartTime();
   endInput.value = item ? (item.explicitEndAt || suggestScheduleEndTime(startInput.value)) : suggestScheduleEndTime(startInput.value);
   saveBtn.innerHTML = `<i class="fas fa-save"></i> <span>${item ? '일정 수정' : '일정 추가'}</span>`;
@@ -366,7 +421,9 @@ function openScheduleCalendarModal(dateKey) {
 }
 
 function openTodayScheduleCalendarModal() {
-  openScheduleCalendarModal(getDateKeyFromDate(new Date()));
+  openScheduleCalendarModalForItem(null, {
+    dateKey: getDateKeyFromDate(new Date())
+  });
 }
 
 function closeScheduleCalendarModal() {
@@ -389,6 +446,19 @@ function onScheduleCalendarStartTimeChanged() {
   updateScheduleCalendarModalPreview();
 }
 
+function onScheduleCalendarDateChanged() {
+  const dateInput = document.getElementById('scheduleCalendarModalDateInput');
+  if (!scheduleCalendarModalState || !dateInput) return;
+  const normalizedDateKey = setScheduleCalendarModalDate(dateInput.value, {
+    renderCalendar: true,
+    updatePreview: true
+  });
+  if (!normalizedDateKey) {
+    dateInput.value = scheduleCalendarModalState.dateKey || getDateKeyFromDate(new Date());
+    alert('날짜를 YYYY-MM-DD 형식으로 입력해주세요.');
+  }
+}
+
 function onScheduleCalendarEndInputChanged() {
   if (!scheduleCalendarModalState) return;
   scheduleCalendarModalState.endAutoManaged = false;
@@ -397,12 +467,13 @@ function onScheduleCalendarEndInputChanged() {
 
 function updateScheduleCalendarModalPreview() {
   const preview = document.getElementById('scheduleCalendarModalPreview');
+  const dateInput = document.getElementById('scheduleCalendarModalDateInput');
   const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
   const endInput = document.getElementById('scheduleCalendarModalEndInput');
-  if (!preview || !startInput || !endInput || !scheduleCalendarModalState) return;
+  if (!preview || !dateInput || !startInput || !endInput || !scheduleCalendarModalState) return;
 
+  const dateKey = normalizeDateKey(dateInput.value || scheduleCalendarModalState.dateKey || '');
   const startTime = String(startInput.value || '').trim();
-  const dateKey = scheduleCalendarModalState.dateKey;
   if (!dateKey || !startTime) {
     preview.textContent = '회차 키/오픈 시각 미리보기가 여기에 표시됩니다.';
     return;
@@ -447,19 +518,26 @@ async function submitScheduleCalendarModal() {
   if (!scheduleCalendarModalState) return;
 
   const season = getSelectedSeasonAlias();
+  const dateInput = document.getElementById('scheduleCalendarModalDateInput');
   const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
   const endInput = document.getElementById('scheduleCalendarModalEndInput');
   const saveBtn = document.getElementById('scheduleCalendarModalSaveBtn');
-  if (!season || !startInput || !endInput || !saveBtn) return;
+  if (!season || !dateInput || !startInput || !endInput || !saveBtn) return;
 
+  const dateKey = normalizeDateKey(dateInput.value || scheduleCalendarModalState.dateKey || '');
   const startTime = String(startInput.value || '').trim();
   const endAt = String(endInput.value || '').trim();
+  if (!dateKey) {
+    alert('날짜를 선택해주세요.');
+    return;
+  }
   if (!startTime) {
     alert('시작 시간을 입력해주세요.');
     return;
   }
 
-  const startAt = `${scheduleCalendarModalState.dateKey}T${startTime}`;
+  scheduleCalendarModalState.dateKey = dateKey;
+  const startAt = `${dateKey}T${startTime}`;
   const actionNoun = scheduleCalendarModalState.isEdit ? '수정' : '추가';
 
   saveBtn.disabled = true;
