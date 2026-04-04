@@ -76,6 +76,7 @@ function invalidateAttendanceDashboardLocalState() {
   attendanceDashboardLastFetchKey = '';
   attendanceDashboardLastFetchedAt = 0;
   attendanceDashboardLastRenderSignature = '';
+  attendanceDashboardEventStatusRequestSeq = 0;
   if (typeof closeAttendanceDashboardMemberHistoryModal === 'function') {
     closeAttendanceDashboardMemberHistoryModal();
   }

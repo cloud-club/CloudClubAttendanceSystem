@@ -204,6 +204,19 @@ function checkSessionHeaderDynamicParsing() {
   );
 }
 
+function checkAttendanceDashboardDrilldownHelpers() {
+  const content = readFile('web/admin/scripts/21_dashboard.js');
+  const updateMatches = content.match(/function updateAttendanceDashboardEventStatusSlice\(/g) || [];
+  if (updateMatches.length !== 1) {
+    throw new Error(`event status 드릴다운 갱신 helper가 ${updateMatches.length}회 선언되었습니다. 정확히 1회여야 합니다.`);
+  }
+  assertRegex(
+    content,
+    /function renderAttendanceDashboardEventStatusSliceMembers\(/,
+    'event status 드릴다운 렌더 helper가 누락되었습니다.'
+  );
+}
+
 function checkSyntax() {
   const jsFiles = [
     'web/admin/scripts/01_state.js',
@@ -250,6 +263,7 @@ const checks = [
   ['학생 운세 escape', checkStudentFortuneEscape],
   ['세션 헤더 동적 파싱 가드', checkSessionHeaderDynamicParsing],
   ['시즌업로드 컬럼 유연성 가드', checkImportUpdateColumnFlexibility],
+  ['출석현황 드릴다운 helper 중복 선언 가드', checkAttendanceDashboardDrilldownHelpers],
   ['수정 파일 문법 체크', checkSyntax]
 ];
 

@@ -479,8 +479,56 @@ function clearAttendanceDashboardMemberHistoryCache() {
   attendanceDashboardMemberHistoryCache = {};
 }
 
+function invalidateAttendanceDashboardEventStatusRequests(options) {
+  const opts = options || {};
+  if (opts.reset) {
+    attendanceDashboardEventStatusRequestSeq = 0;
+    return;
+  }
+  attendanceDashboardEventStatusRequestSeq += 1;
+}
+
+function beginAttendanceDashboardEventStatusRequest(filter) {
+  attendanceDashboardEventStatusRequestSeq += 1;
+  return {
+    seq: attendanceDashboardEventStatusRequestSeq,
+    filterId: filter && filter.id ? String(filter.id) : ''
+  };
+}
+
+function isAttendanceDashboardEventStatusRequestCurrent(requestState) {
+  if (!requestState) return false;
+  if (Number(requestState.seq || 0) !== Number(attendanceDashboardEventStatusRequestSeq || 0)) {
+    return false;
+  }
+  const activeId = attendanceDashboardActiveSliceFilter && attendanceDashboardActiveSliceFilter.id
+    ? String(attendanceDashboardActiveSliceFilter.id)
+    : '';
+  return !requestState.filterId || requestState.filterId === activeId;
+}
+
+function getAttendanceDashboardStatusScopeSessionKeys(payload) {
+  const sourcePayload = payload || attendanceDashboardPayload || null;
+  const quickFilter = sourcePayload && sourcePayload.meta && sourcePayload.meta.quickFilter
+    ? sourcePayload.meta.quickFilter
+    : null;
+  if (quickFilter && Array.isArray(quickFilter.sessionKeys)) {
+    return quickFilter.sessionKeys;
+  }
+  return sourcePayload && sourcePayload.meta && Array.isArray(sourcePayload.meta.statusSessionKeys)
+    ? sourcePayload.meta.statusSessionKeys
+    : [];
+}
+
+function isAttendanceDashboardSessionInStatusScope(sessionKey, payload) {
+  const targetKey = String(sessionKey || '').trim();
+  if (!targetKey) return false;
+  return getAttendanceDashboardStatusScopeSessionKeys(payload).some(item => String(item || '').trim() === targetKey);
+}
+
 function resetAttendanceDashboardSliceUiState(options) {
   const opts = options || {};
+  invalidateAttendanceDashboardEventStatusRequests();
   attendanceDashboardActiveSliceFilter = null;
   attendanceDashboardActiveSliceMembers = [];
   attendanceDashboardActiveStatusRankingRows = [];
@@ -506,6 +554,7 @@ function toggleAttendanceDashboardActiveSlice(filter, members) {
     return;
   }
 
+  invalidateAttendanceDashboardEventStatusRequests();
   attendanceDashboardActiveSliceFilter = filter || null;
   attendanceDashboardActiveSliceMembers = sortAttendanceDashboardSliceMembers(members);
   attendanceDashboardActiveStatusRankingRows = [];
@@ -524,6 +573,7 @@ function toggleAttendanceDashboardStatusRanking(filter, rows) {
     return;
   }
 
+  invalidateAttendanceDashboardEventStatusRequests();
   attendanceDashboardActiveSliceFilter = filter || null;
   attendanceDashboardActiveSliceMembers = [];
   attendanceDashboardActiveStatusRankingRows = Array.isArray(rows) ? rows.slice() : [];
@@ -663,6 +713,7 @@ async function updateAttendanceDashboardEventStatusSlice(filter, options) {
   const previousFilter = attendanceDashboardActiveSliceFilter
     ? Object.assign({}, attendanceDashboardActiveSliceFilter)
     : null;
+  const requestState = beginAttendanceDashboardEventStatusRequest(filter);
 
   renderAttendanceDashboardSliceLoading(
     filter,
@@ -675,17 +726,19 @@ async function updateAttendanceDashboardEventStatusSlice(filter, options) {
       forceRefresh: !!opts.forceRefresh,
       payload: opts.payload || attendanceDashboardPayload
     });
+    if (!isAttendanceDashboardEventStatusRequestCurrent(requestState)) {
+      return;
+    }
     updateAttendanceDashboardEventStatusSliceCache(filter, matchedMembers);
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
+    if (!isAttendanceDashboardEventStatusRequestCurrent(requestState)) {
+      return;
+    }
     if (opts.preserveExistingTable && previousFilter && previousMembers.length > 0) {
-      attendanceDashboardActiveSliceFilter = Object.assign({}, previousFilter, {
+      renderAttendanceDashboardEventStatusSliceMembers(Object.assign({}, previousFilter, {
         summary: `${previousFilter.summary || filter.summary || ''} / 최신 데이터 갱신 실패: ${getDisplayErrorMessage(error, '드릴다운 조회 실패')}`
-      });
-      attendanceDashboardActiveSliceMembers = previousMembers;
-      attendanceDashboardActiveStatusRankingRows = [];
-      attendanceDashboardActiveDrilldownMode = 'memberList';
-      renderAttendanceDashboardSliceMembers();
+      }), previousMembers, { closeModal: false });
       return;
     }
     resetAttendanceDashboardSliceUiState({ render: false });
@@ -701,16 +754,11 @@ async function updateAttendanceDashboardEventStatusSlice(filter, options) {
 }
 
 function updateAttendanceDashboardEventStatusSliceCache(filter, matchedMembers) {
-  attendanceDashboardActiveSliceFilter = Object.assign({}, filter, {
+  renderAttendanceDashboardEventStatusSliceMembers(Object.assign({}, filter, {
     summary: filter.statusKey === 'pending'
       ? `회차 ${filter.sessionKey}에서 아직 출석하지 않은 멤버 ${matchedMembers.length}명`
       : `회차 ${filter.sessionKey}에서 ${formatDashboardStatus(filter.statusKey)}로 집계된 멤버 ${matchedMembers.length}명`
-  });
-  attendanceDashboardActiveSliceMembers = sortAttendanceDashboardSliceMembers(matchedMembers);
-  attendanceDashboardActiveStatusRankingRows = [];
-  attendanceDashboardActiveDrilldownMode = 'memberList';
-  closeAttendanceDashboardMemberHistoryModal();
-  renderAttendanceDashboardSliceMembers();
+  }), matchedMembers);
 }
 
 async function applyAttendanceDashboardEventStatusSlice(sessionKey, statusKey) {
@@ -823,6 +871,10 @@ function restoreAttendanceDashboardActiveSliceSnapshot(snapshot) {
     return true;
   }
   if (snapshot.type === 'eventStatus' && snapshot.sessionKey && snapshot.statusKey) {
+    if (!isAttendanceDashboardSessionInStatusScope(snapshot.sessionKey)) {
+      resetAttendanceDashboardSliceUiState();
+      return false;
+    }
     const isOngoing = isAttendanceDashboardSessionOngoingByKey(snapshot.sessionKey);
     if (isOngoing) {
       void updateAttendanceDashboardEventStatusSlice(buildAttendanceDashboardEventStatusFilter(snapshot.sessionKey, snapshot.statusKey, attendanceDashboardActiveSliceMembers.length), {
@@ -2149,7 +2201,7 @@ function buildAttendanceDashboardEventStatusFilter(sessionKey, statusKey, matche
   };
 }
 
-function updateAttendanceDashboardEventStatusSlice(filter, members, options) {
+function renderAttendanceDashboardEventStatusSliceMembers(filter, members, options) {
   const opts = options || {};
   attendanceDashboardActiveSliceFilter = filter || null;
   attendanceDashboardActiveSliceMembers = sortAttendanceDashboardSliceMembers(members);
