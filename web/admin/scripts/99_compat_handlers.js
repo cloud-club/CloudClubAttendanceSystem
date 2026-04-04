@@ -67,6 +67,8 @@ window.AdminApp.compat = window.AdminApp.compat || {};
   "handleAdminRoleChange",
   "resetAdminUserForm",
   "loadAdminUsers",
+  "openScheduleCalendarDatePicker",
+  "onScheduleCalendarDateChanged",
   "closeExcuseModal",
   "submitExcuseModal",
   "closeExcuseOverrideModal",

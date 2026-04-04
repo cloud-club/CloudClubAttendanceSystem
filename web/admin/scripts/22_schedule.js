@@ -409,7 +409,13 @@ function openScheduleCalendarModalForItem(item, options) {
   renderScheduleCalendar();
 
   modal.style.display = 'flex';
-  setTimeout(() => startInput.focus(), 0);
+  setTimeout(() => {
+    if (item) {
+      startInput.focus();
+      return;
+    }
+    openScheduleCalendarDatePicker();
+  }, 0);
 }
 
 function openScheduleCalendarModal(dateKey) {
