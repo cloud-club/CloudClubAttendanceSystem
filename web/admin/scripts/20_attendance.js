@@ -293,6 +293,9 @@ async function changeSheet() {
     currentSeasonAlias = getSelectedSeasonAlias();
     syncImportSeasonInputByCurrentSelection();
     updateImportModeHintFromInput();
+    if (typeof restoreAttendanceDashboardLiveDefaultScope === 'function') {
+      restoreAttendanceDashboardLiveDefaultScope({ clearSessionSearch: true, resetSlice: true });
+    }
     await refreshSeasonData();
     return;
   }
@@ -310,6 +313,9 @@ async function changeSheet() {
       updateImportModeHintFromInput();
       invalidateSeasonOperationalCaches(currentSeasonAlias);
       invalidateAdminUrlCache();
+      if (typeof restoreAttendanceDashboardLiveDefaultScope === 'function') {
+        restoreAttendanceDashboardLiveDefaultScope({ clearSessionSearch: true, resetSlice: true });
+      }
       showToast(`<i class="fas fa-check-circle"></i> ${escapeHtml(response.message)}`, true);
 
       await refreshSeasonData();

@@ -157,6 +157,9 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 29. [ ] 이미 지난 회차의 상태 bar slice를 열어둔 상태에서 자동 새로고침이 돌아와도 해당 표를 다시 비우거나 재조회하지 않고 그대로 유지함
 30. [ ] 활성 회차 slice 재조회가 timeout 되어도 하단 표는 직전 데이터가 유지되고, 비파괴적 오류 안내만 보임
 31. [ ] 상태 bar slice를 열어둔 채 날짜/회차 필터를 바꾸면 새 범위 밖 회차는 잘못 복원되지 않고, 범위 안 slice만 유지됨
+32. [ ] query 없이 출석현황 탭에 다시 진입하면 예전 수동 필터(localStorage)보다 `완료 회차 + 현재 활성 회차` 기본 범위가 우선 복원됨
+33. [ ] 시즌을 바꾸면 이전 시즌의 날짜/회차 수동 범위가 남지 않고, 새 시즌 기준 기본 실시간 범위로 돌아감
+34. [ ] auto 상태에서 뷰 링크를 복사하면 `dash_from`/`dash_to`/`dash_sessions`가 강제로 박제되지 않고, 링크를 열었을 때 live default가 유지됨
 
 ### super
 1. [ ] variables/seasonImport/adminUsers 기존 동작 정상

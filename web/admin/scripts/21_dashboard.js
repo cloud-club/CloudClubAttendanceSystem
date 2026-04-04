@@ -49,11 +49,72 @@ function normalizeAttendanceDashboardState(rawState) {
   return normalized;
 }
 
+function getPersistedAttendanceDashboardState(rawState) {
+  const source = normalizeAttendanceDashboardState(rawState);
+  return {
+    group: source.group,
+    sessionSearch: source.sessionSearch,
+    topN: source.topN,
+    sortBy: source.sortBy,
+    chartType: source.chartType,
+    selectedMemberKeys: source.selectedMemberKeys,
+    memberSearch: source.memberSearch
+  };
+}
+
+function hasExplicitAttendanceDashboardQueryScope(state) {
+  return !!(
+    state
+    && (
+      state.sessionScopeMode === 'manual'
+      || !!state.dateFrom
+      || !!state.dateTo
+      || (Array.isArray(state.sessionKeys) && state.sessionKeys.length > 0)
+    )
+  );
+}
+
+function resetAttendanceDashboardScopeState(options) {
+  const opts = options || {};
+  const current = normalizeAttendanceDashboardState(attendanceDashboardState);
+  attendanceDashboardState = normalizeAttendanceDashboardState(Object.assign({}, current, {
+    dateFrom: '',
+    dateTo: '',
+    sessionKeys: [],
+    sessionScopeMode: 'auto',
+    sessionSearch: opts.clearSessionSearch ? '' : current.sessionSearch
+  }));
+  attendanceDashboardDateRangeUserEdited = false;
+  attendanceDashboardAutoDateHydratedOnce = false;
+  return attendanceDashboardState;
+}
+
+function restoreAttendanceDashboardLiveDefaultScope(options) {
+  const opts = options || {};
+  resetAttendanceDashboardScopeState({ clearSessionSearch: !!opts.clearSessionSearch });
+  if (!attendanceDashboardInitialized) {
+    if (opts.save !== false) {
+      saveAttendanceDashboardStateToStorage();
+    }
+    return;
+  }
+  applyAttendanceDashboardStateToControls();
+  renderAttendanceDashboardSessionPicker();
+  renderAttendanceDashboardMemberPicker();
+  closeAttendanceDashboardPopovers();
+  if (opts.resetSlice !== false) {
+    resetAttendanceDashboardSliceUiState({ render: true });
+  }
+  if (opts.save !== false) {
+    saveAttendanceDashboardStateToStorage();
+  }
+}
+
 function readAttendanceDashboardStateFromStorage() {
   try {
     const raw = localStorage.getItem(ATTENDANCE_DASHBOARD_STORAGE_KEY);
     if (!raw) return null;
-    return normalizeAttendanceDashboardState(JSON.parse(raw));
+    return getPersistedAttendanceDashboardState(JSON.parse(raw));
   } catch (error) {
     return null;
   }
@@ -61,7 +122,10 @@ function readAttendanceDashboardStateFromStorage() {
 
 function saveAttendanceDashboardStateToStorage() {
   try {
-    localStorage.setItem(ATTENDANCE_DASHBOARD_STORAGE_KEY, JSON.stringify(attendanceDashboardState));
+    localStorage.setItem(
+      ATTENDANCE_DASHBOARD_STORAGE_KEY,
+      JSON.stringify(getPersistedAttendanceDashboardState(attendanceDashboardState))
+    );
   } catch (error) {
     // no-op
   }
@@ -94,6 +158,7 @@ function readAttendanceDashboardStateFromQuery() {
 function buildAttendanceDashboardShareUrl() {
   const url = new URL(window.location.href);
   const state = normalizeAttendanceDashboardState(attendanceDashboardState);
+  const hasManualScope = state.sessionScopeMode === 'manual';
   const setOrDelete = (key, value) => {
     if (value === undefined || value === null || value === '') {
       url.searchParams.delete(key);
@@ -103,11 +168,11 @@ function buildAttendanceDashboardShareUrl() {
   };
 
   setOrDelete('dash_group', state.group);
-  setOrDelete('dash_from', state.dateFrom);
-  setOrDelete('dash_to', state.dateTo);
+  setOrDelete('dash_from', hasManualScope ? state.dateFrom : '');
+  setOrDelete('dash_to', hasManualScope ? state.dateTo : '');
   setOrDelete('dash_session_q', state.sessionSearch);
-  setOrDelete('dash_sessions', state.sessionKeys.join(','));
-  setOrDelete('dash_scope', state.sessionScopeMode === 'manual' ? 'manual' : '');
+  setOrDelete('dash_sessions', hasManualScope ? state.sessionKeys.join(',') : '');
+  setOrDelete('dash_scope', hasManualScope ? 'manual' : '');
   setOrDelete('dash_top', state.topN);
   setOrDelete('dash_sort', state.sortBy);
   setOrDelete('dash_chart', state.chartType);
@@ -2728,23 +2793,16 @@ function initializeAttendanceDashboardUi() {
     queryState || {}
   );
   attendanceDashboardState = normalizeAttendanceDashboardState(merged);
-  const hasExplicitSessionScope = !!(
-    (storedState && Object.prototype.hasOwnProperty.call(storedState, 'sessionScopeMode'))
-    || (queryState && Object.prototype.hasOwnProperty.call(queryState, 'sessionScopeMode'))
-  );
-  if (
-    !hasExplicitSessionScope
-    && (
-      attendanceDashboardState.dateFrom
-      || attendanceDashboardState.dateTo
-      || ((attendanceDashboardState.sessionKeys || []).length > 0)
-    )
-  ) {
-    attendanceDashboardState.sessionScopeMode = 'manual';
+  const hasExplicitQueryScope = hasExplicitAttendanceDashboardQueryScope(queryState);
+  if (!hasExplicitQueryScope) {
+    resetAttendanceDashboardScopeState();
   }
-  attendanceDashboardDateRangeUserEdited = !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
-  attendanceDashboardAutoDateHydratedOnce = !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
+  attendanceDashboardDateRangeUserEdited = hasExplicitQueryScope && !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
+  attendanceDashboardAutoDateHydratedOnce = hasExplicitQueryScope && !!(attendanceDashboardState.dateFrom || attendanceDashboardState.dateTo);
   applyAttendanceDashboardStateToControls();
+  if (!hasExplicitQueryScope) {
+    saveAttendanceDashboardStateToStorage();
+  }
 
   const sessionSearchInput = document.getElementById('dashboardSessionSearchInput');
   const memberSearchInput = document.getElementById('dashboardMemberSearchInput');

@@ -217,6 +217,35 @@ function checkAttendanceDashboardDrilldownHelpers() {
   );
 }
 
+function checkAttendanceDashboardLiveDefaultScopePersistence() {
+  const content = readFile('web/admin/scripts/21_dashboard.js');
+  assertRegex(
+    content,
+    /function getPersistedAttendanceDashboardState\(/,
+    '출석현황 저장 상태 정규화 helper가 누락되었습니다.'
+  );
+  assertRegex(
+    content,
+    /JSON\.stringify\(\s*getPersistedAttendanceDashboardState\(attendanceDashboardState\)\s*\)/,
+    '출석현황 localStorage 저장이 display prefs 전용 helper를 거치지 않습니다.'
+  );
+  assertRegex(
+    content,
+    /const hasManualScope = state\.sessionScopeMode === 'manual';/,
+    '출석현황 공유 URL이 auto/manual scope를 구분하지 않습니다.'
+  );
+  assertRegex(
+    content,
+    /setOrDelete\('dash_from', hasManualScope \? state\.dateFrom : ''\);/,
+    '출석현황 공유 URL이 auto 상태 날짜 범위를 제거하지 않습니다.'
+  );
+  assertRegex(
+    content,
+    /if \(!hasExplicitQueryScope\) \{\s*resetAttendanceDashboardScopeState\(\);\s*\}/,
+    '출석현황 초기화가 query 없는 경우 live default scope로 복원되지 않습니다.'
+  );
+}
+
 function checkSyntax() {
   const jsFiles = [
     'web/admin/scripts/01_state.js',
@@ -264,6 +293,7 @@ const checks = [
   ['세션 헤더 동적 파싱 가드', checkSessionHeaderDynamicParsing],
   ['시즌업로드 컬럼 유연성 가드', checkImportUpdateColumnFlexibility],
   ['출석현황 드릴다운 helper 중복 선언 가드', checkAttendanceDashboardDrilldownHelpers],
+  ['출석현황 live default scope persistence 가드', checkAttendanceDashboardLiveDefaultScopePersistence],
   ['수정 파일 문법 체크', checkSyntax]
 ];
 
