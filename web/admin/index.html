@@ -471,6 +471,46 @@
       min-width: 0;
     }
 
+    .schedule-new-date-launcher {
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .schedule-new-date-popover {
+      left: auto;
+      right: 0;
+      width: min(296px, calc(100vw - 32px));
+    }
+
+    .schedule-new-date-panel {
+      gap: 10px;
+      text-align: left;
+    }
+
+    .schedule-new-date-label {
+      color: #dbeafe;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .schedule-new-date-input {
+      padding: 12px 14px;
+      font-size: 15px;
+      letter-spacing: 0;
+      text-align: left;
+    }
+
+    .schedule-new-date-help {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .schedule-new-date-actions {
+      justify-content: flex-end;
+    }
+
     .card-subtitle {
       font-size: 12px;
       font-weight: 700;
@@ -3942,10 +3982,33 @@
             <i class="fas fa-list card-icon"></i>
             <h2 class="card-title">현재 시즌 일정 관리</h2>
           </div>
-          <button type="button" class="btn" onclick="openTodayScheduleCalendarModal()">
-            <i class="fas fa-plus"></i>
-            <span>새 일정</span>
-          </button>
+          <div class="schedule-new-date-launcher">
+            <button
+              type="button"
+              class="btn"
+              id="scheduleNewDateBtn"
+              onclick="openTodayScheduleCalendarModal()"
+              aria-expanded="false"
+              aria-controls="scheduleNewDatePopover">
+              <i class="fas fa-plus"></i>
+              <span>새 일정</span>
+            </button>
+            <div id="scheduleNewDatePopover" class="dashboard-picker-popover schedule-new-date-popover" hidden>
+              <div class="dashboard-picker-panel schedule-new-date-panel">
+                <label class="schedule-new-date-label" for="scheduleNewDateInput">날짜 선택</label>
+                <input
+                  id="scheduleNewDateInput"
+                  type="date"
+                  class="form-input schedule-new-date-input"
+                  onchange="submitScheduleNewDateSelection()">
+                <p class="schedule-new-date-help">날짜를 고르면 해당 날짜 기준으로 새 일정 모달이 열립니다.</p>
+                <div class="dashboard-action-row schedule-new-date-actions">
+                  <button type="button" class="btn btn-secondary" onclick="selectTodayForNewSchedule()">오늘</button>
+                  <button type="button" class="btn" onclick="submitScheduleNewDateSelection()">이 날짜로 열기</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <p class="info-text">목록에서 회차를 확인하고, `새 일정` 또는 `수정`으로 같은 일정 모달에서 추가/수정/삭제를 처리합니다.</p>
         <div class="table-wrap" id="scheduleTableWrap">

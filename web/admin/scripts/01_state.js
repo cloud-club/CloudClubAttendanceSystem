@@ -31,6 +31,7 @@ let calendarCursorYear = new Date().getFullYear();
 let calendarCursorMonth = new Date().getMonth();
 let calendarSelectedDateKey = '';
 let scheduleCalendarModalState = null;
+let scheduleNewDatePopoverOpen = false;
 let excusedSearchKeyword = '';
 let excusedAbsentOnly = false;
 let graduationMatrixRenderToken = 0;

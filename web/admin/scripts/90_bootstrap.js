@@ -59,9 +59,20 @@ document.addEventListener('DOMContentLoaded', () => {
     closeAuthInfoPopover();
   });
 
+  document.addEventListener('click', (event) => {
+    const popover = document.getElementById('scheduleNewDatePopover');
+    const button = document.getElementById('scheduleNewDateBtn');
+    if (!popover || popover.hidden || !button) return;
+    if (button.contains(event.target) || popover.contains(event.target)) return;
+    closeScheduleNewDatePopover();
+  });
+
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeAuthInfoPopover();
+      if (typeof closeScheduleNewDatePopover === 'function') {
+        closeScheduleNewDatePopover();
+      }
     }
   });
 

@@ -63,6 +63,83 @@ function openScheduleCalendarDatePicker(event) {
   input.click();
 }
 
+function getScheduleNewDatePopoverElements() {
+  return {
+    button: document.getElementById('scheduleNewDateBtn'),
+    popover: document.getElementById('scheduleNewDatePopover'),
+    input: document.getElementById('scheduleNewDateInput')
+  };
+}
+
+function getDefaultNewScheduleDateKey() {
+  const selected = normalizeDateKey(calendarSelectedDateKey);
+  return selected || getDateKeyFromDate(new Date());
+}
+
+function setScheduleNewDatePopoverOpen(open) {
+  const elements = getScheduleNewDatePopoverElements();
+  if (!elements.popover || !elements.button) return;
+
+  scheduleNewDatePopoverOpen = !!open;
+  elements.popover.hidden = !open;
+  elements.popover.classList.toggle('is-open', !!open);
+  elements.button.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeScheduleNewDatePopover() {
+  setScheduleNewDatePopoverOpen(false);
+}
+
+function focusScheduleNewDateInput(options) {
+  const opts = options || {};
+  const elements = getScheduleNewDatePopoverElements();
+  const input = elements.input;
+  if (!input) return;
+
+  setTimeout(() => {
+    input.focus();
+    if (opts.showPicker === false || typeof input.showPicker !== 'function') return;
+    try {
+      input.showPicker();
+    } catch (error) {
+      // Ignore unsupported or blocked picker openings.
+    }
+  }, 0);
+}
+
+function toggleScheduleNewDatePopover() {
+  const elements = getScheduleNewDatePopoverElements();
+  if (!elements.popover || !elements.input) return;
+
+  const shouldOpen = !scheduleNewDatePopoverOpen;
+  if (shouldOpen) {
+    elements.input.value = getDefaultNewScheduleDateKey();
+  }
+  setScheduleNewDatePopoverOpen(shouldOpen);
+  if (shouldOpen) {
+    focusScheduleNewDateInput({ showPicker: true });
+  }
+}
+
+function submitScheduleNewDateSelection() {
+  const elements = getScheduleNewDatePopoverElements();
+  const dateKey = normalizeDateKey(elements.input && elements.input.value ? elements.input.value : '');
+  if (!dateKey) {
+    showBoxMessage('scheduleActionResult', `❌ ${escapeHtml('새 일정을 추가할 날짜를 선택해주세요.')}`, false);
+    return;
+  }
+
+  closeScheduleNewDatePopover();
+  openScheduleCalendarModalForItem(null, { dateKey });
+}
+
+function selectTodayForNewSchedule() {
+  const elements = getScheduleNewDatePopoverElements();
+  if (!elements.input) return;
+  elements.input.value = getDateKeyFromDate(new Date());
+  submitScheduleNewDateSelection();
+}
+
 function renderScheduleTable(items) {
   const wrap = document.getElementById('scheduleTableWrap');
   if (!wrap) return;
@@ -370,6 +447,7 @@ function openScheduleCalendarModalForItem(item, options) {
   const opts = options || {};
   const dateKey = String(opts.dateKey || getScheduleItemDateKey(item) || '').trim();
   if (!dateKey) return;
+  closeScheduleNewDatePopover();
 
   const modal = document.getElementById('scheduleCalendarModal');
   const title = document.getElementById('scheduleCalendarModalTitle');
@@ -427,9 +505,7 @@ function openScheduleCalendarModal(dateKey) {
 }
 
 function openTodayScheduleCalendarModal() {
-  openScheduleCalendarModalForItem(null, {
-    dateKey: getDateKeyFromDate(new Date())
-  });
+  toggleScheduleNewDatePopover();
 }
 
 function closeScheduleCalendarModal() {
