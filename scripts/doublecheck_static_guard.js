@@ -299,6 +299,7 @@ function checkLocationPrivacyAndPolicyUi() {
   const studentJs = readFile('web/student/student.js');
   const studentHtml = readFile('web/student/latest/index.html');
   const adminHtml = readFile('web/admin/index.html');
+  const adminScheduleJs = readFile('web/admin/scripts/22_schedule.js');
   const privacyHtml = readFile('web/privacy.html');
   const termsHtml = readFile('web/terms.html');
 
@@ -310,6 +311,51 @@ function checkLocationPrivacyAndPolicyUi() {
   assertRegex(studentHtml, /href="\.\.\/\.\.\/privacy\.html"/, '학생 개인정보 처리 안내 링크가 없습니다.');
   assertRegex(adminHtml, /google-maps-attribution[^>]*" translate="no">Google Maps</, '관리자 Google Maps attribution이 없습니다.');
   assertRegex(adminHtml, /href="\.\.\/privacy\.html"/, '관리자 개인정보 처리 안내 링크가 없습니다.');
+  assertRegex(
+    adminHtml,
+    /class="schedule-calendar-modal-body"[\s\S]*class="schedule-calendar-modal-timing"[\s\S]*class="schedule-location-panel"/,
+    '일정 모달이 데스크톱 밀도형 시간·장소 2열 구조를 사용하지 않습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /@media \(max-width: 900px\)[\s\S]*?\.schedule-calendar-modal-body\s*\{[\s\S]*?grid-template-columns:\s*1fr/,
+    '일정 모달의 900px 이하 단일 열 반응형 규칙이 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /\.modal-panel\.schedule-calendar-location-modal \.form-input\s*\{[\s\S]*?min-height:\s*44px/,
+    '일정 모달 입력의 최소 44px 터치 영역 규칙이 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /\.schedule-location-toggle\s*\{[\s\S]*?min-height:\s*44px/,
+    '장소 확인 필수 토글의 최소 44px 터치 영역 규칙이 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /\.schedule-place-summary\s*\{[\s\S]*?text-wrap:\s*balance[\s\S]*?word-break:\s*keep-all/,
+    '모바일 장소 주소의 마지막 토큰 고립을 막는 균형 줄바꿈 규칙이 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /\.modal-panel\.schedule-calendar-location-modal \.modal-actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(88px,\s*1fr\)\)/,
+    '모바일 일정 모달의 2개·3개 행동 버튼을 함께 수용하는 반응형 그리드가 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /body\.schedule-calendar-modal-open\s*\{[\s\S]*?overflow:\s*hidden/,
+    '일정 모달이 열린 동안 배경 문서 스크롤을 잠그는 스타일이 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /\.schedule-calendar-modal-body\s*\{[\s\S]*?overscroll-behavior:\s*contain[\s\S]*?scrollbar-width:\s*thin/,
+    '일정 모달 본문 스크롤 격리 또는 저대비 스크롤바 스타일이 없습니다.'
+  );
+  assertRegex(
+    adminScheduleJs,
+    /document\.body\.classList\.add\('schedule-calendar-modal-open'\)[\s\S]*document\.body\.classList\.remove\('schedule-calendar-modal-open'\)/,
+    '일정 모달의 배경 스크롤 잠금 수명주기 처리가 없습니다.'
+  );
   assertRegex(privacyHtml, /현재 좌표[\s\S]*저장하지 않습니다/, '개인정보 안내에 참가자 좌표 미저장 정책이 없습니다.');
   assertRegex(termsHtml, /Google Maps\/Google Earth 추가 서비스 약관/, '이용약관에 Google Maps 약관 참조가 없습니다.');
 }

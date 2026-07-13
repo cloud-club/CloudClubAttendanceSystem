@@ -24,6 +24,10 @@
       min-height: 100vh;
     }
 
+    body.schedule-calendar-modal-open {
+      overflow: hidden;
+    }
+
     .is-hidden {
       display: none !important;
     }
@@ -1353,12 +1357,13 @@
 
     .schedule-calendar-modal-grid {
       display: grid;
-      gap: 10px;
-      margin-top: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 0;
     }
 
     .schedule-calendar-modal-date-row {
-      margin-top: 10px;
+      margin-top: 0;
     }
 
     .schedule-calendar-modal-date-field {
@@ -1401,8 +1406,9 @@
     }
 
     .schedule-location-panel {
-      margin-top: 14px;
-      padding: 14px;
+      min-width: 0;
+      margin-top: 0;
+      padding: 12px;
       border: 1px solid rgba(96, 165, 250, 0.3);
       border-radius: 16px;
       background: rgba(15, 23, 42, 0.45);
@@ -1410,8 +1416,9 @@
 
     .schedule-location-toggle {
       display: flex;
-      align-items: flex-start;
-      gap: 10px;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
       color: #e2e8f0;
       cursor: pointer;
     }
@@ -1423,10 +1430,26 @@
       accent-color: #60a5fa;
     }
 
+    .schedule-location-toggle-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .schedule-location-toggle-description {
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.45;
+      text-wrap: pretty;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
     .schedule-location-fields {
       display: grid;
-      gap: 10px;
-      margin-top: 12px;
+      gap: 8px;
+      margin-top: 10px;
     }
 
     .schedule-place-host gmp-place-autocomplete {
@@ -1436,18 +1459,21 @@
 
     .schedule-place-summary,
     .schedule-place-status {
-      padding: 10px 12px;
+      padding: 8px 10px;
       border-radius: 12px;
       background: rgba(255, 255, 255, 0.06);
       color: #cbd5e1;
       font-size: 13px;
-      line-height: 1.55;
+      line-height: 1.45;
       overflow-wrap: anywhere;
     }
 
     .schedule-place-summary {
       display: grid;
       gap: 6px;
+      text-wrap: balance;
+      word-break: keep-all;
+      overflow-wrap: break-word;
     }
 
     .google-maps-attribution-row {
@@ -1478,11 +1504,28 @@
     }
 
     .schedule-location-note {
-      min-height: 84px;
+      min-height: 72px;
       resize: vertical;
       text-align: left;
       letter-spacing: 0;
       line-height: 1.5;
+    }
+
+    .schedule-location-note-field {
+      margin-top: 10px;
+    }
+
+    .schedule-location-compact-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(120px, 0.45fr);
+      gap: 8px;
+      align-items: end;
+    }
+
+    .schedule-location-compact-row .btn {
+      width: 100%;
+      min-height: 44px;
+      justify-content: center;
     }
 
     .status-chip.neutral {
@@ -1491,10 +1534,49 @@
       border: 1px solid rgba(148, 163, 184, 0.35);
     }
 
-    .schedule-calendar-location-modal {
-      max-width: 640px;
-      max-height: calc(100dvh - 32px);
+    .schedule-calendar-modal-heading {
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .schedule-calendar-modal-heading p:last-child {
+      margin-bottom: 0;
+    }
+
+    .schedule-calendar-modal-body {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.35fr);
+      gap: 16px;
+      min-height: 0;
+      padding: 12px 4px 4px 0;
       overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+    }
+
+    .schedule-calendar-modal-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .schedule-calendar-modal-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .schedule-calendar-modal-body::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.45);
+    }
+
+    .schedule-calendar-modal-timing {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .schedule-calendar-modal-timing .schedule-preview {
+      margin-top: 0;
     }
 
     .table-wrap {
@@ -2193,9 +2275,12 @@
     }
 
     .modal-panel.schedule-calendar-location-modal {
-      max-width: 640px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      max-width: 960px;
       max-height: calc(100dvh - 32px);
-      overflow-y: auto;
+      overflow: hidden;
+      padding: 16px;
     }
 
     .modal-panel.schedule-calendar-location-modal .schedule-location-toggle input {
@@ -2204,6 +2289,33 @@
       height: 20px;
       margin-top: 2px;
       padding: 0;
+    }
+
+    .modal-panel.schedule-calendar-location-modal .form-label {
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .modal-panel.schedule-calendar-location-modal .form-input {
+      min-height: 44px;
+    }
+
+    .modal-panel.schedule-calendar-location-modal .schedule-location-note {
+      min-height: 72px;
+    }
+
+    .modal-panel.schedule-calendar-location-modal .btn {
+      min-height: 44px;
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      gap: 8px;
+    }
+
+    .modal-panel.schedule-calendar-location-modal .modal-actions {
+      margin-top: 8px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .modal-actions {
@@ -3151,6 +3263,16 @@
       }
     }
 
+    @media (max-width: 900px) {
+      .modal-panel.schedule-calendar-location-modal {
+        max-width: 720px;
+      }
+
+      .schedule-calendar-modal-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
     @media (max-width: 768px) {
       .container {
         padding: 15px;
@@ -3298,6 +3420,19 @@
         font-size: 13px;
       }
 
+      .modal-backdrop {
+        padding: 8px;
+      }
+
+      .modal-panel.schedule-calendar-location-modal {
+        max-height: calc(100dvh - 16px);
+        padding: 12px;
+      }
+
+      .schedule-calendar-modal-body {
+        padding-right: 0;
+      }
+
       .dashboard-filter-grid {
         grid-template-columns: 1fr;
       }
@@ -3377,6 +3512,28 @@
         grid-column: 2;
         align-items: flex-start;
       }
+    }
+
+    @media (max-width: 560px) {
+      .schedule-calendar-modal-grid,
+      .schedule-location-compact-row {
+        grid-template-columns: 1fr;
+      }
+
+      .modal-panel.schedule-calendar-location-modal .schedule-location-note {
+        min-height: 84px;
+      }
+
+      .modal-panel.schedule-calendar-location-modal .modal-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+      }
+
+      .modal-panel.schedule-calendar-location-modal .modal-actions .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
     }
     
     /* Cloud Animation */
@@ -4573,59 +4730,70 @@
 
   <div id="scheduleCalendarModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="scheduleCalendarModalTitle" aria-describedby="scheduleCalendarModalSessionInfo">
     <div class="modal-panel schedule-calendar-location-modal">
-      <h3 id="scheduleCalendarModalTitle">새 회차 추가</h3>
-      <p id="scheduleCalendarModalTargetDate">-</p>
-      <p id="scheduleCalendarModalSessionInfo">해당 날짜에 등록된 회차가 없습니다.</p>
-      <div class="schedule-calendar-modal-date-row">
-        <div>
-          <label class="form-label" for="scheduleCalendarModalDateInput">행사 날짜</label>
-          <div class="schedule-calendar-modal-date-field">
-            <input id="scheduleCalendarModalDateInput" type="date" class="form-input" onchange="onScheduleCalendarDateChanged()">
-            <button type="button" class="btn btn-secondary schedule-calendar-date-picker-btn" onclick="openScheduleCalendarDatePicker(event)" aria-label="날짜 선택" title="날짜 선택">
-              <i class="fas fa-calendar-days"></i>
-            </button>
-          </div>
-        </div>
+      <div class="schedule-calendar-modal-heading">
+        <h3 id="scheduleCalendarModalTitle">새 회차 추가</h3>
+        <p id="scheduleCalendarModalTargetDate">-</p>
+        <p id="scheduleCalendarModalSessionInfo">해당 날짜에 등록된 회차가 없습니다.</p>
       </div>
-      <div class="schedule-calendar-modal-grid">
-        <div>
-          <label class="form-label" for="scheduleCalendarModalStartTimeInput">시작 시간</label>
-          <input id="scheduleCalendarModalStartTimeInput" type="time" class="form-input" onchange="onScheduleCalendarStartTimeChanged()">
-        </div>
-        <div>
-          <label class="form-label" for="scheduleCalendarModalEndInput">종료 시간 (선택)</label>
-          <input id="scheduleCalendarModalEndInput" type="time" class="form-input" oninput="onScheduleCalendarEndInputChanged()">
-        </div>
-      </div>
-      <div class="schedule-location-panel">
-        <label class="schedule-location-toggle" for="scheduleLocationRequiredInput">
-          <input id="scheduleLocationRequiredInput" type="checkbox" onchange="onScheduleLocationRequiredChanged()">
-          <span><strong>장소 기반 출석 확인 필수</strong><br>선택하면 참가자는 지정 장소 반경 500m 이내에서만 출석할 수 있습니다.</span>
-        </label>
-        <div id="scheduleLocationFields" class="schedule-location-fields" hidden>
-          <div>
-            <span class="form-label">Google 장소 선택</span>
-            <div id="schedulePlaceAutocompleteHost" class="schedule-place-host"></div>
+      <div class="schedule-calendar-modal-body">
+        <section class="schedule-calendar-modal-timing" aria-label="회차 시간 설정">
+          <div class="schedule-calendar-modal-date-row">
+            <div>
+              <label class="form-label" for="scheduleCalendarModalDateInput">행사 날짜</label>
+              <div class="schedule-calendar-modal-date-field">
+                <input id="scheduleCalendarModalDateInput" type="date" class="form-input" onchange="onScheduleCalendarDateChanged()">
+                <button type="button" class="btn btn-secondary schedule-calendar-date-picker-btn" onclick="openScheduleCalendarDatePicker(event)" aria-label="날짜 선택" title="날짜 선택">
+                  <i class="fas fa-calendar-days"></i>
+                </button>
+              </div>
+            </div>
           </div>
-          <div id="schedulePlaceSelectionSummary" class="schedule-place-summary">
-            <span id="schedulePlaceSelectionText">선택된 장소가 없습니다.</span>
-            <span id="schedulePlaceAttribution" class="google-maps-attribution-row">
-              <span class="google-maps-attribution" translate="no">Google Maps</span>
+          <div class="schedule-calendar-modal-grid">
+            <div>
+              <label class="form-label" for="scheduleCalendarModalStartTimeInput">시작 시간</label>
+              <input id="scheduleCalendarModalStartTimeInput" type="time" class="form-input" onchange="onScheduleCalendarStartTimeChanged()">
+            </div>
+            <div>
+              <label class="form-label" for="scheduleCalendarModalEndInput">종료 시간 (선택)</label>
+              <input id="scheduleCalendarModalEndInput" type="time" class="form-input" oninput="onScheduleCalendarEndInputChanged()">
+            </div>
+          </div>
+          <div id="scheduleCalendarModalPreview" class="schedule-preview">회차 키/오픈 시각 미리보기가 여기에 표시됩니다.</div>
+        </section>
+        <section class="schedule-location-panel" aria-label="장소 및 메모 설정">
+          <label class="schedule-location-toggle" for="scheduleLocationRequiredInput">
+            <input id="scheduleLocationRequiredInput" type="checkbox" onchange="onScheduleLocationRequiredChanged()">
+            <span class="schedule-location-toggle-copy">
+              <strong>장소 기반 출석 확인 필수</strong>
+              <span class="schedule-location-toggle-description">지정 장소 500m 안에서만 출석할 수 있습니다.</span>
             </span>
+          </label>
+          <div id="scheduleLocationFields" class="schedule-location-fields" hidden>
+            <div>
+              <span class="form-label">Google 장소 선택</span>
+              <div id="schedulePlaceAutocompleteHost" class="schedule-place-host"></div>
+            </div>
+            <div id="schedulePlaceSelectionSummary" class="schedule-place-summary">
+              <span id="schedulePlaceSelectionText">선택된 장소가 없습니다.</span>
+              <span id="schedulePlaceAttribution" class="google-maps-attribution-row">
+                <span class="google-maps-attribution" translate="no">Google Maps</span>
+              </span>
+            </div>
+            <div class="schedule-location-compact-row">
+              <button id="schedulePlaceClearBtn" type="button" class="btn btn-secondary" onclick="clearSchedulePlaceSelection()">선택한 장소 지우기</button>
+              <div>
+                <label class="form-label" for="scheduleLocationRadiusInput">허용 반경</label>
+                <input id="scheduleLocationRadiusInput" type="text" class="form-input" value="500m" readonly>
+              </div>
+            </div>
           </div>
-          <button id="schedulePlaceClearBtn" type="button" class="btn btn-secondary" onclick="clearSchedulePlaceSelection()">선택한 장소 지우기</button>
-          <div>
-            <label class="form-label" for="scheduleLocationRadiusInput">허용 반경</label>
-            <input id="scheduleLocationRadiusInput" type="text" class="form-input" value="500m" readonly>
+          <div class="schedule-location-note-field">
+            <label class="form-label" for="scheduleLocationNoteInput">학생에게 표시할 장소 안내/회차 메모 (선택)</label>
+            <textarea id="scheduleLocationNoteInput" class="form-input schedule-location-note" maxlength="500" placeholder="예: 강남역 3번 출구 앞, 2층 세미나실"></textarea>
           </div>
-        </div>
-        <div style="margin-top:12px;">
-          <label class="form-label" for="scheduleLocationNoteInput">학생에게 표시할 장소 안내/회차 메모 (선택)</label>
-          <textarea id="scheduleLocationNoteInput" class="form-input schedule-location-note" maxlength="500" placeholder="예: 강남역 3번 출구 앞, 2층 세미나실"></textarea>
-        </div>
-        <div id="schedulePlaceStatus" class="schedule-place-status" role="status" aria-live="polite"></div>
+          <div id="schedulePlaceStatus" class="schedule-place-status" role="status" aria-live="polite"></div>
+        </section>
       </div>
-      <div id="scheduleCalendarModalPreview" class="schedule-preview">회차 키/오픈 시각 미리보기가 여기에 표시됩니다.</div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeScheduleCalendarModal()">취소</button>
         <button type="button" class="btn btn-secondary" id="scheduleCalendarModalDeleteBtn" onclick="deleteFromCalendarModal()" style="display:none;">삭제</button>

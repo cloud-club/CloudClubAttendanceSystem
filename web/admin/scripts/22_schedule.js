@@ -426,6 +426,7 @@ function openScheduleCalendarModalForItem(item, options) {
   updateScheduleCalendarModalPreview();
   renderScheduleCalendar();
 
+  document.body.classList.add('schedule-calendar-modal-open');
   modal.style.display = 'flex';
   setTimeout(() => {
     if (item) {
@@ -455,6 +456,7 @@ function closeScheduleCalendarModal() {
   if (modal) {
     modal.style.display = 'none';
   }
+  document.body.classList.remove('schedule-calendar-modal-open');
   closeScheduleLocationEditor();
   scheduleCalendarModalState = null;
 }
