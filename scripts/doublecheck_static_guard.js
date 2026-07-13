@@ -314,6 +314,26 @@ function checkLocationPrivacyAndPolicyUi() {
   assertRegex(termsHtml, /Google Maps\/Google Earth 추가 서비스 약관/, '이용약관에 Google Maps 약관 참조가 없습니다.');
 }
 
+function checkPagesEnvInjectionExitStatus() {
+  const workflow = readFile('.github/workflows/deploy-gh-pages.yml');
+
+  assertNotRegex(
+    workflow,
+    /grep -q "__(?:API_BASE_URL|GOOGLE_MAPS_BROWSER_API_KEY)__" web\/shared\/env\.js &&/,
+    'Pages 환경 주입의 마지막 음수 검증이 성공 경로에서도 종료 코드 1을 반환할 수 있습니다.'
+  );
+  assertRegex(
+    workflow,
+    /if grep -q "__GOOGLE_MAPS_BROWSER_API_KEY__" web\/shared\/env\.js; then/,
+    'Maps 키 placeholder 잔존 검증이 명시적인 if 블록이 아닙니다.'
+  );
+  assertRegex(
+    workflow,
+    /grep -F "\$GOOGLE_MAPS_BROWSER_API_KEY" web\/shared\/env\.js >\/dev\/null/,
+    'Maps 브라우저 키가 env.js에 실제로 주입되었는지 확인하지 않습니다.'
+  );
+}
+
 const checks = [
   ['API 라우터 불변성', checkApiRouterInvariance],
   ['SUPER_ONLY_TABS 불변성', checkSuperOnlyTabsInvariance],
@@ -328,6 +348,7 @@ const checks = [
   ['출석현황 live default scope persistence 가드', checkAttendanceDashboardLiveDefaultScopePersistence],
   ['위치 정책 회귀 테스트', checkLocationPolicyRegression],
   ['위치 개인정보·Google Maps 정책 표면', checkLocationPrivacyAndPolicyUi],
+  ['Pages 환경 주입 종료 코드 가드', checkPagesEnvInjectionExitStatus],
   ['수정 파일 문법 체크', checkSyntax]
 ];
 

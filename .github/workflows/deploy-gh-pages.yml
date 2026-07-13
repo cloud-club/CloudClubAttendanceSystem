@@ -58,11 +58,18 @@ jobs:
           set -euo pipefail
           grep -q "__API_BASE_URL__" web/shared/env.js || { echo "::error::env.js placeholder(__API_BASE_URL__)를 찾지 못했습니다."; exit 1; }
           sed -i "0,/__API_BASE_URL__/s|__API_BASE_URL__|$APPS_SCRIPT_WEB_APP_URL|" web/shared/env.js
-          grep -q "__API_BASE_URL__" web/shared/env.js && { echo "::error::env.js placeholder가 남아있습니다."; exit 1; }
+          if grep -q "__API_BASE_URL__" web/shared/env.js; then
+            echo "::error::env.js placeholder가 남아있습니다."
+            exit 1
+          fi
           grep -F "$APPS_SCRIPT_WEB_APP_URL" web/shared/env.js >/dev/null || { echo "::error::env.js에 API URL이 주입되지 않았습니다."; exit 1; }
           grep -q "__GOOGLE_MAPS_BROWSER_API_KEY__" web/shared/env.js || { echo "::error::env.js placeholder(__GOOGLE_MAPS_BROWSER_API_KEY__)를 찾지 못했습니다."; exit 1; }
           sed -i "0,/__GOOGLE_MAPS_BROWSER_API_KEY__/s|__GOOGLE_MAPS_BROWSER_API_KEY__|$GOOGLE_MAPS_BROWSER_API_KEY|" web/shared/env.js
-          grep -q "__GOOGLE_MAPS_BROWSER_API_KEY__" web/shared/env.js && { echo "::error::env.js Maps 키 placeholder가 남아있습니다."; exit 1; }
+          if grep -q "__GOOGLE_MAPS_BROWSER_API_KEY__" web/shared/env.js; then
+            echo "::error::env.js Maps 키 placeholder가 남아있습니다."
+            exit 1
+          fi
+          grep -F "$GOOGLE_MAPS_BROWSER_API_KEY" web/shared/env.js >/dev/null || { echo "::error::env.js에 Maps 브라우저 키가 주입되지 않았습니다."; exit 1; }
 
       - name: Health check Apps Script apiInfo
         env:
