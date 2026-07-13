@@ -21,6 +21,7 @@ window.AdminRuntimeDeps = (function createAdminRuntimeDeps(global) {
   };
 
   const inflightByDep = {};
+  let googleMapsPromise = null;
 
   function getLoader(depName) {
     return depLoaders[String(depName || '').trim().toLowerCase()] || null;
@@ -84,9 +85,45 @@ window.AdminRuntimeDeps = (function createAdminRuntimeDeps(global) {
     return !!(loader && loader.isReady());
   }
 
+  function ensureGoogleMapsPlaces() {
+    if (global.google && global.google.maps && typeof global.google.maps.importLibrary === 'function') {
+      return global.google.maps.importLibrary('places');
+    }
+    if (googleMapsPromise) return googleMapsPromise;
+
+    const key = String((global.CLOUDCLUB_CONFIG || {}).GOOGLE_MAPS_BROWSER_API_KEY || '').trim();
+    if (!key) {
+      return Promise.reject(new Error('GOOGLE_MAPS_BROWSER_API_KEY가 설정되지 않았습니다.'));
+    }
+
+    googleMapsPromise = new Promise((resolve, reject) => {
+      const callbackName = '__ccGoogleMapsReady';
+      const script = document.createElement('script');
+      global[callbackName] = async function () {
+        try {
+          resolve(await global.google.maps.importLibrary('places'));
+        } catch (error) {
+          reject(error);
+        } finally {
+          try { delete global[callbackName]; } catch (error) { global[callbackName] = undefined; }
+        }
+      };
+      script.async = true;
+      script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key)
+        + '&loading=async&v=weekly&auth_referrer_policy=origin&callback=' + callbackName;
+      script.onerror = () => reject(new Error('Google Maps JavaScript API를 불러오지 못했습니다.'));
+      document.head.appendChild(script);
+    }).catch(error => {
+      googleMapsPromise = null;
+      throw error;
+    });
+    return googleMapsPromise;
+  }
+
   return {
     ensure,
     ensureMany,
-    isReady
+    isReady,
+    ensureGoogleMapsPlaces
   };
 })(window);

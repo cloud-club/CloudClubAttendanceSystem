@@ -1,9 +1,33 @@
+function getMemberProfileRangeWidth(memberSchema) {
+  const schema = memberSchema || { fieldMap: {} };
+  const fieldMap = schema.fieldMap || {};
+  let maxIndex = Math.max(0, Number(schema.profileEndColIndex || 0));
+  Object.keys(fieldMap).forEach(field => {
+    const idx = Number(fieldMap[field]);
+    if (!isNaN(idx) && idx >= 0) {
+      maxIndex = Math.max(maxIndex, idx);
+    }
+  });
+  return maxIndex + 1;
+}
+
+function getMemberProfileValues(sheet, memberSchema) {
+  const schema = memberSchema || resolveMemberSchema(sheet);
+  const lastRow = Math.max(1, sheet.getLastRow());
+  const profileWidth = Math.max(1, getMemberProfileRangeWidth(schema));
+  return {
+    memberSchema: schema,
+    values: sheet.getRange(1, 1, lastRow, profileWidth).getValues()
+  };
+}
+
 function getMembers(seasonName) {
   try {
     const info = getRequestedSeasonSheetInfo(seasonName);
     const sheet = info.sheet;
-    const values = sheet.getDataRange().getValues();
-    const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+    const profilePack = getMemberProfileValues(sheet);
+    const values = profilePack.values;
+    const memberSchema = profilePack.memberSchema;
 
     const members = [];
     for (let i = 1; i < values.length; i++) {
@@ -39,6 +63,91 @@ function getMembers(seasonName) {
     return {
       success: false,
       message: error.message || '회원 목록 조회 중 오류가 발생했습니다.'
+    };
+  }
+}
+
+function buildManualApproveStatusEntry(status, note, attendTime) {
+  const normalizedStatus = String(status || '').trim() || 'none';
+  const recorded = normalizedStatus === 'on_time'
+    || normalizedStatus === 'late'
+    || normalizedStatus === 'excused'
+    || normalizedStatus === 'recorded';
+  return {
+    status: normalizedStatus,
+    hasValue: recorded,
+    note: String(note || '').trim(),
+    attendTime: String(attendTime || '').trim()
+  };
+}
+
+function getManualApproveStatus(seasonName, sessionKey) {
+  try {
+    const info = getRequestedSeasonSheetInfo(seasonName);
+    const key = String(sessionKey || '').trim();
+    if (!key) {
+      return {
+        success: true,
+        seasonAlias: info.seasonAlias,
+        currentSheet: info.currentSheet,
+        sessionKey: '',
+        statusByPhone: {}
+      };
+    }
+
+    const sheet = info.sheet;
+    const lastCol = Math.max(1, sheet.getLastColumn());
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+    const memberSchema = resolveMemberSchemaFromHeaders(headers);
+    const sessions = collectSessionsFromSheet(sheet, {
+      createMissingMeta: false,
+      memberSchema: memberSchema
+    });
+    const targetSession = sessions.find(item => item.sessionKey === key);
+    if (!targetSession) {
+      return {
+        success: false,
+        message: '회차 정보를 찾을 수 없습니다.'
+      };
+    }
+
+    const profilePack = getMemberProfileValues(sheet, memberSchema);
+    const profileValues = profilePack.values;
+    const rowCount = Math.max(0, profileValues.length - 1);
+    const cellValues = rowCount > 0
+      ? sheet.getRange(2, targetSession.colIndex + 1, rowCount, 1).getValues()
+      : [];
+    const noteValues = rowCount > 0
+      ? sheet.getRange(2, targetSession.colIndex + 1, rowCount, 1).getNotes()
+      : [];
+    const now = new Date();
+    const statusByPhone = {};
+
+    for (let i = 1; i < profileValues.length; i++) {
+      const member = readMemberFromRow(profileValues[i], memberSchema);
+      if (!member.name || !member.phone) continue;
+
+      const cellValue = cellValues[i - 1] ? cellValues[i - 1][0] : '';
+      const note = noteValues[i - 1] ? noteValues[i - 1][0] : '';
+      const status = getAttendanceDetailType(cellValue, targetSession, now);
+      const attendTime = (status === 'on_time' || status === 'late')
+        ? getDashboardAttendTimeText(cellValue)
+        : '';
+
+      statusByPhone[member.phone] = buildManualApproveStatusEntry(status, note, attendTime);
+    }
+
+    return {
+      success: true,
+      seasonAlias: info.seasonAlias,
+      currentSheet: info.currentSheet,
+      sessionKey: targetSession.sessionKey,
+      statusByPhone: statusByPhone
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || '수동 승인 상태 조회 중 오류가 발생했습니다.'
     };
   }
 }

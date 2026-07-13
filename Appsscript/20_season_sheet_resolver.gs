@@ -12,11 +12,41 @@ function isLegacySeasonSheetName(name) {
   return LEGACY_SEASON_NAME_REGEX.test(String(name || '').trim());
 }
 
-function getSeasonSheetCandidates() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const candidates = [];
+function readSeasonSheetMetaCache() {
+  try {
+    const raw = CacheService.getScriptCache().get(SEASON_SHEET_META_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && Array.isArray(parsed.items) ? parsed.items : null;
+  } catch (error) {
+    return null;
+  }
+}
 
-  ss.getSheets().forEach(sheet => {
+function writeSeasonSheetMetaCache(items) {
+  if (!Array.isArray(items)) return;
+  try {
+    CacheService.getScriptCache().put(
+      SEASON_SHEET_META_CACHE_KEY,
+      JSON.stringify({ items: items }),
+      SEASON_SHEET_META_CACHE_TTL_SECONDS
+    );
+  } catch (error) {
+    Logger.log('시즌 시트 메타 캐시 저장 실패: ' + error.toString());
+  }
+}
+
+function invalidateSeasonSheetMetaCache() {
+  try {
+    CacheService.getScriptCache().remove(SEASON_SHEET_META_CACHE_KEY);
+  } catch (error) {
+    Logger.log('시즌 시트 메타 캐시 삭제 실패: ' + error.toString());
+  }
+}
+
+function buildSeasonSheetCandidatesFromSheets(sheets) {
+  const candidates = [];
+  (sheets || []).forEach(sheet => {
     const name = sheet.getName();
 
     if (isSeasonSheetName(name) || isLegacySeasonSheetName(name)) {
@@ -41,6 +71,36 @@ function getSeasonSheetCandidates() {
   });
 
   return candidates;
+}
+
+function getSeasonSheetCandidates() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const cachedItems = readSeasonSheetMetaCache();
+  if (cachedItems && cachedItems.length > 0) {
+    const hydrated = cachedItems.map(item => {
+      const sheet = ss.getSheetByName(String(item && item.name || '').trim());
+      if (!sheet) return null;
+      return {
+        sheet: sheet,
+        name: String(item.name || '').trim(),
+        alias: String(item.alias || '').trim(),
+        seasonNo: Number(item.seasonNo || -1),
+        isLegacy: !!item.isLegacy
+      };
+    }).filter(item => !!item);
+    if (hydrated.length === cachedItems.length) {
+      return hydrated;
+    }
+  }
+
+  const fresh = buildSeasonSheetCandidatesFromSheets(ss.getSheets());
+  writeSeasonSheetMetaCache(fresh.map(item => ({
+    name: item.name,
+    alias: item.alias,
+    seasonNo: item.seasonNo,
+    isLegacy: item.isLegacy
+  })));
+  return fresh;
 }
 
 function resolveSeasonSheetInfo(seasonInput) {
@@ -190,4 +250,3 @@ function getRequestedSeasonSheetInfo(seasonName) {
 
   return resolveSeasonSheetInfo(seasonName);
 }
-

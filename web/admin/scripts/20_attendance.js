@@ -498,7 +498,10 @@ function openTab(tabName, evt) {
   }
 
   if (tabName === 'status') {
-    loadAttendanceDashboard({ forceReload: !!isAttendanceActive });
+    if (typeof primeAttendanceDashboardLiveDefaults === 'function') {
+      primeAttendanceDashboardLiveDefaults();
+    }
+    loadAttendanceDashboard({ forceReload: false });
     if (typeof flushAttendanceDashboardDeferredWork === 'function') {
       runWhenBrowserIdle(() => flushAttendanceDashboardDeferredWork(), 120);
     }
@@ -546,12 +549,15 @@ function openTab(tabName, evt) {
   endPerfMark(perfToken, { status: 'ok' });
 }
 
-async function refreshSessionAndRanking() {
+async function refreshSessionAndRanking(options) {
+  const opts = options || {};
   await withPerfMark('data:refresh-session-and-ranking', async () => {
-    await Promise.all([
-      checkAttendanceSession(),
-      loadRankings()
-    ]);
+    const tasks = [checkAttendanceSession()];
+    const shouldLoadRanking = opts.includeRanking === true || getActiveTabName() === 'status';
+    if (shouldLoadRanking) {
+      tasks.push(loadRankings());
+    }
+    await Promise.all(tasks);
   });
 }
 
@@ -824,7 +830,9 @@ function createManualApproveInitialState() {
     openCommentPhones: {},
     filteredMembers: [],
     statusLoadedSeasonAlias: '',
-    statusLoadedSessionKey: ''
+    statusLoadedSessionKey: '',
+    dataRequested: false,
+    dataLoading: false
   };
 }
 
@@ -844,7 +852,16 @@ function isManualMemberValueRecorded(status) {
 function getManualMemberStatusInfo(phone) {
   const key = String(phone || '').trim();
   const mapped = key && manualApproveState.statusByPhone ? manualApproveState.statusByPhone[key] : null;
-  if (mapped) return mapped;
+  if (mapped) {
+    const normalizedStatus = normalizeManualMemberStatus(mapped.status);
+    return {
+      status: normalizedStatus,
+      label: String(mapped.label || '').trim() || MANUAL_MEMBER_STATUS_LABELS[normalizedStatus] || MANUAL_MEMBER_STATUS_LABELS.none,
+      hasValue: mapped.hasValue === true || (mapped.hasValue !== false && isManualMemberValueRecorded(normalizedStatus)),
+      note: String(mapped.note || '').trim(),
+      attendTime: String(mapped.attendTime || '').trim()
+    };
+  }
   return {
     status: 'none',
     label: MANUAL_MEMBER_STATUS_LABELS.none,
@@ -900,6 +917,22 @@ function initializeManualApproveUi() {
   if (forceOverrideInput) {
     forceOverrideInput.checked = !!manualApproveState.forceOverride;
   }
+
+  const lazyTargets = [
+    document.getElementById('manualSessionSelect'),
+    document.getElementById('manualMemberSearchInput'),
+    document.getElementById('manualMemberListWrap')
+  ].filter(node => !!node);
+  lazyTargets.forEach(node => {
+    const triggerLoad = () => {
+      ensureManualApproveDataLoaded().catch(error => {
+        if (handleUnauthorizedError(error)) return;
+        showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 대상 정보 조회 중 오류'))}`, false);
+      });
+    };
+    node.addEventListener('focus', triggerLoad, { once: true });
+    node.addEventListener('pointerdown', triggerLoad, { once: true });
+  });
 
   renderManualMemberList();
 }
@@ -973,6 +1006,8 @@ function populateManualSessionSelect(items) {
     select.innerHTML = '<option value="">회차가 없습니다</option>';
     manualApproveState.sessionKey = '';
     manualApproveState.statusByPhone = {};
+    manualApproveState.dataRequested = false;
+    manualApproveState.dataLoading = false;
     syncManualApproveSubmitState();
     renderManualMemberList();
     return;
@@ -989,6 +1024,7 @@ function populateManualSessionSelect(items) {
   select.value = targetItem && targetItem.sessionKey ? targetItem.sessionKey : items[0].sessionKey;
   manualApproveState.sessionKey = String(select.value || '').trim();
   syncManualApproveSubmitState();
+  renderManualMemberList();
 }
 
 function onManualSessionChanged(value) {
@@ -998,6 +1034,7 @@ function onManualSessionChanged(value) {
   manualApproveState.openCommentPhones = {};
   manualApproveState.statusLoadedSessionKey = '';
   manualApproveState.statusLoadedSeasonAlias = '';
+  manualApproveState.dataRequested = true;
   renderManualMemberList();
   refreshManualApproveData({ forceMembers: false, forceStatuses: true }).catch(error => {
     if (handleUnauthorizedError(error)) return;
@@ -1007,6 +1044,12 @@ function onManualSessionChanged(value) {
 
 function onManualMemberSearchInput(value) {
   manualApproveState.keyword = String(value || '').trim().toLowerCase();
+  if (!manualApproveState.dataRequested && manualApproveState.sessionKey) {
+    ensureManualApproveDataLoaded().catch(error => {
+      if (handleUnauthorizedError(error)) return;
+      showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 대상 정보 조회 중 오류'))}`, false);
+    });
+  }
   scheduleManualMemberListRender();
 }
 
@@ -1236,6 +1279,20 @@ function renderManualMemberList() {
     return;
   }
 
+  if (manualApproveState.dataLoading) {
+    wrap.classList.remove('manual-member-list-cv');
+    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">수동 승인 대상 정보를 불러오는 중...</p>';
+    endPerfMark(perfToken, { status: 'loading' });
+    return;
+  }
+
+  if (!manualApproveState.dataRequested) {
+    wrap.classList.remove('manual-member-list-cv');
+    wrap.innerHTML = '<p class="info-text" style="padding: 12px;">회차를 확인하거나 검색을 시작하면 수동 승인 대상 정보를 불러옵니다.</p>';
+    endPerfMark(perfToken, { status: 'deferred' });
+    return;
+  }
+
   if (members.length === 0) {
     wrap.classList.remove('manual-member-list-cv');
     wrap.innerHTML = '<p class="info-text" style="padding: 12px;">회원 목록이 없습니다.</p>';
@@ -1371,30 +1428,9 @@ async function loadManualApproveStatuses(options) {
     return;
   }
 
-  const cachedReport = graduationReportCache;
-  const cachedSeasonAlias = normalizeSeasonAlias(
-    cachedReport && (
-      cachedReport.seasonAlias
-      || cachedReport.currentSheet
-      || cachedReport.sheetName
-      || cachedReport.season
-    )
-  );
-  if (
-    cachedReport
-    && cachedReport.success
-    && Array.isArray(cachedReport.members)
-    && cachedSeasonAlias
-    && cachedSeasonAlias === normalizeSeasonAlias(season)
-  ) {
-    manualApproveState.statusByPhone = buildManualStatusByPhoneFromReport(cachedReport, sessionKey);
-    manualApproveState.statusLoadedSeasonAlias = season;
-    manualApproveState.statusLoadedSessionKey = sessionKey;
-    return;
-  }
-
-  const response = await CloudClubApi.call('graduationReport', {
+  const response = await CloudClubApi.call('manualApproveStatus', {
     season,
+    sessionKey,
     adminToken
   });
 
@@ -1402,9 +1438,35 @@ async function loadManualApproveStatuses(options) {
     throw new Error(response.message || '수동 승인 대상 상태 조회 실패');
   }
 
-  manualApproveState.statusByPhone = buildManualStatusByPhoneFromReport(response, sessionKey);
+  manualApproveState.statusByPhone = response.statusByPhone || {};
   manualApproveState.statusLoadedSeasonAlias = season;
   manualApproveState.statusLoadedSessionKey = sessionKey;
+}
+
+async function ensureManualApproveDataLoaded(options) {
+  const opts = options || {};
+  const hasLoadedData = (
+    Array.isArray(manualApproveState.members) && manualApproveState.members.length > 0
+  ) || (
+    manualApproveState.statusLoadedSeasonAlias === getSelectedSeasonAlias()
+    && manualApproveState.statusLoadedSessionKey === String(manualApproveState.sessionKey || '').trim()
+  );
+  if (manualApproveState.dataLoading) return;
+  if (manualApproveState.dataRequested && !opts.force && hasLoadedData) return;
+  if (!manualApproveState.sessionKey) return;
+
+  manualApproveState.dataRequested = true;
+  manualApproveState.dataLoading = true;
+  renderManualMemberList();
+  try {
+    await refreshManualApproveData({
+      forceMembers: !!opts.forceMembers,
+      forceStatuses: !!opts.forceStatuses
+    });
+  } finally {
+    manualApproveState.dataLoading = false;
+    renderManualMemberList();
+  }
 }
 
 async function refreshManualApproveData(options) {
@@ -1419,10 +1481,12 @@ async function refreshManualApproveData(options) {
   if (seasonChanged) {
     const prevDefaultComment = manualApproveState.defaultComment || '';
     const prevForceOverride = !!manualApproveState.forceOverride;
+    const prevDataRequested = !!manualApproveState.dataRequested;
     manualApproveState = createManualApproveInitialState();
     manualApproveState.seasonAlias = season;
     manualApproveState.defaultComment = prevDefaultComment;
     manualApproveState.forceOverride = prevForceOverride;
+    manualApproveState.dataRequested = prevDataRequested;
   }
 
   if (forceMembers || seasonChanged || membersCache.length === 0) {
@@ -1569,10 +1633,11 @@ async function submitManualApproveBatch(event) {
     manualApproveState.statusLoadedSeasonAlias = '';
     invalidateSeasonOperationalCaches(getSelectedSeasonAlias());
 
-    await Promise.all([
-      refreshSessionAndRanking(),
-      loadGraduationReport({ forceReload: true })
-    ]);
+    const followUpTasks = [refreshSessionAndRanking()];
+    if (getActiveTabName() === 'graduation' || getActiveTabName() === 'excused') {
+      followUpTasks.push(loadGraduationReport({ forceReload: true }));
+    }
+    await Promise.all(followUpTasks);
     await refreshStatusDashboardIfVisible();
     await refreshManualApproveData({ forceMembers: false, forceStatuses: true });
   } catch (error) {

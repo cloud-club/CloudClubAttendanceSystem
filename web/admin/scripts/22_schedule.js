@@ -76,6 +76,11 @@ function renderScheduleTable(items) {
     const activeBadge = item.isActive
       ? '<span class="status-chip possible">진행중</span>'
       : (item.isPast ? '<span class="status-chip fail">종료</span>' : '<span class="status-chip pass">예정</span>');
+    const locationBadge = item.locationPolicyValid === false
+      ? '<span class="status-chip fail">GPS 정책 오류</span>'
+      : (item.locationRequired
+        ? '<span class="status-chip possible">GPS 필수 · 500m</span>'
+        : '<span class="status-chip neutral">장소 제한 없음</span>');
 
     return `
       <tr>
@@ -84,6 +89,7 @@ function renderScheduleTable(items) {
         <td>${escapeHtml(item.openLabel)}</td>
         <td>${escapeHtml(item.endLabel)}</td>
         <td>${item.explicitEndAt ? escapeHtml(item.explicitEndAt) : '-'}</td>
+        <td>${locationBadge}${item.locationNote ? `<br><span class="info-text">${escapeHtml(item.locationNote)}</span>` : ''}</td>
         <td>${activeBadge}</td>
         <td>
           <button type="button" class="btn btn-secondary" style="padding:8px 12px; font-size:13px;" onclick="selectScheduleForEdit('${encodeURIComponent(item.sessionKey)}')">
@@ -104,6 +110,7 @@ function renderScheduleTable(items) {
           <th>오픈</th>
           <th>마감</th>
           <th>종료 직접입력</th>
+          <th>장소 정책</th>
           <th>상태</th>
           <th>동작</th>
         </tr>
@@ -135,6 +142,17 @@ async function loadScheduleList(options) {
   });
 
   try {
+    if (getActiveTabName() === 'attend' && manualApproveState.seasonAlias !== season) {
+      const prevDefaultComment = manualApproveState.defaultComment || '';
+      const prevForceOverride = !!manualApproveState.forceOverride;
+      manualApproveState = createManualApproveInitialState();
+      manualApproveState.seasonAlias = season;
+      manualApproveState.defaultComment = prevDefaultComment;
+      manualApproveState.forceOverride = prevForceOverride;
+      membersCache = [];
+      renderManualMemberList();
+    }
+
     const cache = getFrontCache();
     const cacheKey = buildFrontCacheKey('schedule:list', season);
     const response = cache
@@ -164,28 +182,27 @@ async function loadScheduleList(options) {
 
     scheduleDefaults = response.defaults || {};
     scheduleItems = response.items || [];
+    scheduleItemsSeasonAlias = season;
     buildScheduleCalendarModel(scheduleItems, response.dateConflicts || []);
     renderScheduleTable(scheduleItems);
     populateManualSessionSelect(scheduleItems);
     renderScheduleCalendar();
-
-    if (getActiveTabName() === 'attend') {
-      try {
-        await refreshManualApproveData({
-          forceMembers: false,
-          forceStatuses: true
+    if (getActiveTabName() === 'attend' && !manualApproveState.dataRequested) {
+      runWhenBrowserIdle(() => {
+        ensureManualApproveDataLoaded().catch(error => {
+          if (handleUnauthorizedError(error)) return;
+          showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 대상 정보 조회 중 오류'))}`, false);
         });
-      } catch (error) {
-        if (handleUnauthorizedError(error)) return;
-        showBoxMessage('manualApproveResult', `❌ ${escapeHtml(getDisplayErrorMessage(error, '수동 승인 대상 정보 조회 중 오류'))}`, false);
-      }
+      }, 250);
     }
+
     endPerfMark(perfToken, {
       status: 'ok',
       scheduleCount: Array.isArray(scheduleItems) ? scheduleItems.length : 0
     });
   } catch (error) {
     if (handleUnauthorizedError(error)) return;
+    scheduleItemsSeasonAlias = '';
     const wrap = document.getElementById('scheduleTableWrap');
     if (wrap) {
       wrap.innerHTML = `<div class="error">${escapeHtml(getDisplayErrorMessage(error, '일정 조회 중 오류'))}</div>`;
@@ -326,7 +343,7 @@ function renderScheduleCalendar() {
       <div class="${dayClass}" onclick="selectCalendarDate('${dateKey}')">
         <div class="schedule-calendar-day-head">
           <span class="schedule-calendar-day-num">${cellDate.getDate()}</span>
-          <button type="button" class="schedule-calendar-plus-btn" onclick="openScheduleCalendarModal('${dateKey}'); event.stopPropagation();">+</button>
+          <button type="button" class="schedule-calendar-plus-btn" data-schedule-date-key="${dateKey}" onclick="openScheduleCalendarModal('${dateKey}'); event.stopPropagation();">+</button>
         </div>
         ${hasSchedule ? `
           <div class="schedule-calendar-item-time">${timeLabel}</div>
@@ -405,6 +422,7 @@ function openScheduleCalendarModalForItem(item, options) {
   saveBtn.innerHTML = `<i class="fas fa-save"></i> <span>${item ? '일정 수정' : '일정 추가'}</span>`;
   deleteBtn.style.display = item ? 'inline-flex' : 'none';
 
+  openScheduleLocationEditor(item || null);
   updateScheduleCalendarModalPreview();
   renderScheduleCalendar();
 
@@ -437,6 +455,7 @@ function closeScheduleCalendarModal() {
   if (modal) {
     modal.style.display = 'none';
   }
+  closeScheduleLocationEditor();
   scheduleCalendarModalState = null;
 }
 
@@ -501,7 +520,7 @@ function updateScheduleCalendarModalPreview() {
   preview.innerHTML = `
     회차 키: <strong>${escapeHtml(sessionKey)}</strong><br>
     출석 오픈: ${escapeHtml(fmt(open))} (${openOffsetMin}분)<br>
-    종료 입력: ${endInput.value ? escapeHtml(endInput.value) : '미입력(기본 마감 규칙 적용)'}
+    종료 입력: ${endInput.value ? escapeHtml(endInput.value) : '미입력(기본 마감 규칙 적용)'}${getScheduleLocationPreviewHtml()}
   `;
 }
 
@@ -511,13 +530,13 @@ async function requestScheduleSave(options) {
     return { success: false, message: '시즌 정보가 없습니다.' };
   }
 
-  return CloudClubApi.call('scheduleSave', {
+  return CloudClubApi.call('scheduleSave', Object.assign({
     season,
     sessionKey: options.sessionKey || '',
     startAt: options.startAt || '',
     endAt: options.endAt || '',
     adminToken
-  });
+  }, options.locationPolicy || {}));
 }
 
 async function submitScheduleCalendarModal() {
@@ -541,6 +560,11 @@ async function submitScheduleCalendarModal() {
     alert('시작 시간을 입력해주세요.');
     return;
   }
+  const locationValidation = validateScheduleLocationForm();
+  if (!locationValidation.valid) {
+    setSchedulePlaceStatus(locationValidation.message, true);
+    return;
+  }
 
   scheduleCalendarModalState.dateKey = dateKey;
   const startAt = `${dateKey}T${startTime}`;
@@ -553,7 +577,8 @@ async function submitScheduleCalendarModal() {
       season,
       sessionKey: scheduleCalendarModalState.sessionKey,
       startAt,
-      endAt
+      endAt,
+      locationPolicy: getScheduleLocationSavePayload()
     });
 
     if (!response.success) {

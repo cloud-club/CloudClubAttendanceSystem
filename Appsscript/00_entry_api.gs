@@ -27,6 +27,39 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+function doPost(e) {
+  try {
+    const postData = e && e.postData ? e.postData : null;
+    const rawBody = postData ? String(postData.contents || '') : '';
+    const contentType = postData ? String(postData.type || '').toLowerCase() : '';
+    if (contentType && contentType.indexOf('text/plain') !== 0) {
+      return createJsonOutput(apiError('POST_CONTENT_TYPE_INVALID', 'POST Content-Type은 text/plain이어야 합니다.'));
+    }
+    if (!rawBody) {
+      return createJsonOutput(apiError('POST_BODY_REQUIRED', '요청 본문이 필요합니다.'));
+    }
+    if (Utilities.newBlob(rawBody).getBytes().length > LOCATION_ATTENDANCE_REQUEST_MAX_BYTES) {
+      return createJsonOutput(apiError('POST_BODY_TOO_LARGE', '요청 본문 크기가 제한을 초과했습니다.'));
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (error) {
+      return createJsonOutput(apiError('POST_JSON_INVALID', '요청 본문이 올바른 JSON이 아닙니다.'));
+    }
+    if (!payload || payload.api !== 'attendanceLocation') {
+      return createJsonOutput(apiError('POST_ACTION_UNSUPPORTED', 'POST는 attendanceLocation 요청만 지원합니다.'));
+    }
+
+    assertRuntimeIntegrity();
+    return createJsonOutput(apiSuccess(processLocationAttendancePost(payload)));
+  } catch (error) {
+    const code = error && error.apiCode ? error.apiCode : 'INTERNAL_ERROR';
+    return createJsonOutput(apiError(code, error && error.message ? error.message : '요청 처리 중 오류가 발생했습니다.'));
+  }
+}
+
 function createMessageOutput(title, message) {
   const html = [
     '<!DOCTYPE html>',
@@ -173,6 +206,13 @@ function handleApiRequest(params) {
         break;
       }
 
+      case 'attendanceLocation':
+        return jsonp(callback, apiError('METHOD_NOT_ALLOWED', '위치 출석은 POST 요청으로만 처리합니다.'));
+
+      case 'locationResult':
+        data = getLocationAttendanceResult(params.requestId || '');
+        break;
+
       case 'status': {
         assertRuntimeIntegrity();
         const phone = (params.phone || '').trim();
@@ -285,6 +325,12 @@ function handleApiRequest(params) {
       case 'members': {
         const seasonAlias = ensureSeasonAlias(params.season || '');
         data = getMembers(seasonAlias);
+        break;
+      }
+
+      case 'manualApproveStatus': {
+        const seasonAlias = ensureSeasonAlias(params.season || '');
+        data = getManualApproveStatus(seasonAlias, params.sessionKey || '');
         break;
       }
 
@@ -420,6 +466,12 @@ function createJavascriptOutput(body) {
     .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
+function createJsonOutput(payload) {
+  return ContentService
+    .createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function apiSuccess(data) {
   return {
     ok: true,
@@ -476,6 +528,11 @@ function getApiInfo() {
     supportedActions: SUPPORTED_API_ACTIONS.slice(),
     accessLevelByAction: accessLevelByAction,
     runtimeChecks: getRuntimeIntegrityChecks(),
+    capabilities: {
+      locationAttendanceV1: true,
+      locationHeaderPolicyV1: true,
+      googlePlacesServerConfigured: isGooglePlacesServerConfigured()
+    },
     scriptTimeZone: Session.getScriptTimeZone(),
     serverTime: formatDateTime(new Date())
   };

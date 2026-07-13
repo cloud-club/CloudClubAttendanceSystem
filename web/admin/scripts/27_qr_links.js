@@ -63,25 +63,20 @@ async function loadAdminQrCode(options) {
 }
 
 async function loadSheetLinkInfo() {
-  const alias = getSelectedSeasonAlias();
-  if (!alias) return;
+  const info = document.getElementById('sheetLinkInfo');
+  if (!info) return;
 
-  try {
-    const response = await fetchSheetLink(alias);
-
-    const info = document.getElementById('sheetLinkInfo');
-    if (!info) return;
-
-    if (!response.success) {
-      info.textContent = response.message || '시트 링크를 불러오지 못했습니다.';
-      return;
-    }
-
-    info.textContent = `현재 시즌: ${response.seasonAlias} (${response.sheetName})`;
-  } catch (error) {
-    if (handleUnauthorizedError(error)) return;
-    console.error('시트 링크 정보 조회 실패:', error);
+  const alias = String(getSelectedSeasonAlias() || '').trim();
+  const sheetName = String(getSelectedSheetName() || '').trim();
+  if (!alias && !sheetName) {
+    info.textContent = '현재 선택된 시즌 탭으로 이동합니다.';
+    return;
   }
+
+  const label = alias || sheetName;
+  info.textContent = sheetName
+    ? `현재 시즌: ${label} (${sheetName})`
+    : `현재 시즌: ${label}`;
 }
 
 async function openCurrentSheet() {

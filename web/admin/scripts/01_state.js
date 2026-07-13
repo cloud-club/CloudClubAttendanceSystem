@@ -14,6 +14,7 @@ let googleClientId = '';
 let adminUsersCache = [];
 let adminUsersEditingEmail = '';
 let scheduleItems = [];
+let scheduleItemsSeasonAlias = '';
 let membersCache = [];
 let variableItems = [];
 let variableConfig = {};

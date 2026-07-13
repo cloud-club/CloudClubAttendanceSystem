@@ -1400,6 +1400,103 @@
       min-height: 40px;
     }
 
+    .schedule-location-panel {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid rgba(96, 165, 250, 0.3);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.45);
+    }
+
+    .schedule-location-toggle {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+
+    .schedule-location-toggle input {
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      accent-color: #60a5fa;
+    }
+
+    .schedule-location-fields {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .schedule-place-host gmp-place-autocomplete {
+      width: 100%;
+      color-scheme: light;
+    }
+
+    .schedule-place-summary,
+    .schedule-place-status {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .schedule-place-summary {
+      display: grid;
+      gap: 6px;
+    }
+
+    .google-maps-attribution-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: normal;
+      color: #fff;
+    }
+
+    .google-maps-attribution {
+      white-space: nowrap;
+      color: #fff;
+      font: 400 12px/1.4 Arial, sans-serif;
+      letter-spacing: normal;
+    }
+
+    .google-maps-provider-link {
+      color: #fff;
+      text-decoration: underline;
+    }
+
+    .schedule-place-status:empty {
+      display: none;
+    }
+
+    .schedule-location-note {
+      min-height: 84px;
+      resize: vertical;
+      text-align: left;
+      letter-spacing: 0;
+      line-height: 1.5;
+    }
+
+    .status-chip.neutral {
+      color: #e2e8f0;
+      background: rgba(148, 163, 184, 0.22);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+    }
+
+    .schedule-calendar-location-modal {
+      max-width: 640px;
+      max-height: calc(100dvh - 32px);
+      overflow-y: auto;
+    }
+
     .table-wrap {
       width: 100%;
       overflow-x: auto;
@@ -2093,6 +2190,20 @@
       color: #fff;
       padding: 10px;
       font-size: 14px;
+    }
+
+    .modal-panel.schedule-calendar-location-modal {
+      max-width: 640px;
+      max-height: calc(100dvh - 32px);
+      overflow-y: auto;
+    }
+
+    .modal-panel.schedule-calendar-location-modal .schedule-location-toggle input {
+      flex: 0 0 auto;
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      padding: 0;
     }
 
     .modal-actions {
@@ -4418,6 +4529,8 @@
             <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer">Instagram</a>
             <a href="https://www.linkedin.com/company/cloudclub-kr" target="_blank" rel="noopener noreferrer">LinkedIn</a>
             <a href="https://www.youtube.com/@cloudclub-kr" target="_blank" rel="noopener noreferrer">YouTube</a>
+            <a href="../privacy.html">개인정보 처리 안내</a>
+            <a href="../terms.html">이용약관</a>
           </div>
         </div>
         <div>
@@ -4458,8 +4571,8 @@
     </div>
   </div>
 
-  <div id="scheduleCalendarModal" class="modal-backdrop">
-    <div class="modal-panel">
+  <div id="scheduleCalendarModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="scheduleCalendarModalTitle" aria-describedby="scheduleCalendarModalSessionInfo">
+    <div class="modal-panel schedule-calendar-location-modal">
       <h3 id="scheduleCalendarModalTitle">새 회차 추가</h3>
       <p id="scheduleCalendarModalTargetDate">-</p>
       <p id="scheduleCalendarModalSessionInfo">해당 날짜에 등록된 회차가 없습니다.</p>
@@ -4483,6 +4596,34 @@
           <label class="form-label" for="scheduleCalendarModalEndInput">종료 시간 (선택)</label>
           <input id="scheduleCalendarModalEndInput" type="time" class="form-input" oninput="onScheduleCalendarEndInputChanged()">
         </div>
+      </div>
+      <div class="schedule-location-panel">
+        <label class="schedule-location-toggle" for="scheduleLocationRequiredInput">
+          <input id="scheduleLocationRequiredInput" type="checkbox" onchange="onScheduleLocationRequiredChanged()">
+          <span><strong>장소 기반 출석 확인 필수</strong><br>선택하면 참가자는 지정 장소 반경 500m 이내에서만 출석할 수 있습니다.</span>
+        </label>
+        <div id="scheduleLocationFields" class="schedule-location-fields" hidden>
+          <div>
+            <span class="form-label">Google 장소 선택</span>
+            <div id="schedulePlaceAutocompleteHost" class="schedule-place-host"></div>
+          </div>
+          <div id="schedulePlaceSelectionSummary" class="schedule-place-summary">
+            <span id="schedulePlaceSelectionText">선택된 장소가 없습니다.</span>
+            <span id="schedulePlaceAttribution" class="google-maps-attribution-row">
+              <span class="google-maps-attribution" translate="no">Google Maps</span>
+            </span>
+          </div>
+          <button id="schedulePlaceClearBtn" type="button" class="btn btn-secondary" onclick="clearSchedulePlaceSelection()">선택한 장소 지우기</button>
+          <div>
+            <label class="form-label" for="scheduleLocationRadiusInput">허용 반경</label>
+            <input id="scheduleLocationRadiusInput" type="text" class="form-input" value="500m" readonly>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <label class="form-label" for="scheduleLocationNoteInput">학생에게 표시할 장소 안내/회차 메모 (선택)</label>
+          <textarea id="scheduleLocationNoteInput" class="form-input schedule-location-note" maxlength="500" placeholder="예: 강남역 3번 출구 앞, 2층 세미나실"></textarea>
+        </div>
+        <div id="schedulePlaceStatus" class="schedule-place-status" role="status" aria-live="polite"></div>
       </div>
       <div id="scheduleCalendarModalPreview" class="schedule-preview">회차 키/오픈 시각 미리보기가 여기에 표시됩니다.</div>
       <div class="modal-actions">
@@ -4532,6 +4673,7 @@
   <script src="./scripts/10_auth.js"></script>
   <script src="./scripts/20_attendance.js"></script>
   <script src="./scripts/21_dashboard.js"></script>
+  <script src="./scripts/22_location.js"></script>
   <script src="./scripts/22_schedule.js"></script>
   <script src="./scripts/23_import.js"></script>
   <script src="./scripts/24_variables.js"></script>

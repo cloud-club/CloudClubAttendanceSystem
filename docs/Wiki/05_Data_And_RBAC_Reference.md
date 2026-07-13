@@ -35,7 +35,7 @@ flowchart LR
   `Name`, `Season`, `Phone`, `Email`, `Github ID`, `Github Email`, `Notion Email`, `Discord ID`, `Slack Email`, `회비 체크`, `수료 여부`, `운영진 여부`
 - 런타임 해석 방식:
   - 회원 프로필 필드는 헤더명 기반으로 매핑합니다.
-  - 출석 세션은 열 위치 고정보다 헤더 패턴(`YYYY-MM-DD-HH:MM` 또는 `YYYY-MM-DD-HH:MM~HH:MM`)으로 탐지합니다.
+  - 출석 세션은 열 위치 고정보다 헤더의 날짜·시간 prefix(`YYYY-MM-DD-HH:MM` 또는 `YYYY-MM-DD-HH:MM~HH:MM`)로 탐지합니다. 뒤에는 선택적으로 `|v=1|gps=...` 장소 정책이 붙습니다.
   - 필수 헤더(`Name`, `Season`, `Phone`, `Email`) 중 하나라도 누락되면 시즌 update는 차단되는 것이 정상 동작입니다.
   - 운영 중 커스텀 프로필 칼럼 삽입/순서 변경이 있어도, 필수 헤더(Name/Season/Phone/Email)와 세션 헤더 패턴이 유지되면 핵심 동작은 유지됩니다.
 - 슈퍼키: `Phone` only
@@ -45,6 +45,7 @@ flowchart LR
 
 - `_admins`: 관리자 계정/역할/활성 상태
 - `_session_meta`: 세션 임계값/마감 등 판정 보조 메타
+- 회차 헤더 셀: 장소 제한 여부, Google Place ID, 500m 반경. 같은 셀 Note는 학생용 장소 안내/회차 메모
 - `_import_meta`: 시즌 업로드 세션 상태 및 단계 관리
 - `/_fortune_versions`: 운세 버전 메타(current, 생성자, row 수)
 - `/_fortune_entries`: 버전별 운세 본문(row_no, fortune_text)
@@ -60,7 +61,7 @@ flowchart LR
 ## 액션 레벨 기준 (정본: ACTION_ACCESS_LEVELS)
 문서에 있는 권한 그룹은 설명용 요약이고, 최종 판정 기준은 항상 `Appsscript/01_constants_access.gs`의 `ACTION_ACCESS_LEVELS`입니다. 권한 이슈가 발생하면 문서보다 코드 상수를 우선 확인합니다.
 
-- Public: `session`, `attendance`, `status`, `ranking`, `latestSeason`, `authGoogleConfig`, `authGoogleLogin`
+- Public: `session`, `attendance`, `attendanceLocation`(POST), `locationResult`, `status`, `ranking`, `latestSeason`, `authGoogleConfig`, `authGoogleLogin`
 - Admin: `attendanceDashboardSummary`, `schedule*`, `manualApprove*`, `excusedSet`, `graduationReport`, `sheetSchemaAudit`, `fortuneVersionList`, `fortuneVersionGet`, `fortuneUploadBegin`, `fortuneUploadChunk`, `fortuneUploadFinalize`, `fortuneUploadAbort`
 - Super: `adminUsers*`, `variables*`, `seasonImport*`, `setActiveSheet`
 

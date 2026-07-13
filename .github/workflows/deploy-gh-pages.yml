@@ -25,9 +25,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate APPS_SCRIPT_WEB_APP_URL secret
+      - name: Validate deployment secrets
         env:
           APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+          GOOGLE_MAPS_BROWSER_API_KEY: ${{ secrets.GOOGLE_MAPS_BROWSER_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${APPS_SCRIPT_WEB_APP_URL:-}" ]; then
@@ -44,15 +45,24 @@ jobs:
               ;;
           esac
 
+          if [ -z "${GOOGLE_MAPS_BROWSER_API_KEY:-}" ]; then
+            echo "::error::GOOGLE_MAPS_BROWSER_API_KEY secret is empty. GCP에서 웹사이트 제한 키를 만든 뒤 Secret을 추가하세요."
+            exit 1
+          fi
+
       - name: Inject API URL from secret
         env:
           APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL }}
+          GOOGLE_MAPS_BROWSER_API_KEY: ${{ secrets.GOOGLE_MAPS_BROWSER_API_KEY }}
         run: |
           set -euo pipefail
           grep -q "__API_BASE_URL__" web/shared/env.js || { echo "::error::env.js placeholder(__API_BASE_URL__)를 찾지 못했습니다."; exit 1; }
           sed -i "0,/__API_BASE_URL__/s|__API_BASE_URL__|$APPS_SCRIPT_WEB_APP_URL|" web/shared/env.js
           grep -q "__API_BASE_URL__" web/shared/env.js && { echo "::error::env.js placeholder가 남아있습니다."; exit 1; }
           grep -F "$APPS_SCRIPT_WEB_APP_URL" web/shared/env.js >/dev/null || { echo "::error::env.js에 API URL이 주입되지 않았습니다."; exit 1; }
+          grep -q "__GOOGLE_MAPS_BROWSER_API_KEY__" web/shared/env.js || { echo "::error::env.js placeholder(__GOOGLE_MAPS_BROWSER_API_KEY__)를 찾지 못했습니다."; exit 1; }
+          sed -i "0,/__GOOGLE_MAPS_BROWSER_API_KEY__/s|__GOOGLE_MAPS_BROWSER_API_KEY__|$GOOGLE_MAPS_BROWSER_API_KEY|" web/shared/env.js
+          grep -q "__GOOGLE_MAPS_BROWSER_API_KEY__" web/shared/env.js && { echo "::error::env.js Maps 키 placeholder가 남아있습니다."; exit 1; }
 
       - name: Health check Apps Script apiInfo
         env:
@@ -68,6 +78,16 @@ jobs:
 
           echo "$body" | grep -q '"apiVersion"' || { echo "::error::apiInfo 응답에 apiVersion이 없습니다."; exit 1; }
           echo "$body" | grep -q '"variablesResetTemplate"' || { echo "::error::apiInfo 응답에 variablesResetTemplate 지원 정보가 없습니다."; exit 1; }
+          echo "$body" | grep -q '"locationAttendanceV1":true' || { echo "::error::Apps Script가 locationAttendanceV1 capability를 지원하지 않습니다. 백엔드를 먼저 재배포하세요."; exit 1; }
+
+      - name: Validate Maps policy surfaces
+        run: |
+          set -euo pipefail
+          test -s web/privacy.html || { echo "::error::web/privacy.html이 없습니다."; exit 1; }
+          test -s web/terms.html || { echo "::error::web/terms.html이 없습니다."; exit 1; }
+          grep -q 'privacy.html' web/admin/index.html || { echo "::error::관리자 페이지 개인정보 처리 안내 링크가 없습니다."; exit 1; }
+          grep -q 'privacy.html' web/student/latest/index.html || { echo "::error::학생 페이지 개인정보 처리 안내 링크가 없습니다."; exit 1; }
+          grep -q 'google-maps-attribution' web/admin/index.html || { echo "::error::관리자 장소 UI의 Google Maps attribution 표면이 없습니다."; exit 1; }
 
       - name: Auth scope canary (authGoogleLogin dummy)
         env:

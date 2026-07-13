@@ -83,6 +83,10 @@ function getAttendanceSessionFromSheet(sheet, seasonAlias) {
       lateDeadline: activeSession.lateDeadline.getTime(),
       endTime: activeSession.lateDeadline.getTime(),
       sessionKey: activeSession.sessionKey,
+      locationRequired: activeSession.locationRequired,
+      locationPolicyValid: activeSession.locationPolicyValid,
+      radiusM: activeSession.radiusM,
+      locationNote: activeSession.locationNote || '',
       currentSheet: sheet.getName(),
       seasonAlias: seasonAlias || toSeasonAlias(sheet.getName())
     };
@@ -96,6 +100,8 @@ function getAttendanceSessionFromSheet(sheet, seasonAlias) {
       nextOpenTime: nextSession.openTime.getTime(),
       nextStartTime: nextSession.startTime.getTime(),
       nextSessionKey: nextSession.sessionKey,
+      nextLocationRequired: nextSession.locationRequired,
+      nextRadiusM: nextSession.radiusM,
       currentSheet: sheet.getName(),
       seasonAlias: seasonAlias || toSeasonAlias(sheet.getName())
     };
@@ -434,7 +440,7 @@ function buildPhoneSuperkeyDuplicateResult(rowIndexes) {
 /**
  * 특정 시트에서 출석을 처리합니다.
  */
-function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
+function markAttendanceInSheet(phoneNumber, sheet, seasonAlias, options) {
   const cleanedInputPhone = normalizePhone(phoneNumber);
   if (!isValidPhoneNumber(cleanedInputPhone)) {
     return { success: false, message: '올바른 전화번호 형식이 아닙니다. (예: 01012345678)' };
@@ -461,6 +467,52 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
         };
       }
       return { success: false, message: '출석 가능한 시간이 종료되었습니다.' };
+    }
+
+    if (!activeSession.locationPolicyValid) {
+      return {
+        success: false,
+        errorCode: activeSession.locationPolicyErrorCode || 'LOCATION_POLICY_INVALID',
+        message: '현재 회차의 장소 정책이 올바르지 않습니다. 운영진에게 문의해 주세요.'
+      };
+    }
+
+    const locationOptions = options || {};
+    let locationVerified = false;
+    if (activeSession.locationRequired) {
+      if (!locationOptions.locationCheck) {
+        return {
+          success: false,
+          errorCode: 'LOCATION_REQUIRED',
+          message: '이 회차는 현재 위치 확인 후에만 출석할 수 있습니다.'
+        };
+      }
+      if (locationOptions.expectedLocationPolicyFingerprint !== getLocationPolicyFingerprint(activeSession)) {
+        return {
+          success: false,
+          errorCode: 'LOCATION_POLICY_CHANGED_RETRY',
+          message: '위치 확인 중 회차 정보가 변경되었습니다. 다시 시도해 주세요.'
+        };
+      }
+
+      const attendeeLocation = normalizeAttendanceLocation(locationOptions.attendeeLocation);
+      const targetLocation = normalizeAttendanceLocation(Object.assign({}, locationOptions.targetLocation || {}, { accuracy: 0 }));
+      if (!attendeeLocation.valid) {
+        return attendeeLocation;
+      }
+      if (!targetLocation.valid) {
+        return { success: false, errorCode: 'LOCATION_TARGET_INVALID', message: '등록된 장소 좌표를 확인할 수 없습니다. 운영진에게 문의해 주세요.' };
+      }
+
+      const distanceM = calculateDistanceMeters(attendeeLocation, targetLocation);
+      if (!isWithinAttendanceRadius(distanceM, activeSession.radiusM)) {
+        return {
+          success: false,
+          errorCode: 'LOCATION_OUT_OF_RANGE',
+          message: `지정된 장소의 ${activeSession.radiusM}m 이내에서만 출석할 수 있습니다.`
+        };
+      }
+      locationVerified = true;
     }
 
     const lookup = findMemberRowIndexByPhone(values, memberSchema, cleanedInputPhone);
@@ -543,6 +595,7 @@ function markAttendanceInSheet(phoneNumber, sheet, seasonAlias) {
       attendanceType: attendanceType,
       sessionKey: activeSession.sessionKey,
       seasonAlias: seasonAlias || toSeasonAlias(sheet.getName()),
+      locationVerified: locationVerified,
       attendanceInfo: {
         attended: attendedCount,
         total: sessions.length,

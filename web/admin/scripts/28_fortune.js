@@ -235,6 +235,11 @@ function hasRequiredFortuneActions(supportedActions) {
 }
 
 async function ensureFortuneApiCompatibility() {
+  if (fortuneApiInfo && hasRequiredFortuneActions(fortuneApiInfo.supportedActions || [])) {
+    setFortuneTabBlocked(false, '', fortuneApiInfo || {});
+    return true;
+  }
+
   try {
     const info = await CloudClubApi.call('apiInfo', {
       adminToken: adminToken

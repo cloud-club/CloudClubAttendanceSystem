@@ -21,6 +21,19 @@
 - `FRONTEND_ADMIN_BASE_URL`
 - `FRONTEND_STUDENT_BASE_URL`
 - `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_MAPS_SERVER_API_KEY` (GPS Place ID 서버 검증 사용 시)
+
+## GPS Place ID 기능 반영
+1. `Appsscript/22_location_attendance.gs`를 포함해 변경 파일을 실제 프로젝트에 동기화
+2. Script Property `GOOGLE_MAPS_SERVER_API_KEY` 저장
+3. `__authorizeExternalRequest()` 실행 후 UrlFetch 권한 승인
+4. 같은 deployment를 `Edit > Deploy`로 재배포
+5. `apiInfo.capabilities.locationAttendanceV1`와 `googlePlacesServerConfigured`가 모두 `true`인지 확인
+6. capability 확인 후 Pages 배포
+7. 배포 직후 테스트 시즌에서 실제 Google 장소를 저장·재열기·삭제
+8. canary가 실패하면 운영 GPS 회차를 만들지 않고 Pages를 직전 artifact/commit으로 즉시 롤백
+
+6시간 CacheService TTL은 일정 유효기간이 아니라 Place ID 좌표 조회 결과의 최대 임시 보관 시간이다. 행사 일정은 헤더의 Place ID로 계속 유지되며 캐시가 없어도 다시 조회한다.
 
 ## `AUTH_SERVER_SCOPE_MISSING` 복구 흐름
 1. Apps Script Editor에서 운영 deployment가 맞는지 확인

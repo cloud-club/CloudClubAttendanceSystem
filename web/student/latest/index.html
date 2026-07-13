@@ -214,6 +214,13 @@
       text-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
       margin-top: 16px;
     }
+
+    #countdown.message-state {
+      font-size: clamp(1.2rem, 5vw, 1.65rem);
+      line-height: 1.5;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
     
     .form-group {
       margin: 32px auto;
@@ -307,8 +314,83 @@
       font-size: 13px;
       line-height: 1.45;
     }
+
+    .attendance-location-summary,
+    .attendance-location-status {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(96, 165, 250, 0.1);
+      border: 1px solid rgba(96, 165, 250, 0.25);
+      color: #bfdbfe;
+      font-size: 14px;
+      line-height: 1.55;
+      text-align: left;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    .attendance-location-summary:empty {
+      display: none;
+    }
+
+    .attendance-location-status:empty {
+      min-height: 1px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .attendance-location-status.is-error {
+      color: #fecaca;
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+
+    .attendance-location-summary.is-error {
+      color: #fecaca;
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+
+    .attendance-location-status.is-success {
+      color: #bbf7d0;
+      background: rgba(34, 197, 94, 0.14);
+      border-color: rgba(34, 197, 94, 0.35);
+    }
+
+    .legal-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin: 28px auto 8px;
+      padding: 0 20px;
+      font-size: 13px;
+    }
+
+    .legal-links a {
+      color: #bfdbfe;
+    }
     
-    #result, #statusResult {
+    #result {
+      min-height: 1px;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 0;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    #result:not(:empty) {
+      margin: 24px auto;
+      padding: 16px 24px;
+      border-radius: 16px;
+      animation: slideDown 0.3s ease-out;
+    }
+
+    #statusResult {
       margin: 24px auto;
       padding: 16px 24px;
       border-radius: 16px;
@@ -733,6 +815,7 @@
       <div class="countdown-card">
         <h2 id="countdown-title" class="card-title">출석 가능 시간 확인 중...</h2>
         <div id="countdown"><span class="loader"></span></div>
+        <div id="sessionVenueSummary" class="attendance-location-summary"></div>
       </div>
       
       <div class="card">
@@ -749,15 +832,16 @@
                    required>
             <p class="info-text">하이픈(-) 없이 숫자만 입력해주세요</p>
           </div>
-          <button type="submit" id="attendBtn" class="btn" disabled>
+          <button type="submit" id="attendBtn" class="btn" aria-describedby="sessionVenueSummary attendanceLocationStatus" disabled>
             <i class="fas fa-hand-point-up"></i>
             <span>지금 출석하기</span>
           </button>
           <p id="attendancePhaseNotice" class="attendance-phase-notice" style="display: none;"></p>
+          <div id="attendanceLocationStatus" class="attendance-location-status" role="status" aria-live="polite" aria-atomic="true"></div>
         </form>
       </div>
       
-      <div id="result"></div>
+      <div id="result" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
     
     <!-- 출석현황 탭 -->
@@ -801,6 +885,11 @@
       </div>
     </div>
   </div>
+
+  <footer class="legal-links" aria-label="서비스 정책">
+    <a href="../../privacy.html">개인정보 처리 안내</a>
+    <a href="../../terms.html">이용약관</a>
+  </footer>
 
   <script src="../../shared/env.js"></script>
   <script src="../../shared/config.js"></script>

@@ -48,6 +48,17 @@ flowchart LR
 3. 기존 탭 회귀 스모크
 - 출석하기/출석현황/일정 관리/유고 처리/수료 판정 기본 동선이 기존과 동일한지 확인
 
+## 관리자 속도 이슈 진단 경로
+관리자 페이지가 느리다고 느껴질 때는 브라우저 렌더와 Apps Script 지연을 분리해 봐야 합니다. 현재 운영 기준에서 정적 리소스보다 관리자 API 체인이 병목일 가능성이 높으므로, 아래 순서를 따릅니다.
+
+1. HAR 또는 Network 로그에서 `DOMContentLoaded`와 `onLoad`를 분리 확인
+2. `script.google.com/macros/.../exec` 요청의 `wait` 시간이 긴지 확인
+3. 초기 진입 시 보이지 않는 탭의 API까지 함께 호출되는지 확인
+4. `status` 탭에서 `attendanceDashboardSummary`가 과도하게 반복 호출되는지 확인
+5. `attend` 탭에서 `graduationReport`가 자동 호출되는지 확인
+
+세부 기준은 [07_Admin_Performance_Optimization_Guide.md](./07_Admin_Performance_Optimization_Guide.md)와 [docs/History/031_관리자_응답속도_최적화_및_기능동일성_재검증_운영기록_2026-04-05.md](../History/031_%EA%B4%80%EB%A6%AC%EC%9E%90_%EC%9D%91%EB%8B%B5%EC%86%8D%EB%8F%84_%EC%B5%9C%EC%A0%81%ED%99%94_%EB%B0%8F_%EA%B8%B0%EB%8A%A5%EB%8F%99%EC%9D%BC%EC%84%B1_%EC%9E%AC%EA%B2%80%EC%A6%9D_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-04-05.md)에서 함께 확인합니다.
+
 ## 장애 유형별 분기
 장애는 관측 코드/메시지 기준으로 분기해야 합니다. 콘솔 경고만 보고 대응하지 말고, API 에러 코드를 기준으로 우선순위를 정합니다.
 
@@ -95,6 +106,18 @@ flowchart LR
 
 - 같은 deployment 재배포(Edit): `APPS_SCRIPT_WEB_APP_URL` Secret 변경 불필요
 - 새 deployment 생성(New deployment)으로 URL 변경: Secret 갱신 + Pages 재배포 필수
+
+## GPS·Google Places 배포 분기
+
+GPS 기능은 [08_GPS_Place_ID_Attendance_Guide.md](./08_GPS_Place_ID_Attendance_Guide.md)를 정본으로 사용합니다.
+
+1. GCP Billing + Maps JavaScript API + Places API (New) 확인
+2. Apps Script `GOOGLE_MAPS_SERVER_API_KEY` Script Property 반영
+3. Apps Script 동일 deployment 재배포 및 `locationAttendanceV1` 확인
+4. GitHub `GOOGLE_MAPS_BROWSER_API_KEY` Secret 반영
+5. Pages 배포 후 운영 origin에서 장소 검색과 모바일 위치 출석 확인
+
+`RefererNotAllowedMapError`는 브라우저 키 referrer 제한, `GOOGLE_PLACES_FORBIDDEN`은 서버 키/API/Billing, `GOOGLE_PLACE_NOT_FOUND`는 회차 장소 재선택을 우선 확인합니다. 6시간 캐시는 일정 제한이 아니며 Place ID 좌표 조회 결과만 임시 보관합니다.
 
 ## 운영 점검 우선순위
 모든 이슈를 같은 레벨로 처리하면 운영 리소스가 분산됩니다. 아래 우선순위로 대응하면 실제 영향도를 기준으로 의사결정할 수 있습니다.

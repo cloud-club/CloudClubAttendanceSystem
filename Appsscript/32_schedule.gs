@@ -1,3 +1,20 @@
+function resolveScheduleLocationNoteUnderLock(locationPolicyProvided, requestedNote, initialTarget, lockedTarget) {
+  const latestNote = String(lockedTarget && lockedTarget.locationNote || '').trim();
+  if (!locationPolicyProvided) {
+    return { valid: true, note: latestNote };
+  }
+
+  const initialNote = String(initialTarget && initialTarget.locationNote || '').trim();
+  if (initialTarget && latestNote !== initialNote) {
+    return {
+      valid: false,
+      errorCode: 'SCHEDULE_CHANGED_RETRY',
+      message: '회차 메모가 다른 요청에서 변경되었습니다. 새로고침 후 다시 시도해 주세요.'
+    };
+  }
+  return { valid: true, note: String(requestedNote || '').trim() };
+}
+
 function getSheetLink(seasonName) {
   try {
     const info = getRequestedSeasonSheetInfo(seasonName);
@@ -136,7 +153,14 @@ function getScheduleList(seasonName) {
         dateKey: dateKey,
         startHhmm: formatTimeHhmm(session.startTime),
         isPast: now > session.lateDeadline,
-        isActive: now >= session.openTime && now <= session.lateDeadline
+        isActive: now >= session.openTime && now <= session.lateDeadline,
+        locationPolicyPresent: session.locationPolicyPresent,
+        locationRequired: session.locationRequired,
+        locationPolicyValid: session.locationPolicyValid,
+        locationPolicyErrorCode: session.locationPolicyErrorCode,
+        googlePlaceId: session.googlePlaceId,
+        radiusM: session.radiusM,
+        locationNote: session.locationNote
       };
     });
 
@@ -174,6 +198,7 @@ function saveSchedule(params) {
     const sessionKey = String(params.sessionKey || '').trim();
     const startAt = String(params.startAt || '').trim();
     const endAt = String(params.endAt || '').trim();
+    const locationPolicyProvided = parseBooleanParam(params.locationPolicyPresent);
 
     if (!startAt) {
       return { success: false, message: 'startAt 파라미터가 필요합니다.' };
@@ -190,67 +215,141 @@ function saveSchedule(params) {
 
     const sheet = info.sheet;
     const variableConfig = getVariableConfig();
-    const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: true });
+    const initialSessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: false });
+    const initialTarget = sessionKey ? initialSessions.find(s => s.sessionKey === sessionKey) : null;
+    if (sessionKey && !initialTarget) {
+      return { success: false, message: '수정 대상 회차를 찾을 수 없습니다.' };
+    }
+
+    let locationPolicy = null;
+    let locationNote = '';
+    if (locationPolicyProvided) {
+      const locationRequired = parseBooleanParam(params.locationRequired);
+      const googlePlaceId = String(params.googlePlaceId || params.placeId || '').trim();
+      locationNote = String(params.locationNote || '').trim();
+      if (locationNote.length > 500) {
+        return { success: false, message: '장소 메모는 500자 이내로 입력해 주세요.' };
+      }
+
+      locationPolicy = {
+        locationRequired: locationRequired,
+        googlePlaceId: googlePlaceId,
+        radiusM: ATTENDANCE_LOCATION_RADIUS_M
+      };
+      if (locationRequired) {
+        if (!googlePlaceId) {
+          return { success: false, errorCode: 'GOOGLE_PLACE_ID_MISSING', message: 'Google 장소를 검색해 하나 선택해 주세요.' };
+        }
+        if (googlePlaceId.length > 4096) {
+          return { success: false, errorCode: 'GOOGLE_PLACE_ID_INVALID', message: 'Google Place ID가 너무 깁니다. 장소를 다시 선택해 주세요.' };
+        }
+        resolveGooglePlaceTarget(googlePlaceId);
+      }
+    } else if (initialTarget) {
+      if (initialTarget.locationPolicyPresent && !initialTarget.locationPolicyValid) {
+        return {
+          success: false,
+          errorCode: initialTarget.locationPolicyErrorCode || 'LOCATION_POLICY_INVALID',
+          message: '현재 회차의 장소 정책 문자열이 올바르지 않습니다. 새 관리자 화면에서 장소 정책을 다시 저장해 주세요.'
+        };
+      }
+      locationPolicy = initialTarget.locationPolicyPresent
+        ? {
+          locationRequired: initialTarget.locationRequired,
+          googlePlaceId: initialTarget.googlePlaceId,
+          radiusM: initialTarget.radiusM
+        }
+        : null;
+      locationNote = initialTarget.locationNote || '';
+    }
 
     const newSessionKey = formatSessionKey(startTime);
     const targetDateKey = formatDateKey(startTime);
-    const duplicate = sessions.find(s => s.sessionKey === newSessionKey && s.sessionKey !== sessionKey);
-    if (duplicate) {
-      return { success: false, message: `동일한 시작시각의 회차가 이미 존재합니다. (${newSessionKey})` };
-    }
+    const headerValue = buildSessionHeader(startTime, endAt, locationPolicy);
+    const lock = LockService.getDocumentLock();
+    lock.waitLock(5000);
 
-    const duplicateDate = sessions.find(s => formatDateKey(s.startTime) === targetDateKey && s.sessionKey !== sessionKey);
-    if (duplicateDate) {
-      return {
-        success: false,
-        errorCode: 'SCHEDULE_DATE_DUPLICATE',
-        message: `같은 날짜(${targetDateKey})에는 회차를 1개만 등록할 수 있습니다. 기존 회차(${duplicateDate.sessionKey})를 먼저 수정/삭제하세요.`,
-        conflictSessionKey: duplicateDate.sessionKey,
-        conflictDateKey: targetDateKey
-      };
-    }
-
-    const headerValue = buildSessionHeader(startTime, endAt);
-
-    if (sessionKey) {
-      const target = sessions.find(s => s.sessionKey === sessionKey);
-      if (!target) {
-        return { success: false, message: '수정 대상 회차를 찾을 수 없습니다.' };
+    try {
+      const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: true });
+      const duplicate = sessions.find(s => s.sessionKey === newSessionKey && s.sessionKey !== sessionKey);
+      if (duplicate) {
+        return { success: false, message: `동일한 시작시각의 회차가 이미 존재합니다. (${newSessionKey})` };
       }
 
-      sheet.getRange(1, target.colIndex + 1).setValue(headerValue);
-
-      if (sessionKey !== newSessionKey) {
-        removeSessionMetaRow(sheet.getName(), sessionKey);
+      const duplicateDate = sessions.find(s => formatDateKey(s.startTime) === targetDateKey && s.sessionKey !== sessionKey);
+      if (duplicateDate) {
+        return {
+          success: false,
+          errorCode: 'SCHEDULE_DATE_DUPLICATE',
+          message: `같은 날짜(${targetDateKey})에는 회차를 1개만 등록할 수 있습니다. 기존 회차(${duplicateDate.sessionKey})를 먼저 수정/삭제하세요.`,
+          conflictSessionKey: duplicateDate.sessionKey,
+          conflictDateKey: targetDateKey
+        };
       }
 
-      upsertSessionMetaRow(sheet.getName(), newSessionKey, {
-        openOffsetMin: variableConfig.attendance_open_offset_min,
-        lateThresholdMin: variableConfig.late_threshold_min,
-        absenceThresholdMin: variableConfig.absence_threshold_min,
-        explicitEndAt: endAt
-      });
-    } else {
-      const insertCol = sheet.getLastColumn() + 1;
-      sheet.getRange(1, insertCol).setValue(headerValue);
+      if (sessionKey) {
+        const target = sessions.find(s => s.sessionKey === sessionKey);
+        if (!target) {
+          return { success: false, message: '수정 대상 회차를 찾을 수 없습니다.' };
+        }
+        if (initialTarget && target.header !== initialTarget.header) {
+          return { success: false, errorCode: 'SCHEDULE_CHANGED_RETRY', message: '회차가 다른 요청에서 변경되었습니다. 새로고침 후 다시 시도해 주세요.' };
+        }
 
-      upsertSessionMetaRow(sheet.getName(), newSessionKey, {
-        openOffsetMin: variableConfig.attendance_open_offset_min,
-        lateThresholdMin: variableConfig.late_threshold_min,
-        absenceThresholdMin: variableConfig.absence_threshold_min,
-        explicitEndAt: endAt
-      });
+        const locationNoteResolution = resolveScheduleLocationNoteUnderLock(
+          locationPolicyProvided,
+          locationNote,
+          initialTarget,
+          target
+        );
+        if (!locationNoteResolution.valid) {
+          return {
+            success: false,
+            errorCode: locationNoteResolution.errorCode,
+            message: locationNoteResolution.message
+          };
+        }
+        locationNote = locationNoteResolution.note;
+
+        sheet.getRange(1, target.colIndex + 1).setValue(headerValue).setNote(locationNote);
+
+        if (sessionKey !== newSessionKey) {
+          removeSessionMetaRow(sheet.getName(), sessionKey);
+        }
+
+        upsertSessionMetaRow(sheet.getName(), newSessionKey, {
+          openOffsetMin: variableConfig.attendance_open_offset_min,
+          lateThresholdMin: variableConfig.late_threshold_min,
+          absenceThresholdMin: variableConfig.absence_threshold_min,
+          explicitEndAt: endAt
+        });
+      } else {
+        const insertCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, insertCol).setValue(headerValue).setNote(locationNote);
+
+        upsertSessionMetaRow(sheet.getName(), newSessionKey, {
+          openOffsetMin: variableConfig.attendance_open_offset_min,
+          lateThresholdMin: variableConfig.late_threshold_min,
+          absenceThresholdMin: variableConfig.absence_threshold_min,
+          explicitEndAt: endAt
+        });
+      }
+    } finally {
+      lock.releaseLock();
     }
 
     return {
       success: true,
       message: sessionKey ? '일정이 수정되었습니다.' : '일정이 추가되었습니다.',
       seasonAlias: info.seasonAlias,
-      sessionKey: newSessionKey
+      sessionKey: newSessionKey,
+      locationRequired: !!(locationPolicy && locationPolicy.locationRequired),
+      radiusM: ATTENDANCE_LOCATION_RADIUS_M
     };
   } catch (error) {
     return {
       success: false,
+      errorCode: error && error.apiCode ? error.apiCode : 'SCHEDULE_SAVE_ERROR',
       message: error.message || '일정 저장 중 오류가 발생했습니다.'
     };
   }
@@ -267,43 +366,50 @@ function deleteSchedule(params) {
     }
 
     const sheet = info.sheet;
-    const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
-    const target = sessions.find(s => s.sessionKey === sessionKey);
+    const lock = LockService.getDocumentLock();
+    lock.waitLock(5000);
 
-    if (!target) {
-      return { success: false, message: '삭제 대상 회차를 찾을 수 없습니다.' };
-    }
+    try {
+      const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: true });
+      const target = sessions.find(s => s.sessionKey === sessionKey);
 
-    const attendanceRecordCount = countAttendanceRecordsInSession(sheet, target.colIndex);
-    if (attendanceRecordCount > 0 && !forceDelete) {
+      if (!target) {
+        return { success: false, message: '삭제 대상 회차를 찾을 수 없습니다.' };
+      }
+
+      const attendanceRecordCount = countAttendanceRecordsInSession(sheet, target.colIndex);
+      if (attendanceRecordCount > 0 && !forceDelete) {
+        return {
+          success: false,
+          errorCode: 'SCHEDULE_DELETE_HAS_ATTENDANCE',
+          message: `이미 ${attendanceRecordCount}건의 출석 기록이 있어 삭제하려면 강제 삭제 확인이 필요합니다.`,
+          attendanceRecordCount: attendanceRecordCount,
+          sessionKey: sessionKey
+        };
+      }
+
+      if (attendanceRecordCount > 0 && forceDelete && confirmSessionKey !== sessionKey) {
+        return {
+          success: false,
+          errorCode: 'SCHEDULE_DELETE_CONFIRM_KEY_MISMATCH',
+          message: '강제 삭제 확인이 실패했습니다. 표시된 회차 키를 그대로 입력해 주세요.'
+        };
+      }
+
+      sheet.deleteColumn(target.colIndex + 1);
+      removeSessionMetaRow(sheet.getName(), sessionKey);
+
       return {
-        success: false,
-        errorCode: 'SCHEDULE_DELETE_HAS_ATTENDANCE',
-        message: `이미 ${attendanceRecordCount}건의 출석 기록이 있어 삭제하려면 강제 삭제 확인이 필요합니다.`,
-        attendanceRecordCount: attendanceRecordCount,
-        sessionKey: sessionKey
+        success: true,
+        message: attendanceRecordCount > 0 ? '강제 삭제로 일정이 삭제되었습니다.' : '일정이 삭제되었습니다.',
+        sessionKey: sessionKey,
+        seasonAlias: info.seasonAlias,
+        forceDeleted: attendanceRecordCount > 0,
+        attendanceRecordCount: attendanceRecordCount
       };
+    } finally {
+      lock.releaseLock();
     }
-
-    if (attendanceRecordCount > 0 && forceDelete && confirmSessionKey !== sessionKey) {
-      return {
-        success: false,
-        errorCode: 'SCHEDULE_DELETE_CONFIRM_KEY_MISMATCH',
-        message: '강제 삭제 확인이 실패했습니다. 표시된 회차 키를 그대로 입력해 주세요.'
-      };
-    }
-
-    sheet.deleteColumn(target.colIndex + 1);
-    removeSessionMetaRow(sheet.getName(), sessionKey);
-
-    return {
-      success: true,
-      message: attendanceRecordCount > 0 ? '강제 삭제로 일정이 삭제되었습니다.' : '일정이 삭제되었습니다.',
-      sessionKey: sessionKey,
-      seasonAlias: info.seasonAlias,
-      forceDeleted: attendanceRecordCount > 0,
-      attendanceRecordCount: attendanceRecordCount
-    };
   } catch (error) {
     return {
       success: false,

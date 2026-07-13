@@ -8,6 +8,8 @@
 - 이름: `APPS_SCRIPT_WEB_APP_URL`
 - 위치: `GitHub Repo > Settings > Secrets and variables > Actions`
 - 역할: Pages 배포 산출물의 API 기준 URL
+- 이름: `GOOGLE_MAPS_BROWSER_API_KEY`
+- 역할: 관리자 장소 검색용 브라우저 키. 배포 후 노출되므로 GCP Website/API 제한이 실제 보안 경계
 
 ### Workflow
 - 파일: [`/.github/workflows/deploy-gh-pages.yml`](../../.github/workflows/deploy-gh-pages.yml)
@@ -24,6 +26,7 @@
   - `FRONTEND_ADMIN_BASE_URL`
   - `FRONTEND_STUDENT_BASE_URL`
   - `GOOGLE_OAUTH_CLIENT_ID`
+  - `GOOGLE_MAPS_SERVER_API_KEY`
 
 ### Deployment
 - 위치: `Deploy > Manage deployments`
@@ -46,6 +49,13 @@
   - Publishing 상태
   - 테스트 모드라면 운영 계정이 test users에 포함돼 있는지
 
+### Maps Platform / Places
+- Billing 연결
+- `Maps JavaScript API`, `Places API (New)` 활성화
+- 브라우저 키: 운영 Pages origin Website 제한 + 두 API만 허용
+- 서버 키: Places API (New)만 허용, Apps Script Script Property에만 저장
+- 예산/할당량 알림과 Place ID 유효성
+
 ## 레포가 직접 보여주는 코드 지점
 - Secret 주입 결과 반영: [`web/shared/env.js`](../../web/shared/env.js)
 - 배포 기본값 예시: [`web/shared/config.example.js`](../../web/shared/config.example.js)
@@ -56,6 +66,7 @@
 - 현재 Google Cloud origin 값
 - 현재 Script Properties 실제 저장값
 - 현재 운영 deployment가 어느 버전인지
+- 현재 Billing/API 활성화, Maps 키 값·제한·할당량
 
 ## 이런 질문에는 이 문서를 먼저 본다
 - `GitHub Secret과 Google OAuth 설정 위치를 요약해줘.`

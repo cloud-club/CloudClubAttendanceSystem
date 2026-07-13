@@ -38,6 +38,8 @@ flowchart LR
 - 운영 런북: [04_Operations_Runbook.md](./04_Operations_Runbook.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/04_Operations_Runbook.md)
 - 데이터/RBAC 레퍼런스: [05_Data_And_RBAC_Reference.md](./05_Data_And_RBAC_Reference.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/05_Data_And_RBAC_Reference.md)
 - 회귀 더블체크 게이트: [06_Doublecheck_Regression_Gate.md](./06_Doublecheck_Regression_Gate.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/06_Doublecheck_Regression_Gate.md)
+- 관리자 성능 최적화 가이드: [07_Admin_Performance_Optimization_Guide.md](./07_Admin_Performance_Optimization_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/07_Admin_Performance_Optimization_Guide.md)
+- GPS·Google Place ID 출석 운영 가이드: [08_GPS_Place_ID_Attendance_Guide.md](./08_GPS_Place_ID_Attendance_Guide.md)
 
 ## 운영 원칙 고정: 공개 API 불변과 시즌업데이트 리스크 분리
 이 위키의 운영 판단 기준은 아래 한 줄로 고정합니다.
@@ -63,6 +65,8 @@ flowchart LR
 - [docs/History/024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md](../History/024_컬럼유연화_헤더기반스키마_무체감안정화_2026-03-03.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/024_%EC%BB%AC%EB%9F%BC%EC%9C%A0%EC%97%B0%ED%99%94_%ED%97%A4%EB%8D%94%EA%B8%B0%EB%B0%98%EC%8A%A4%ED%82%A4%EB%A7%88_%EB%AC%B4%EC%B2%B4%EA%B0%90%EC%95%88%EC%A0%95%ED%99%94_2026-03-03.md)
 - [docs/History/025_관리자_출석현황_평균출석시간추이_전환_운영기록_2026-03-10.md](../History/025_관리자_출석현황_평균출석시간추이_전환_운영기록_2026-03-10.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/025_%EA%B4%80%EB%A6%AC%EC%9E%90_%EC%B6%9C%EC%84%9D%ED%98%84%ED%99%A9_%ED%8F%89%EA%B7%A0%EC%B6%9C%EC%84%9D%EC%8B%9C%EA%B0%84%EC%B6%94%EC%9D%B4_%EC%A0%84%ED%99%98_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-03-10.md)
 - [docs/History/026_관리자_출석현황_실시간_pending표시_및_출석상태비율_회기준_운영기록_2026-03-31.md](../History/026_관리자_출석현황_실시간_pending표시_및_출석상태비율_회기준_운영기록_2026-03-31.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/026_%EA%B4%80%EB%A6%AC%EC%9E%90_%EC%B6%9C%EC%84%9D%ED%98%84%ED%99%A9_%EC%8B%A4%EC%8B%9C%EA%B0%84_pending%ED%91%9C%EC%8B%9C_%EB%B0%8F_%EC%B6%9C%EC%84%9D%EC%83%81%ED%83%9C%EB%B9%84%EC%9C%A8_%ED%9A%8C%EA%B8%B0%EC%A4%80_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-03-31.md)
+- [docs/History/031_관리자_응답속도_최적화_및_기능동일성_재검증_운영기록_2026-04-05.md](../History/031_%EA%B4%80%EB%A6%AC%EC%9E%90_%EC%9D%91%EB%8B%B5%EC%86%8D%EB%8F%84_%EC%B5%9C%EC%A0%81%ED%99%94_%EB%B0%8F_%EA%B8%B0%EB%8A%A5%EB%8F%99%EC%9D%BC%EC%84%B1_%EC%9E%AC%EA%B2%80%EC%A6%9D_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-04-05.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/031_%EA%B4%80%EB%A6%AC%EC%9E%90_%EC%9D%91%EB%8B%B5%EC%86%8D%EB%8F%84_%EC%B5%9C%EC%A0%81%ED%99%94_%EB%B0%8F_%EA%B8%B0%EB%8A%A5%EB%8F%99%EC%9D%BC%EC%84%B1_%EC%9E%AC%EA%B2%80%EC%A6%9D_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-04-05.md)
+- [docs/History/032_출석_GPS_장소검증_Google_Maps_Place_ID_서버리스_도입기록_2026-07-13.md](../History/032_출석_GPS_장소검증_Google_Maps_Place_ID_서버리스_도입기록_2026-07-13.md)
 
 ## 원문 이력
 현재 위키가 “무엇을 어떻게 운영하는지”를 정의한다면, History는 “왜 이런 결정을 했는지”를 보여줍니다. 운영 판단이 필요할 때는 위키를 기준으로 하고, 의사결정 배경이 필요할 때만 History를 참조합니다.

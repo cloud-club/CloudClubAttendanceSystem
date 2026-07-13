@@ -69,13 +69,84 @@ function serializeFortuneVersionRecord(record) {
   };
 }
 
+function readFortuneVersionRowsCache() {
+  try {
+    const raw = CacheService.getScriptCache().get(FORTUNE_VERSION_ROWS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeFortuneVersionRowsCache(records) {
+  if (!Array.isArray(records)) return;
+  try {
+    CacheService.getScriptCache().put(
+      FORTUNE_VERSION_ROWS_CACHE_KEY,
+      JSON.stringify(records),
+      FORTUNE_VERSION_CACHE_TTL_SECONDS
+    );
+  } catch (error) {
+    Logger.log('운세 버전 캐시 저장 실패: ' + error.toString());
+  }
+}
+
+function getFortuneVersionEntryCacheKey(versionId) {
+  return FORTUNE_VERSION_ENTRY_CACHE_PREFIX + String(versionId || '').trim();
+}
+
+function readFortuneEntryRowsCache(versionId) {
+  const key = getFortuneVersionEntryCacheKey(versionId);
+  if (!key || key === FORTUNE_VERSION_ENTRY_CACHE_PREFIX) return null;
+  try {
+    const raw = CacheService.getScriptCache().get(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeFortuneEntryRowsCache(versionId, rows) {
+  const key = getFortuneVersionEntryCacheKey(versionId);
+  if (!key || key === FORTUNE_VERSION_ENTRY_CACHE_PREFIX || !Array.isArray(rows)) return;
+  try {
+    CacheService.getScriptCache().put(
+      key,
+      JSON.stringify(rows),
+      FORTUNE_VERSION_CACHE_TTL_SECONDS
+    );
+  } catch (error) {
+    Logger.log('운세 엔트리 캐시 저장 실패: ' + error.toString());
+  }
+}
+
+function invalidateFortuneVersionCaches(versionId) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.remove(FORTUNE_VERSION_ROWS_CACHE_KEY);
+    const key = getFortuneVersionEntryCacheKey(versionId);
+    if (key && key !== FORTUNE_VERSION_ENTRY_CACHE_PREFIX) {
+      cache.remove(key);
+    }
+  } catch (error) {
+    Logger.log('운세 버전 캐시 삭제 실패: ' + error.toString());
+  }
+}
+
 function getFortuneVersionRows() {
+  const cached = readFortuneVersionRowsCache();
+  if (cached) return cached;
+
   const sheet = ensureFortuneVersionSheet();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
   const values = sheet.getRange(2, 1, lastRow - 1, FORTUNE_VERSION_HEADERS.length).getValues();
-  return values.map((row, idx) => {
+  const records = values.map((row, idx) => {
     const versionId = String(row[0] || '').trim();
     if (!versionId) return null;
     return {
@@ -89,6 +160,8 @@ function getFortuneVersionRows() {
       note: String(row[6] || '').trim()
     };
   }).filter(item => !!item);
+  writeFortuneVersionRowsCache(records);
+  return records;
 }
 
 function getFortuneVersionById(versionId) {
@@ -119,6 +192,7 @@ function clearFortuneCurrentFlags() {
     values.push([false]);
   }
   sheet.getRange(2, 6, lastRow - 1, 1).setValues(values);
+  invalidateFortuneVersionCaches('');
 }
 
 function appendFortuneVersionRow(record) {
@@ -135,12 +209,16 @@ function appendFortuneVersionRow(record) {
   ];
   const rowIndex = sheet.getLastRow() + 1;
   sheet.getRange(rowIndex, 1, 1, FORTUNE_VERSION_HEADERS.length).setValues([row]);
+  invalidateFortuneVersionCaches(record.versionId);
   return rowIndex;
 }
 
 function getFortuneEntryRowsByVersionId(versionId) {
   const targetVersionId = String(versionId || '').trim();
   if (!targetVersionId) return [];
+
+  const cached = readFortuneEntryRowsCache(targetVersionId);
+  if (cached) return cached;
 
   const sheet = ensureFortuneEntrySheet();
   const lastRow = sheet.getLastRow();
@@ -166,10 +244,12 @@ function getFortuneEntryRowsByVersionId(versionId) {
     return a.rowIndex - b.rowIndex;
   });
 
-  return rows.map((item, idx) => ({
+  const normalizedRows = rows.map((item, idx) => ({
     rowNo: idx + 1,
     fortune: item.fortune
   }));
+  writeFortuneEntryRowsCache(targetVersionId, normalizedRows);
+  return normalizedRows;
 }
 
 function appendFortuneEntryRows(versionId, rows) {
@@ -185,6 +265,7 @@ function appendFortuneEntryRows(versionId, rows) {
   ]);
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, appendRows.length, FORTUNE_ENTRY_HEADERS.length).setValues(appendRows);
+  invalidateFortuneVersionCaches(targetVersionId);
 }
 
 function getFortuneUploadMetaRows() {
@@ -331,6 +412,7 @@ function clearFortuneCache() {
   } catch (error) {
     Logger.log('운세 캐시 삭제 실패: ' + error.toString());
   }
+  invalidateFortuneVersionCaches('');
 }
 
 function loadCurrentFortunePayloadFromSheets() {

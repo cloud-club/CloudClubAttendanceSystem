@@ -373,10 +373,7 @@ async function initializeDashboard() {
     renderSheetInfo: true
   });
   if (seasonSourceOk) {
-    await Promise.all([
-      refreshSessionAndRanking(),
-      loadSheetLinkInfo()
-    ]);
+    loadSheetLinkInfo();
   } else {
     console.warn('시즌 목록 로드 실패로 운영 조회 API 호출을 중단합니다.');
     showToast(
@@ -462,10 +459,7 @@ async function initializeDashboard() {
     }
   }
 
-  // Keep first-load data hydration aligned with the default active tab.
-  if (getActiveTabName() === 'attend') {
-    await loadScheduleList();
-  }
+  await refreshSeasonData();
 
 }
 
@@ -478,18 +472,25 @@ async function refreshSeasonData() {
     return;
   }
 
-  await Promise.all([
-    refreshSessionAndRanking(),
-    loadSheetLinkInfo()
-  ]);
-
   const activeTab = getActiveTabName();
-  if (activeTab === 'status') {
-    await loadAttendanceDashboard({ forceReload: true });
+  loadSheetLinkInfo();
+  if (activeTab === 'attend') {
+    await Promise.all([
+      checkAttendanceSession(),
+      loadScheduleList()
+    ]);
     return;
   }
 
-  if (activeTab === 'schedule' || activeTab === 'attend') {
+  if (activeTab === 'status') {
+    if (typeof primeAttendanceDashboardLiveDefaults === 'function') {
+      primeAttendanceDashboardLiveDefaults();
+    }
+    await loadAttendanceDashboard({ forceReload: false });
+    return;
+  }
+
+  if (activeTab === 'schedule') {
     await loadScheduleList();
     return;
   }

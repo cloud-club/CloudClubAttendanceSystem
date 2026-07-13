@@ -27,7 +27,10 @@ function getAttendanceDashboardSummary(params) {
     const statusSessionKeys = statusSelectedSessions.map(session => session.sessionKey);
     const disableCache = parseDashboardBooleanParam(params.disableCache);
     const cacheKey = buildAttendanceDashboardCacheKey(seasonAlias, filters);
-    const canUseCache = !disableCache && ongoingSelectedSessions.length === 0;
+    const canUseCache = !disableCache;
+    const cacheTtlSeconds = ongoingSelectedSessions.length > 0
+      ? ATTENDANCE_DASHBOARD_LIVE_CACHE_TTL_SECONDS
+      : ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS;
 
     if (canUseCache) {
       const cached = readAttendanceDashboardCache(cacheKey);
@@ -59,10 +62,6 @@ function getAttendanceDashboardSummary(params) {
         isOngoing: isOngoing
       };
     });
-
-    const sessionStartCol = Math.max(0, memberSchema.sessionStartColIndex);
-    const notesMatrix = getDashboardNotesMatrix(sheet, sessionStartCol);
-
     const memberRows = [];
     const quickFilterMembers = [];
     let totalMembers = 0;
@@ -500,7 +499,7 @@ function getAttendanceDashboardSummary(params) {
     };
 
     if (canUseCache) {
-      writeAttendanceDashboardCache(cacheKey, payload);
+      writeAttendanceDashboardCache(cacheKey, payload, cacheTtlSeconds);
     }
 
     return payload;
@@ -529,8 +528,6 @@ function getAttendanceDashboardDrilldown(params) {
     const filters = normalizeAttendanceDashboardFilters(params, sessions);
     const selectedSessions = filterSessionsForDashboard(sessions, filters);
     const closedSelectedSessions = selectedSessions.filter(session => session.lateDeadline <= now);
-    const sessionStartCol = Math.max(0, memberSchema.sessionStartColIndex);
-    const notesMatrix = getDashboardNotesMatrix(sheet, sessionStartCol);
 
     const drillType = normalizeDashboardDrillType(params.drillType || params.type);
     const key = String(params.key || '').trim();
@@ -544,6 +541,8 @@ function getAttendanceDashboardDrilldown(params) {
         return { success: false, message: '선택된 필터 범위에서 회차를 찾을 수 없습니다.' };
       }
 
+      const noteColumns = getDashboardSessionNoteColumns(sheet, [targetSession]);
+
       const rows = [];
       const summary = { onTimeCount: 0, lateCount: 0, absentCount: 0, excusedCount: 0, pendingCount: 0, participants: 0, effectiveCount: 0 };
 
@@ -556,7 +555,7 @@ function getAttendanceDashboardDrilldown(params) {
 
         const cellValue = values[i][targetSession.colIndex];
         const status = getDashboardAttendanceStatus(cellValue, targetSession, now);
-        const note = getDashboardNoteValue(notesMatrix, i, targetSession.colIndex, sessionStartCol);
+        const note = getDashboardSessionNoteValue(noteColumns, i, targetSession.sessionKey);
         const attendTime = status === 'on_time' || status === 'late'
           ? getDashboardAttendTimeText(cellValue)
           : '';
@@ -637,6 +636,7 @@ function getAttendanceDashboardDrilldown(params) {
       }
 
       const rows = [];
+      const noteColumns = getDashboardSessionNoteColumns(sheet, selectedSessions);
       const summary = {
         onTimeCount: 0,
         lateCount: 0,
@@ -651,7 +651,7 @@ function getAttendanceDashboardDrilldown(params) {
       selectedSessions.forEach(session => {
         const cellValue = values[targetRowIndex][session.colIndex];
         const status = getDashboardAttendanceStatus(cellValue, session, now);
-        const note = getDashboardNoteValue(notesMatrix, targetRowIndex, session.colIndex, sessionStartCol);
+        const note = getDashboardSessionNoteValue(noteColumns, targetRowIndex, session.sessionKey);
         const attendTime = status === 'on_time' || status === 'late'
           ? getDashboardAttendTimeText(cellValue)
           : '';
@@ -1085,6 +1085,32 @@ function getDashboardNotesMatrix(sheet, sessionStartCol) {
   return sheet.getRange(2, startCol + 1, sheet.getLastRow() - 1, sheet.getLastColumn() - startCol).getNotes();
 }
 
+function getDashboardSessionNoteColumns(sheet, sessions) {
+  const list = Array.isArray(sessions) ? sessions : [];
+  const rowCount = Math.max(0, sheet.getLastRow() - 1);
+  const noteColumns = {};
+  if (rowCount === 0 || list.length === 0) {
+    return noteColumns;
+  }
+
+  list.forEach(session => {
+    const key = String(session && session.sessionKey || '').trim();
+    const colIndex = Number(session && session.colIndex);
+    if (!key || isNaN(colIndex) || colIndex < 0) return;
+    noteColumns[key] = sheet.getRange(2, colIndex + 1, rowCount, 1).getNotes();
+  });
+  return noteColumns;
+}
+
+function getDashboardSessionNoteValue(noteColumns, rowIndex, sessionKey) {
+  const key = String(sessionKey || '').trim();
+  const rows = key ? noteColumns[key] : null;
+  if (!rows || rows.length === 0) return '';
+  const row = rows[rowIndex - 1];
+  if (!row || row.length === 0) return '';
+  return String(row[0] || '').trim();
+}
+
 function getDashboardNoteValue(notesMatrix, rowIndex, colIndex, sessionStartCol) {
   if (!notesMatrix || notesMatrix.length === 0) return '';
   const row = notesMatrix[rowIndex - 1];
@@ -1130,13 +1156,17 @@ function readAttendanceDashboardCache(key) {
   }
 }
 
-function writeAttendanceDashboardCache(key, payload) {
+function writeAttendanceDashboardCache(key, payload, ttlSeconds) {
   if (!key || !payload || typeof payload !== 'object') return;
 
   try {
     const raw = JSON.stringify(payload);
     if (!raw || raw.length > ATTENDANCE_DASHBOARD_CACHE_MAX_BYTES) return;
-    CacheService.getScriptCache().put(key, raw, ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS);
+    CacheService.getScriptCache().put(
+      key,
+      raw,
+      Math.max(1, Number(ttlSeconds || ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS))
+    );
   } catch (error) {
     // no-op
   }

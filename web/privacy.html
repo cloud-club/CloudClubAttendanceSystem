@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>개인정보 처리 안내 | Cloud Club 출석 시스템</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; line-height: 1.7; }
+    main { width: min(820px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 64px; }
+    h1, h2 { color: #fff; line-height: 1.3; }
+    h1 { font-size: clamp(28px, 6vw, 42px); margin: 0 0 8px; }
+    h2 { margin-top: 32px; font-size: 21px; }
+    p, li { color: #cbd5e1; }
+    a { color: #93c5fd; }
+    .meta, .notice { color: #94a3b8; }
+    .notice { padding: 16px; border: 1px solid rgba(96,165,250,.35); border-radius: 14px; background: rgba(59,130,246,.1); }
+    nav { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 36px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>개인정보 처리 안내</h1>
+    <p class="meta">Cloud Club 출석 시스템 · 시행일 2026-07-13</p>
+    <p class="notice">이 문서는 출석 시스템의 실제 데이터 흐름을 설명합니다. 운영 정책이나 관련 법령이 바뀌면 Cloud Club 운영진이 내용을 검토하고 갱신합니다.</p>
+
+    <h2>처리 목적과 항목</h2>
+    <ul>
+      <li>전화번호와 출석 시각: 회원 확인, 출석 기록과 통계 제공을 위해 Google Sheets에 저장합니다.</li>
+      <li>현재 위치와 정확도: 장소 제한 회차에서 지정 장소 반경 500m 여부를 한 번 판정하기 위해 처리합니다.</li>
+      <li>Google Place ID: 회차별 지정 장소를 식별하기 위해 해당 회차의 Sheets 헤더에 저장합니다.</li>
+    </ul>
+
+    <h2>현재 위치의 전송과 보관</h2>
+    <p>위치 필수 회차에서 사용자가 출석 버튼을 누를 때 브라우저가 위치 권한을 요청합니다. 현재 좌표와 정확도는 HTTPS를 통해 기존 Google Apps Script로 전송되고 거리 판정에만 사용됩니다. 참가자 좌표는 Google Sheets, 셀 Note, 브라우저 localStorage에 저장하지 않습니다.</p>
+    <p>지정 장소 좌표는 Apps Script가 Google Places API에서 조회하며, 반복 조회를 줄이기 위해 최대 6시간 동안 Apps Script Cache에 임시 보관될 수 있습니다. 이 캐시는 일정 유효기간과 무관합니다.</p>
+
+    <h2>외부 서비스</h2>
+    <p>이 시스템은 GitHub Pages, Google Apps Script, Google Sheets, Google Maps Platform을 사용합니다. Google Maps Platform을 사용할 때는 <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google 개인정보처리방침</a>이 함께 적용됩니다.</p>
+
+    <h2>위치 정보의 한계와 선택</h2>
+    <p>브라우저 위치는 GPS·Wi-Fi·통신망 등을 이용한 추정값이며 조작될 수 있습니다. 이 기능은 일반적인 원격 출석을 줄이기 위한 장치이지 물리적 방문을 완전히 증명하지 않습니다. 위치 권한을 허용하지 않으면 위치 필수 회차의 자동 출석은 처리되지 않으며, 필요한 경우 운영진의 수동 승인 절차를 이용할 수 있습니다.</p>
+
+    <h2>보유 기간과 문의</h2>
+    <p>참가자 현재 좌표는 거리 판정 후 보관하지 않습니다. 전화번호·출석 기록의 보유와 정정·삭제 요청은 Cloud Club의 회원·출석 운영 정책에 따릅니다. 관련 문의는 <a href="mailto:cloudclub@cloudclub.kr">cloudclub@cloudclub.kr</a>로 접수할 수 있습니다.</p>
+
+    <nav aria-label="정책 링크">
+      <a href="./terms.html">이용약관</a>
+      <a href="./student/latest/">학생 출석 페이지</a>
+      <a href="./admin/">관리자 페이지</a>
+    </nav>
+  </main>
+</body>
+</html>

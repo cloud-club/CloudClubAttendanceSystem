@@ -49,7 +49,7 @@
   function sanitizeUrl(url) {
     try {
       var parsed = new URL(url, global.location && global.location.href ? global.location.href : undefined);
-      ['adminKey', 'adminToken', 'phone', 'comment', 'sessionKey', 'confirmSessionKey', 'itemsJson', 'rowsJson', 'schemaSummaryJson', 'diffToken', 'idToken', 'credential'].forEach(function (key) {
+      ['adminKey', 'adminToken', 'phone', 'comment', 'sessionKey', 'confirmSessionKey', 'itemsJson', 'rowsJson', 'schemaSummaryJson', 'diffToken', 'idToken', 'credential', 'latitude', 'longitude', 'accuracy', 'locationCapturedAt', 'requestId'].forEach(function (key) {
         if (parsed.searchParams.has(key)) {
           parsed.searchParams.set(key, 'REDACTED');
         }
@@ -158,7 +158,64 @@
     });
   }
 
+  function createLocationRequestId() {
+    if (!global.crypto || typeof global.crypto.getRandomValues !== 'function') {
+      throw createError('안전한 위치 출석 요청 식별자를 만들 수 없습니다.', 'CRYPTO_UNAVAILABLE');
+    }
+    var bytes = new Uint8Array(16);
+    global.crypto.getRandomValues(bytes);
+    return Array.prototype.map.call(bytes, function (value) {
+      return value.toString(16).padStart(2, '0');
+    }).join('');
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      global.setTimeout(resolve, ms);
+    });
+  }
+
+  async function postLocationAttendance(params, options) {
+    var baseUrl = getApiBaseUrl();
+    if (!baseUrl || baseUrl.indexOf('REPLACE_WITH_APPS_SCRIPT_WEB_APP_URL') >= 0) {
+      throw createError('API_BASE_URL이 설정되지 않았습니다.', 'MISSING_API_BASE_URL');
+    }
+
+    var requestId = createLocationRequestId();
+    var payload = Object.assign({}, params || {}, {
+      api: 'attendanceLocation',
+      requestId: requestId
+    });
+    await global.fetch(baseUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      cache: 'no-store',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify(payload)
+    });
+
+    var timeoutMs = getTimeoutMs(options);
+    var startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      var status = await call('locationResult', { requestId: requestId }, { timeoutMs: Math.min(timeoutMs, 8000) });
+      if (status && status.ready) {
+        var envelope = status.result;
+        if (!envelope || envelope.ok !== true) {
+          throw createError(
+            envelope && envelope.error ? envelope.error.message : '위치 출석 처리 결과가 올바르지 않습니다.',
+            envelope && envelope.error ? envelope.error.code : 'LOCATION_RESULT_INVALID'
+          );
+        }
+        return envelope.data;
+      }
+      await delay(600);
+    }
+    throw createError('위치 출석 처리 시간이 초과되었습니다. 다시 시도해 주세요.', 'LOCATION_RESULT_TIMEOUT');
+  }
+
   global.CloudClubApi = {
-    call: call
+    call: call,
+    postLocationAttendance: postLocationAttendance
   };
 })(window);

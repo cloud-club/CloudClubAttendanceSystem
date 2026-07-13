@@ -110,6 +110,46 @@ function restoreAttendanceDashboardLiveDefaultScope(options) {
   }
 }
 
+function primeAttendanceDashboardLiveDefaults() {
+  if (attendanceDashboardDateRangeUserEdited) return false;
+  if (isAttendanceDashboardSessionScopeManual()) return false;
+  if (String(scheduleItemsSeasonAlias || '').trim() !== String(getSelectedSeasonAlias() || '').trim()) return false;
+  if (!Array.isArray(scheduleItems) || scheduleItems.length === 0) return false;
+
+  const visibleItems = scheduleItems.filter(item => item && (item.isPast || item.isActive));
+  const nextSessionKeys = visibleItems
+    .map(item => String(item.sessionKey || '').trim())
+    .filter(key => !!key);
+  const nextDateKeys = visibleItems
+    .map(item => getManualSessionDateKey(item))
+    .filter(key => !!key)
+    .sort();
+  const nextDateFrom = nextDateKeys.length > 0 ? nextDateKeys[0] : '';
+  const nextDateTo = nextDateKeys.length > 0 ? nextDateKeys[nextDateKeys.length - 1] : '';
+  const currentKeys = Array.isArray(attendanceDashboardState.sessionKeys)
+    ? attendanceDashboardState.sessionKeys.slice()
+    : [];
+  const sameKeys = nextSessionKeys.length === currentKeys.length
+    && nextSessionKeys.every((key, index) => key === currentKeys[index]);
+  const sameDates = attendanceDashboardState.dateFrom === nextDateFrom
+    && attendanceDashboardState.dateTo === nextDateTo;
+
+  if (sameKeys && sameDates) return false;
+
+  attendanceDashboardState.sessionKeys = nextSessionKeys;
+  attendanceDashboardState.sessionScopeMode = 'auto';
+  attendanceDashboardState.dateFrom = nextDateFrom;
+  attendanceDashboardState.dateTo = nextDateTo;
+  attendanceDashboardAutoDateHydratedOnce = !!(nextDateFrom && nextDateTo);
+  if (attendanceDashboardInitialized) {
+    applyAttendanceDashboardStateToControls();
+    renderAttendanceDashboardSessionPicker();
+    renderAttendanceDashboardMemberPicker();
+  }
+  saveAttendanceDashboardStateToStorage();
+  return true;
+}
+
 function readAttendanceDashboardStateFromStorage() {
   try {
     const raw = localStorage.getItem(ATTENDANCE_DASHBOARD_STORAGE_KEY);
@@ -1345,7 +1385,7 @@ function renderAttendanceDashboardMemberPicker() {
     }).join('') + (overflowCount > 0 ? `<span class="dashboard-chip dashboard-chip-overflow">+${overflowCount}</span>` : '');
 
   if (hintNode) {
-    hintNode.textContent = `선택 없으면 전체 평균 / 최대 ${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명 선택`;
+    hintNode.textContent = `회원을 선택하면 평균 추이를 표시합니다. / 최대 ${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}명 선택`;
   }
   if (countBadge) {
     countBadge.textContent = `선택 ${selectedKeys.length}/${ATTENDANCE_DASHBOARD_MAX_MEMBER_SELECTION}`;
@@ -2748,6 +2788,12 @@ function tryHydrateAttendanceDashboardDateRange(payload, options) {
   return true;
 }
 
+function tryHydrateAttendanceDashboardDefaultScope(payload, options) {
+  const sessionHydrated = tryHydrateAttendanceDashboardActiveSessionScope(payload, options);
+  const dateHydrated = tryHydrateAttendanceDashboardDateRange(payload, options);
+  return sessionHydrated || dateHydrated;
+}
+
 function dashboardSelectAllSessions() {
   const options = getFilteredDashboardSessionOptions();
   setAttendanceDashboardSessionKeys(options.map(item => item.sessionKey));
@@ -3231,17 +3277,14 @@ async function loadAttendanceDashboard(options) {
       return;
     }
 
-    if (tryHydrateAttendanceDashboardActiveSessionScope(response, opts)) {
-      attendanceDashboardLoading = false;
-      endPerfMark(perfToken, { status: 'rehydrate-active-session-reload' });
-      await loadAttendanceDashboard({ forceReload: true, skipAutoSessionHydration: true });
-      return;
-    }
-
-    if (tryHydrateAttendanceDashboardDateRange(response, opts)) {
+    if (tryHydrateAttendanceDashboardDefaultScope(response, opts)) {
       attendanceDashboardLoading = false;
       endPerfMark(perfToken, { status: 'rehydrate-reload' });
-      await loadAttendanceDashboard({ forceReload: true, skipAutoDateHydration: true });
+      await loadAttendanceDashboard({
+        forceReload: true,
+        skipAutoSessionHydration: true,
+        skipAutoDateHydration: true
+      });
       return;
     }
 

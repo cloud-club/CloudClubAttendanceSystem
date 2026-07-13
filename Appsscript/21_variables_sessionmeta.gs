@@ -1,15 +1,34 @@
-function buildSessionHeader(startTime, endAtText) {
+function buildSessionHeader(startTime, endAtText, locationPolicy) {
   const startText = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'yyyy-MM-dd-HH:mm');
-  if (!endAtText) {
-    return startText;
+  let baseHeader = startText;
+
+  if (endAtText) {
+    const endMatch = String(endAtText).trim().match(/^(\d{2}):(\d{2})$/);
+    if (!endMatch) {
+      throw new Error('종료시간은 HH:mm 형식이어야 합니다.');
+    }
+    baseHeader = `${startText}~${endMatch[1]}:${endMatch[2]}`;
   }
 
-  const endMatch = String(endAtText).trim().match(/^(\d{2}):(\d{2})$/);
-  if (!endMatch) {
-    throw new Error('종료시간은 HH:mm 형식이어야 합니다.');
+  if (locationPolicy === undefined || locationPolicy === null) {
+    return baseHeader;
   }
 
-  return `${startText}~${endMatch[1]}:${endMatch[2]}`;
+  if (!locationPolicy.locationRequired) {
+    return `${baseHeader}|v=${SESSION_LOCATION_POLICY_VERSION}|gps=0`;
+  }
+
+  const placeId = String(locationPolicy.googlePlaceId || locationPolicy.placeId || '').trim();
+  if (!placeId) {
+    throw new Error('GPS 필수 일정에는 Google Place ID가 필요합니다.');
+  }
+
+  const radiusM = Number(locationPolicy.radiusM || ATTENDANCE_LOCATION_RADIUS_M);
+  if (radiusM !== ATTENDANCE_LOCATION_RADIUS_M) {
+    throw new Error(`현재 위치 확인 반경은 ${ATTENDANCE_LOCATION_RADIUS_M}m만 지원합니다.`);
+  }
+
+  return `${baseHeader}|v=${SESSION_LOCATION_POLICY_VERSION}|gps=1|pid=${encodeURIComponent(placeId)}|r=${ATTENDANCE_LOCATION_RADIUS_M}`;
 }
 
 function ensureVariableSheet(options) {
@@ -1078,7 +1097,9 @@ function collectSessionsFromSheet(sheet, options) {
   const createMissingMeta = opts.createMissingMeta !== false;
   const variableConfig = normalizeVariableConfig(opts.variableConfig || getVariableConfig());
 
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const headerRange = sheet.getRange(1, 1, 1, sheet.getLastColumn());
+  const headers = headerRange.getValues()[0];
+  const headerNotes = headerRange.getNotes()[0];
   const memberSchema = opts.memberSchema || resolveMemberSchemaFromHeaders(headers);
   const parsedSessions = [];
 
@@ -1087,6 +1108,7 @@ function collectSessionsFromSheet(sheet, options) {
     if (!parsed) continue;
 
     parsed.colIndex = j;
+    parsed.locationNote = String(headerNotes[j] || '').trim();
     parsedSessions.push(parsed);
   }
 
@@ -1189,7 +1211,14 @@ function collectSessionsFromSheet(sheet, options) {
       explicitEndAt: explicitEndAt,
       openOffsetMin: openOffsetMin,
       lateThresholdMin: lateThresholdMin,
-      absenceThresholdMin: absenceThresholdMin
+      absenceThresholdMin: absenceThresholdMin,
+      locationPolicyPresent: parsed.locationPolicyPresent,
+      locationRequired: parsed.locationRequired,
+      locationPolicyValid: parsed.locationPolicyValid,
+      locationPolicyErrorCode: parsed.locationPolicyErrorCode,
+      googlePlaceId: parsed.googlePlaceId,
+      radiusM: parsed.radiusM,
+      locationNote: parsed.locationNote
     };
   });
 }
@@ -1255,4 +1284,3 @@ function findNextSession(sessions, now) {
 
   return next;
 }
-

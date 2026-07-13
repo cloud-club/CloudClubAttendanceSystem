@@ -1483,6 +1483,7 @@ function finalizeSeasonImport(params) {
     const applyResult = applyImportUpdateToExistingSheet(targetSheet, snapshot);
     applySeasonSheetTablePresentation(targetSheet);
     PropertiesService.getScriptProperties().setProperty('activeSheet', record.seasonAlias);
+    invalidateSeasonSheetMetaCache();
 
     ss.deleteSheet(stagingSheet);
 

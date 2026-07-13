@@ -1,6 +1,16 @@
 // Appsscript/01_constants_access.gs
 
 const SESSION_HEADER_REGEX = /^(\d{4})-(\d{2})-(\d{2})-(\d{2}):(\d{2})(?:~(\d{2}):(\d{2}))?$/;
+const SESSION_LOCATION_POLICY_VERSION = '1';
+const ATTENDANCE_LOCATION_RADIUS_M = 500;
+const ATTENDANCE_LOCATION_MAX_ACCURACY_M = 100;
+const GOOGLE_MAPS_SERVER_API_KEY_PROPERTY = 'GOOGLE_MAPS_SERVER_API_KEY';
+const GOOGLE_PLACE_TARGET_CACHE_PREFIX = 'google_place_target_v1_';
+const GOOGLE_PLACE_TARGET_CACHE_TTL_SECONDS = 6 * 60 * 60;
+const LOCATION_ATTENDANCE_REQUEST_MAX_BYTES = 8 * 1024;
+const LOCATION_ATTENDANCE_RESULT_CACHE_PREFIX = 'location_attendance_result_v1_';
+const LOCATION_ATTENDANCE_PROCESSING_CACHE_PREFIX = 'location_attendance_processing_v1_';
+const LOCATION_ATTENDANCE_RESULT_TTL_SECONDS = 120;
 const SEASON_NAME_REGEX = /^season_(\d{2})$/;
 const LEGACY_SEASON_NAME_REGEX = /^(\d{1,2})$/;
 
@@ -18,9 +28,14 @@ const ADMINS_SHEET_NAME = '_admins';
 const ADMINS_SHEET_HEADERS = ['name', 'season', 'phone', 'email', 'role', 'is_active', 'created_at', 'updated_at'];
 const ADMIN_SEASON_SYNC_CACHE_KEY = 'admin_season_sync_latest_v1';
 const ADMIN_SEASON_SYNC_CACHE_TTL_SECONDS = 60;
+const ADMIN_RECORDS_CACHE_KEY = 'admin_records_v1';
+const ADMIN_RECORDS_CACHE_TTL_SECONDS = 300;
+const SEASON_SHEET_META_CACHE_KEY = 'season_sheet_meta_v1';
+const SEASON_SHEET_META_CACHE_TTL_SECONDS = 300;
 const GOOGLE_TOKENINFO_ENDPOINT = 'https://oauth2.googleapis.com/tokeninfo?id_token=';
-const API_VERSION = '2026.02.20-v5.2';
+const API_VERSION = '2026.07.13-v6.0';
 const ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS = 90;
+const ATTENDANCE_DASHBOARD_LIVE_CACHE_TTL_SECONDS = 15;
 const ATTENDANCE_DASHBOARD_CACHE_MAX_BYTES = 90000;
 
 const VARIABLE_SHEET_NAME = 'variable';
@@ -70,6 +85,9 @@ const FORTUNE_ENTRY_HEADERS = [
   'row_no',
   'fortune_text'
 ];
+const FORTUNE_VERSION_ROWS_CACHE_KEY = 'fortune_version_rows_v1';
+const FORTUNE_VERSION_ENTRY_CACHE_PREFIX = 'fortune_version_entries_';
+const FORTUNE_VERSION_CACHE_TTL_SECONDS = 300;
 const FORTUNE_UPLOAD_META_SHEET_NAME = '_fortune_upload_meta';
 const FORTUNE_UPLOAD_META_HEADERS = [
   'upload_id',
@@ -130,6 +148,8 @@ const SUPPORTED_API_ACTIONS = [
   'adminUsersDelete',
   'session',
   'attendance',
+  'attendanceLocation',
+  'locationResult',
   'status',
   'ranking',
   'latestSeason',
@@ -149,6 +169,7 @@ const SUPPORTED_API_ACTIONS = [
   'scheduleSave',
   'scheduleDelete',
   'members',
+  'manualApproveStatus',
   'manualApprove',
   'manualApproveBatch',
   'excusedSet',
@@ -176,6 +197,8 @@ const ACTION_ACCESS_LEVELS = Object.freeze({
   authGoogleLogin: ACTION_ACCESS_PUBLIC,
   session: ACTION_ACCESS_PUBLIC,
   attendance: ACTION_ACCESS_PUBLIC,
+  attendanceLocation: ACTION_ACCESS_PUBLIC,
+  locationResult: ACTION_ACCESS_PUBLIC,
   status: ACTION_ACCESS_PUBLIC,
   ranking: ACTION_ACCESS_PUBLIC,
   latestSeason: ACTION_ACCESS_PUBLIC,
@@ -193,6 +216,7 @@ const ACTION_ACCESS_LEVELS = Object.freeze({
   scheduleSave: ACTION_ACCESS_ADMIN,
   scheduleDelete: ACTION_ACCESS_ADMIN,
   members: ACTION_ACCESS_ADMIN,
+  manualApproveStatus: ACTION_ACCESS_ADMIN,
   manualApprove: ACTION_ACCESS_ADMIN,
   manualApproveBatch: ACTION_ACCESS_ADMIN,
   excusedSet: ACTION_ACCESS_ADMIN,

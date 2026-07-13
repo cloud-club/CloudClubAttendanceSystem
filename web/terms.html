@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이용약관 | Cloud Club 출석 시스템</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; line-height: 1.7; }
+    main { width: min(820px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 64px; }
+    h1, h2 { color: #fff; line-height: 1.3; }
+    h1 { font-size: clamp(28px, 6vw, 42px); margin: 0 0 8px; }
+    h2 { margin-top: 32px; font-size: 21px; }
+    p, li { color: #cbd5e1; }
+    a { color: #93c5fd; }
+    .meta, .notice { color: #94a3b8; }
+    .notice { padding: 16px; border: 1px solid rgba(96,165,250,.35); border-radius: 14px; background: rgba(59,130,246,.1); }
+    nav { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 36px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>출석 시스템 이용약관</h1>
+    <p class="meta">Cloud Club 출석 시스템 · 시행일 2026-07-13</p>
+    <p class="notice">이 시스템을 사용하면 본 약관과 Google Maps 관련 약관에 동의한 것으로 봅니다. 동의하기 어려운 경우 위치 필수 출석 전에 운영진에게 대체 절차를 문의해 주세요.</p>
+
+    <h2>서비스 목적</h2>
+    <p>이 시스템은 Cloud Club 행사 일정, 출석 기록, 출석 현황과 운영진의 수동 승인 업무를 지원합니다. 사용자는 본인의 정보로만 출석을 요청하고 시스템의 출석 제한을 우회해서는 안 됩니다.</p>
+
+    <h2>장소 기반 출석</h2>
+    <p>일부 회차는 브라우저 위치와 Google Place ID를 이용해 지정 장소 반경 500m 여부를 확인합니다. 위치 권한 거부, 정확도 부족, 네트워크·Google Maps Platform 장애가 있으면 자동 출석이 거절되거나 지연될 수 있습니다.</p>
+    <p>위치 기반 판정은 일반적인 원격 출석을 억제하지만 가짜 GPS나 수정된 클라이언트까지 완전히 차단하지 않습니다. 필요한 경우 운영진은 수동 승인, 현장 확인 등 별도 증빙을 요구할 수 있습니다.</p>
+
+    <h2>Google Maps 약관</h2>
+    <p>장소 검색과 확인에는 Google Maps Platform이 포함됩니다. 사용자는 <a href="https://maps.google.com/help/terms_maps/" target="_blank" rel="noopener noreferrer">Google Maps/Google Earth 추가 서비스 약관</a>, <a href="https://cloud.google.com/maps-platform/terms" target="_blank" rel="noopener noreferrer">Google Maps Platform 서비스 약관</a>, <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Google 서비스 약관</a>의 적용을 받습니다.</p>
+
+    <h2>책임과 문의</h2>
+    <p>운영진은 합리적인 범위에서 시스템을 운영하지만 브라우저 위치 오차, 외부 API 장애, 네트워크 지연으로 인한 자동 판정 실패를 항상 방지할 수는 없습니다. 출석 결과가 실제 참여와 다르거나 정정이 필요하면 <a href="mailto:cloudclub@cloudclub.kr">cloudclub@cloudclub.kr</a>로 문의해 주세요.</p>
+
+    <nav aria-label="정책 링크">
+      <a href="./privacy.html">개인정보 처리 안내</a>
+      <a href="./student/latest/">학생 출석 페이지</a>
+      <a href="./admin/">관리자 페이지</a>
+    </nav>
+  </main>
+</body>
+</html>

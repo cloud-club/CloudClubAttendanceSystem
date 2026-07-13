@@ -1,6 +1,7 @@
 let countdownInterval;
 let isAttendanceActive = false;
 let currentAttendancePhase = '';
+let currentAttendanceSession = null;
 let currentSeason = '';
 let latestSeason = '';
 let requestedSeason = '';
@@ -624,12 +625,44 @@ function formatDurationKorean(ms) {
   return `${minutes}분 ${String(seconds).padStart(2, '0')}초`;
 }
 
+function renderAttendanceLocationPolicy(session) {
+  const summary = document.getElementById('sessionVenueSummary');
+  if (!summary) return;
+  summary.classList.remove('is-error');
+  if (session && session.active && session.locationPolicyValid === false) {
+    summary.textContent = '장소 설정을 확인할 수 없어 위치 권한을 요청하지 않습니다. 운영진에게 문의해 주세요.';
+    summary.classList.add('is-error');
+    return;
+  }
+  if (!session || (!session.active && !session.nextLocationRequired) || (session.active && !session.locationRequired)) {
+    summary.textContent = '';
+    return;
+  }
+
+  const radius = Number(session.radiusM || session.nextRadiusM || 500);
+  const note = String(session.locationNote || '').trim();
+  summary.textContent = note
+    ? `위치 확인 필수 · 지정 장소 ${radius}m 이내 · ${note} · 출석 버튼을 누르면 현재 위치를 한 번 확인하며 좌표는 저장하지 않습니다.`
+    : `위치 확인 필수 · 지정 장소 ${radius}m 이내 · 출석 버튼을 누르면 현재 위치를 한 번 확인하며 좌표는 저장하지 않습니다.`;
+}
+
+function setAttendanceLocationStatus(message, tone) {
+  const status = document.getElementById('attendanceLocationStatus');
+  if (!status) return;
+  status.textContent = String(message || '');
+  status.classList.remove('is-error', 'is-success');
+  if (tone === 'error') status.classList.add('is-error');
+  if (tone === 'success') status.classList.add('is-success');
+}
+
 function renderCountdown(session) {
   const countdownTitle = document.getElementById('countdown-title');
   const countdownDiv = document.getElementById('countdown');
   const attendBtn = document.getElementById('attendBtn');
 
   clearInterval(countdownInterval);
+  countdownDiv.classList.remove('message-state');
+  renderAttendanceLocationPolicy(session);
 
   if (!session.active) {
     currentAttendancePhase = '';
@@ -671,11 +704,25 @@ function renderCountdown(session) {
     }
 
     countdownTitle.textContent = '출석 대기 중';
+    countdownDiv.classList.add('message-state');
     countdownDiv.textContent = session.message || '지금은 출석 가능한 시간이 아닙니다.';
     isAttendanceActive = false;
     attendBtn.disabled = true;
     clearAttendButtonPhaseClassNames(attendBtn);
     attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 불가</span>';
+    return;
+  }
+
+  if (session.locationPolicyValid === false) {
+    countdownTitle.textContent = '출석 장소 설정 확인 필요';
+    countdownDiv.classList.add('message-state');
+    countdownDiv.textContent = '운영진이 장소 설정을 수정한 뒤 출석할 수 있습니다.';
+    isAttendanceActive = false;
+    currentAttendancePhase = '';
+    setAttendancePhaseNoticeVisible(false);
+    attendBtn.disabled = true;
+    clearAttendButtonPhaseClassNames(attendBtn);
+    attendBtn.innerHTML = '<i class="fas fa-triangle-exclamation"></i> <span>장소 설정 오류</span>';
     return;
   }
 
@@ -727,10 +774,16 @@ function renderCountdown(session) {
 async function checkAttendanceSession() {
   try {
     const session = await callStudentApi('session', buildSeasonParams());
+    currentAttendanceSession = session && session.active && session.locationPolicyValid !== false ? session : null;
+    setAttendanceLocationStatus('');
     renderCountdown(session);
+    return session;
   } catch (error) {
     if (handleHistoricalAccessError(error)) return;
+    currentAttendanceSession = null;
+    setAttendanceLocationStatus('');
     renderCountdown({ active: false, message: getDisplayErrorMessage(error, '세션 정보를 불러올 수 없습니다.') });
+    return null;
   }
 }
 
@@ -881,6 +934,48 @@ function openTab(tabName, evt) {
   }
 }
 
+function captureAttendanceLocation() {
+  return new Promise((resolve, reject) => {
+    if (!window.isSecureContext) {
+      reject(createStudentApiError('LOCATION_INSECURE_CONTEXT', '안전한 HTTPS 페이지에서만 위치를 확인할 수 있습니다.'));
+      return;
+    }
+    if (!navigator.geolocation) {
+      reject(createStudentApiError('LOCATION_UNSUPPORTED', '이 브라우저는 위치 확인을 지원하지 않습니다.'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const coords = position && position.coords ? position.coords : {};
+        if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude) || !Number.isFinite(coords.accuracy)) {
+          reject(createStudentApiError('LOCATION_INVALID', '현재 위치 정보를 확인하지 못했습니다.'));
+          return;
+        }
+        resolve({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy
+        });
+      },
+      error => {
+        const codeByNative = {
+          1: 'LOCATION_PERMISSION_DENIED',
+          2: 'LOCATION_UNAVAILABLE',
+          3: 'LOCATION_TIMEOUT'
+        };
+        const messageByNative = {
+          1: '위치 권한을 허용한 뒤 다시 시도해 주세요.',
+          2: '현재 위치를 확인할 수 없습니다. 위치 서비스를 켜고 다시 시도해 주세요.',
+          3: '위치 확인 시간이 초과되었습니다. 하늘이 보이거나 신호가 좋은 곳에서 다시 시도해 주세요.'
+        };
+        reject(createStudentApiError(codeByNative[error && error.code] || 'LOCATION_ERROR', messageByNative[error && error.code] || '현재 위치 확인 중 오류가 발생했습니다.'));
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+    );
+  });
+}
+
 async function doAttendance(event) {
   event.preventDefault();
 
@@ -904,12 +999,36 @@ async function doAttendance(event) {
 
   const attendBtn = document.getElementById('attendBtn');
   attendBtn.disabled = true;
-  attendBtn.innerHTML = '<span class="loader"></span> <span>처리 중...</span>';
+  attendBtn.innerHTML = '<span class="loader"></span> <span>회차 확인 중...</span>';
+
+  const refreshedSession = await checkAttendanceSession();
+  if (!refreshedSession || !refreshedSession.active || refreshedSession.locationPolicyValid === false || !isAttendanceActive) {
+    return;
+  }
+
+  currentAttendanceSession = refreshedSession;
+  attendBtn.disabled = true;
+  attendBtn.innerHTML = currentAttendanceSession && currentAttendanceSession.locationRequired
+    ? '<span class="loader"></span> <span>위치 확인 중...</span>'
+    : '<span class="loader"></span> <span>처리 중...</span>';
 
   localStorage.setItem('lastUsedPhone', phoneNumber);
 
   try {
-    const response = await callStudentApi('attendance', buildSeasonParams({ phone: phoneNumber }));
+    let response;
+    if (currentAttendanceSession && currentAttendanceSession.locationRequired) {
+      setAttendanceLocationStatus('출석 판정을 위해 현재 위치를 한 번 확인합니다. 위치 좌표는 출석 판정 후 저장하지 않습니다.');
+      const location = await captureAttendanceLocation();
+      setAttendanceLocationStatus('지정 장소와의 거리를 서버에서 확인하고 있습니다.');
+      response = await window.CloudClubApi.postLocationAttendance(buildSeasonParams({
+        phone: phoneNumber,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy
+      }), { timeoutMs: 20000 });
+    } else {
+      response = await callStudentApi('attendance', buildSeasonParams({ phone: phoneNumber }));
+    }
     handleAttendanceResponse(response);
   } catch (error) {
     if (handleHistoricalAccessError(error)) return;
@@ -922,6 +1041,7 @@ function handleAttendanceResponse(response) {
   const attendBtn = document.getElementById('attendBtn');
 
   if (response.success) {
+    setAttendanceLocationStatus(response.locationVerified ? '현재 위치 확인이 완료되었습니다.' : '', response.locationVerified ? 'success' : '');
     studentRankingCache.loadedAt = 0;
     studentRankingCache.response = null;
 
@@ -930,14 +1050,17 @@ function handleAttendanceResponse(response) {
     const typeBadge = response.attendanceType === 'late'
       ? '<span class="attendance-badge late">지각</span>'
       : '<span class="attendance-badge on-time">정시</span>';
+    const safeSeasonLabel = escapeHtml(response.seasonLabel || response.grade || '-');
+    const safeName = escapeHtml(response.name || '회원');
+    const safeTime = escapeHtml(response.time || '');
 
-    let message = `✅ <span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님, ${response.time} 출석 완료! ${typeBadge}`;
+    let message = `✅ <span class="grade-badge">${safeSeasonLabel}</span>${safeName}님, ${safeTime} 출석 완료! ${typeBadge}`;
 
     if (response.attendanceInfo) {
       const info = buildLiveAttendanceProgress(response.attendanceInfo);
       message += `
         <div class="attendance-info">
-          <h3><span class="grade-badge">${response.seasonLabel || response.grade || '-'}</span>${response.name}님 출석 현황</h3>
+          <h3><span class="grade-badge">${safeSeasonLabel}</span>${safeName}님 출석 현황</h3>
           <div class="attendance-stats">
             <div class="stat-item">
               <div class="stat-label">출석 횟수</div>
@@ -972,30 +1095,40 @@ function handleAttendanceResponse(response) {
     resultDiv.className = 'success';
     attendBtn.innerHTML = '<i class="fas fa-check-circle"></i> <span>출석 완료</span>';
   } else {
-    resultDiv.innerHTML = `❌ ${response.message}`;
-    resultDiv.className = 'error';
+    const isLocationError = response.errorCode && String(response.errorCode).indexOf('LOCATION_') === 0;
+    if (isLocationError) {
+      setAttendanceLocationStatus(response.message || '위치 확인에 실패했습니다. 다시 시도해 주세요.', 'error');
+      resultDiv.textContent = '';
+      resultDiv.className = '';
+    } else {
+      resultDiv.innerHTML = `❌ ${escapeHtml(response.message || '출석 처리에 실패했습니다.')}`;
+      resultDiv.className = 'error';
+    }
     attendBtn.disabled = false;
     setAttendButtonByPhase(currentAttendancePhase || 'on_time', { preserveDisabledLabel: false });
   }
 
-  resultDiv.style.display = 'block';
-
-  setTimeout(() => {
-    resultDiv.style.display = 'none';
-    if (!response.success && isAttendanceActive) {
-      attendBtn.disabled = false;
-      setAttendButtonByPhase(currentAttendancePhase || 'on_time', { preserveDisabledLabel: false });
-    }
-  }, response.success ? 15000 : 5000);
+  if (response.success) {
+    setTimeout(() => {
+      resultDiv.textContent = '';
+      resultDiv.className = '';
+    }, 15000);
+  }
 }
 
 function handleAttendanceError(error) {
   const resultDiv = document.getElementById('result');
   const attendBtn = document.getElementById('attendBtn');
 
-  resultDiv.innerHTML = `❌ 오류가 발생했습니다: ${getDisplayErrorMessage(error, '알 수 없는 오류')}`;
-  resultDiv.className = 'error';
-  resultDiv.style.display = 'block';
+  const isLocationError = String(error && error.code || '').indexOf('LOCATION_') === 0;
+  if (isLocationError) {
+    setAttendanceLocationStatus(getDisplayErrorMessage(error, '위치 확인에 실패했습니다.'), 'error');
+    resultDiv.textContent = '';
+    resultDiv.className = '';
+  } else {
+    resultDiv.innerHTML = `❌ 오류가 발생했습니다: ${escapeHtml(getDisplayErrorMessage(error, '알 수 없는 오류'))}`;
+    resultDiv.className = 'error';
+  }
 
   if (isAttendanceActive) {
     attendBtn.disabled = false;
@@ -1006,9 +1139,6 @@ function handleAttendanceError(error) {
     attendBtn.innerHTML = '<i class="fas fa-times"></i> <span>출석 불가</span>';
   }
 
-  setTimeout(() => {
-    resultDiv.style.display = 'none';
-  }, 5000);
 }
 
 async function checkAttendanceStatus(event) {
@@ -1152,6 +1282,7 @@ function applyBlockedStudentState(message) {
     countdownTitle.textContent = '시즌 정보를 확인하지 못했습니다.';
   }
   if (countdownDiv) {
+    countdownDiv.classList.add('message-state');
     countdownDiv.textContent = message || '잠시 후 다시 시도해주세요.';
   }
   if (attendBtn) {

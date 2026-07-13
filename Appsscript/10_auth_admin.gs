@@ -48,7 +48,45 @@ function getAdminsSheet() {
   return sheet;
 }
 
-function getAdminRecords() {
+function readAdminRecordsCache() {
+  try {
+    const raw = CacheService.getScriptCache().get(ADMIN_RECORDS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeAdminRecordsCache(records) {
+  if (!Array.isArray(records)) return;
+  try {
+    CacheService.getScriptCache().put(
+      ADMIN_RECORDS_CACHE_KEY,
+      JSON.stringify(records),
+      ADMIN_RECORDS_CACHE_TTL_SECONDS
+    );
+  } catch (error) {
+    Logger.log('관리자 레코드 캐시 저장 실패: ' + error.toString());
+  }
+}
+
+function invalidateAdminRecordsCache() {
+  try {
+    CacheService.getScriptCache().remove(ADMIN_RECORDS_CACHE_KEY);
+  } catch (error) {
+    Logger.log('관리자 레코드 캐시 삭제 실패: ' + error.toString());
+  }
+}
+
+function getAdminRecords(options) {
+  const opts = options || {};
+  if (!opts.forceRefresh) {
+    const cached = readAdminRecordsCache();
+    if (cached) return cached;
+  }
+
   const sheet = getAdminsSheet();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
@@ -78,6 +116,7 @@ function getAdminRecords() {
     });
   });
 
+  writeAdminRecordsCache(records);
   return records;
 }
 
@@ -207,7 +246,7 @@ function syncSeasonAdminsFromLatestSeason(options) {
     }
 
     const sheet = getAdminsSheet();
-    const records = getAdminRecords();
+    const records = getAdminRecords({ forceRefresh: true });
     const nowText = formatDateTime(new Date());
     const existingEmailMap = {};
 
@@ -302,6 +341,7 @@ function syncSeasonAdminsFromLatestSeason(options) {
       insertedCount++;
     });
 
+    invalidateAdminRecordsCache();
     cache.put(ADMIN_SEASON_SYNC_CACHE_KEY, '1', ADMIN_SEASON_SYNC_CACHE_TTL_SECONDS);
 
     return {
@@ -541,7 +581,6 @@ function requireAdmin(params) {
     throwApiException('UNAUTHORIZED', '관리자 세션이 유효하지 않습니다.');
   }
 
-  // 관리자 API 재검증 시 최신 시즌 운영진 동기화를 주기적으로 반영한다.
   syncSeasonAdminsFromLatestSeason({
     force: false,
     source: 'requireAdmin'
@@ -821,7 +860,7 @@ function adminUsersUpsert(adminContext, params) {
   const nowText = formatDateTime(new Date());
 
   const sheet = getAdminsSheet();
-  const records = getAdminRecords();
+  const records = getAdminRecords({ forceRefresh: true });
   const matched = records.filter(item => item.email === email);
   if (matched.length > 1) {
     throwApiException('CONFLICT_EMAIL', '동일 이메일이 _admins 시트에 중복되어 있습니다. 중복 행을 정리 후 다시 시도하세요.');
@@ -845,6 +884,8 @@ function adminUsersUpsert(adminContext, params) {
     const nextRow = sheet.getLastRow() + 1;
     sheet.getRange(nextRow, 1, 1, ADMINS_SHEET_HEADERS.length).setValues([rowValues]);
   }
+
+  invalidateAdminRecordsCache();
 
   return {
     success: true,
@@ -874,7 +915,7 @@ function adminUsersDelete(adminContext, params) {
     throwApiException('FORBIDDEN', '고정 Super Admin은 삭제할 수 없습니다.');
   }
 
-  const records = getAdminRecords();
+  const records = getAdminRecords({ forceRefresh: true });
   const matched = records.filter(item => item.email === email);
   if (matched.length > 1) {
     throwApiException('CONFLICT_EMAIL', '동일 이메일이 _admins 시트에 중복되어 있습니다. 중복 행을 정리 후 다시 시도하세요.');
@@ -889,6 +930,7 @@ function adminUsersDelete(adminContext, params) {
 
   const sheet = getAdminsSheet();
   sheet.deleteRow(found.rowIndex);
+  invalidateAdminRecordsCache();
   return {
     success: true,
     message: '관리자가 삭제되었습니다.',
@@ -983,4 +1025,3 @@ function toSeasonAlias(input) {
 
   return '';
 }
-

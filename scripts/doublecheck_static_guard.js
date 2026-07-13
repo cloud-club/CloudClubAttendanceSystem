@@ -248,10 +248,16 @@ function checkAttendanceDashboardLiveDefaultScopePersistence() {
 
 function checkSyntax() {
   const jsFiles = [
+    'web/shared/env.js',
+    'web/shared/config.js',
+    'web/shared/api-jsonp.js',
     'web/admin/scripts/01_state.js',
+    'web/admin/scripts/05_runtime_deps.js',
     'web/admin/scripts/10_auth.js',
     'web/admin/scripts/20_attendance.js',
     'web/admin/scripts/21_dashboard.js',
+    'web/admin/scripts/22_location.js',
+    'web/admin/scripts/22_schedule.js',
     'web/admin/scripts/23_import.js',
     'web/admin/scripts/28_fortune.js',
     'web/admin/scripts/99_compat_handlers.js',
@@ -268,7 +274,10 @@ function checkSyntax() {
     'Appsscript/35_fortune_admin.gs',
     'Appsscript/91_fortune.gs',
     'Appsscript/00_entry_api.gs',
-    'Appsscript/01_constants_access.gs'
+    'Appsscript/01_constants_access.gs',
+    'Appsscript/21_variables_sessionmeta.gs',
+    'Appsscript/22_location_attendance.gs',
+    'Appsscript/90_common_utils.gs'
   ];
   const tempDir = fs.mkdtempSync(path.join(repoRoot, '.tmp-doublecheck-'));
   try {
@@ -280,6 +289,29 @@ function checkSyntax() {
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+}
+
+function checkLocationPolicyRegression() {
+  execSync(`node "${path.join(repoRoot, 'scripts/location_policy_test.js')}"`, { stdio: 'ignore' });
+}
+
+function checkLocationPrivacyAndPolicyUi() {
+  const studentJs = readFile('web/student/student.js');
+  const studentHtml = readFile('web/student/latest/index.html');
+  const adminHtml = readFile('web/admin/index.html');
+  const privacyHtml = readFile('web/privacy.html');
+  const termsHtml = readFile('web/terms.html');
+
+  assertRegex(
+    studentJs,
+    /session\.locationPolicyValid === false[\s\S]*?위치 권한을 요청하지 않습니다/,
+    '손상된 위치 정책에서 학생 GPS 권한 요청을 차단하는 안내가 없습니다.'
+  );
+  assertRegex(studentHtml, /href="\.\.\/\.\.\/privacy\.html"/, '학생 개인정보 처리 안내 링크가 없습니다.');
+  assertRegex(adminHtml, /google-maps-attribution[^>]*" translate="no">Google Maps</, '관리자 Google Maps attribution이 없습니다.');
+  assertRegex(adminHtml, /href="\.\.\/privacy\.html"/, '관리자 개인정보 처리 안내 링크가 없습니다.');
+  assertRegex(privacyHtml, /현재 좌표[\s\S]*저장하지 않습니다/, '개인정보 안내에 참가자 좌표 미저장 정책이 없습니다.');
+  assertRegex(termsHtml, /Google Maps\/Google Earth 추가 서비스 약관/, '이용약관에 Google Maps 약관 참조가 없습니다.');
 }
 
 const checks = [
@@ -294,6 +326,8 @@ const checks = [
   ['시즌업로드 컬럼 유연성 가드', checkImportUpdateColumnFlexibility],
   ['출석현황 드릴다운 helper 중복 선언 가드', checkAttendanceDashboardDrilldownHelpers],
   ['출석현황 live default scope persistence 가드', checkAttendanceDashboardLiveDefaultScopePersistence],
+  ['위치 정책 회귀 테스트', checkLocationPolicyRegression],
+  ['위치 개인정보·Google Maps 정책 표면', checkLocationPrivacyAndPolicyUi],
   ['수정 파일 문법 체크', checkSyntax]
 ];
 
