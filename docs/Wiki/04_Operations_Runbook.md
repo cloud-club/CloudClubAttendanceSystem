@@ -30,6 +30,9 @@ flowchart LR
 4. 관리자 페이지 하드 리로드 후 `apiInfo`/로그인 canary 확인
 5. 역할별 계정(Super/Admin/User) 분기 검증
 
+### 학생 인사이트의 Pages-first 예외
+기존 `status` 액션을 유지하면서 `data.insights`만 추가하고, 새 Pages가 구버전 Apps Script에서 본인 출석률과 기존 조회 기능을 보존하는 경우에는 Pages를 먼저 배포할 수 있습니다. 이때 평균 비교·수료 조건 영역만 업데이트 안내를 표시해야 하며, 구버전 백엔드 스모크가 선행 조건입니다. 이후 관련 Apps Script 파일을 한 deployment에 함께 반영하고 `apiInfo.capabilities.studentInsightsV1`와 관련 런타임 무결성 항목을 확인하면 예외 절차가 끝납니다.
+
 ## 최근 운영 변경 참조 (History 023)
 구조분할 배경, 출석 인증 불일치 원인, 런타임 무결성 복구 결정은 아래 History 문서를 기준으로 추적합니다.
 

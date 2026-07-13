@@ -763,6 +763,87 @@ function evaluateRequiredSessions(requiredPositions, sessions, statusBySessionKe
   };
 }
 
+function resolveGraduationCriteria(variableConfig, sessionCount) {
+  const config = variableConfig || {};
+  const totalSessions = Math.max(0, Number(sessionCount) || 0);
+  const requiredAttendanceCount = Math.ceil(Math.max(0, toNumberWithDefault(config.required_attendance_count, 3)));
+  const lateToAbsenceRatio = Math.ceil(Math.max(1, toNumberWithDefault(config.late_to_absence_ratio, 3)));
+
+  let maxAbsenceEquivalent = config.max_absence_equivalent;
+  if (maxAbsenceEquivalent === '' || maxAbsenceEquivalent === null || maxAbsenceEquivalent === undefined) {
+    maxAbsenceEquivalent = Math.max(0, totalSessions - requiredAttendanceCount);
+  } else {
+    maxAbsenceEquivalent = Math.max(0, toNumberWithDefault(maxAbsenceEquivalent, 0));
+  }
+
+  return {
+    requiredPositions: parseRequiredSessionPositions(config.required_session_positions),
+    requiredAttendanceCount: requiredAttendanceCount,
+    lateToAbsenceRatio: lateToAbsenceRatio,
+    maxAbsenceEquivalent: maxAbsenceEquivalent
+  };
+}
+
+function buildGraduationAssessment(input) {
+  const values = input || {};
+  const attendedCount = Math.max(0, Number(values.attendedCount) || 0);
+  const lateCount = Math.max(0, Number(values.lateCount) || 0);
+  const absentCount = Math.max(0, Number(values.absentCount) || 0);
+  const effectivePastCount = Math.max(0, Number(values.effectivePastCount) || 0);
+  const futureCount = Math.max(0, Number(values.futureCount) || 0);
+  const remainingSessions = values.remainingSessions === undefined
+    ? futureCount
+    : Math.max(0, Number(values.remainingSessions) || 0);
+  const requiredAttendanceCount = Math.ceil(Math.max(0, Number(values.requiredAttendanceCount) || 0));
+  const lateToAbsenceRatio = Math.ceil(Math.max(1, Number(values.lateToAbsenceRatio) || 1));
+  const maxAbsenceEquivalent = Math.max(0, Number(values.maxAbsenceEquivalent) || 0);
+  const requiredCheck = values.requiredCheck || { satisfied: true, possible: true, details: [] };
+  const requiredDetails = Array.isArray(requiredCheck.details) ? requiredCheck.details : [];
+
+  const absenceEquivalent = absentCount + Math.floor(lateCount / lateToAbsenceRatio);
+  const absenceEquivalentRate = effectivePastCount > 0
+    ? Math.round((absenceEquivalent / effectivePastCount) * 1000) / 10
+    : 0;
+  const attendanceShortfall = Math.max(0, requiredAttendanceCount - attendedCount);
+  const remainingAbsenceAllowance = Math.max(0, maxAbsenceEquivalent - absenceEquivalent);
+  const absenceRequiredParticipation = Math.max(0, futureCount - Math.floor(remainingAbsenceAllowance));
+  const pendingRequiredSessionKeys = {};
+  const pendingRequiredCount = requiredDetails.reduce((count, item, index) => {
+    if (!item || item.satisfied || !item.possible) return count;
+    const key = String(item.sessionKey || `required-${index}`);
+    if (pendingRequiredSessionKeys[key]) return count;
+    pendingRequiredSessionKeys[key] = true;
+    return count + 1;
+  }, 0);
+  const minimumFutureParticipation = Math.max(
+    attendanceShortfall,
+    pendingRequiredCount,
+    absenceRequiredParticipation
+  );
+  const meetsAttendanceCount = attendedCount >= requiredAttendanceCount;
+  const attendancePossible = attendedCount + futureCount >= requiredAttendanceCount;
+  const meetsAbsenceThreshold = absenceEquivalent <= maxAbsenceEquivalent;
+  const requiredSessionsOk = requiredCheck.satisfied !== false;
+  const requiredSessionsPossible = requiredCheck.possible !== false;
+  const isFinal = remainingSessions === 0;
+
+  return {
+    absenceEquivalent: absenceEquivalent,
+    absenceEquivalentRate: absenceEquivalentRate,
+    remainingSessions: remainingSessions,
+    minimumFutureParticipation: minimumFutureParticipation,
+    remainingAbsenceAllowance: remainingAbsenceAllowance,
+    meetsAttendanceCount: meetsAttendanceCount,
+    attendancePossible: attendancePossible,
+    meetsAbsenceThreshold: meetsAbsenceThreshold,
+    requiredSessionsOk: requiredSessionsOk,
+    requiredSessionsPossible: requiredSessionsPossible,
+    isFinal: isFinal,
+    isGraduated: isFinal && requiredSessionsOk && meetsAttendanceCount && meetsAbsenceThreshold,
+    isGraduationPossible: requiredSessionsPossible && attendancePossible && meetsAbsenceThreshold
+  };
+}
+
 function getGraduationReport(seasonName) {
   try {
     const info = getRequestedSeasonSheetInfo(seasonName);
@@ -773,17 +854,13 @@ function getGraduationReport(seasonName) {
     const variableConfig = getVariableConfig();
     const sessions = collectSessionsFromSheet(sheet, { variableConfig: variableConfig, createMissingMeta: false, memberSchema: memberSchema });
     const now = new Date();
+    const remainingSessionCount = sessions.filter(session => now <= session.lateDeadline).length;
 
-    const requiredPositions = parseRequiredSessionPositions(variableConfig.required_session_positions);
-    const lateToAbsenceRatio = Math.max(1, toNumberWithDefault(variableConfig.late_to_absence_ratio, 3));
-    const requiredAttendanceCount = Math.max(0, toNumberWithDefault(variableConfig.required_attendance_count, 3));
-
-    let maxAbsenceEquivalent = variableConfig.max_absence_equivalent;
-    if (maxAbsenceEquivalent === '' || maxAbsenceEquivalent === null || maxAbsenceEquivalent === undefined) {
-      maxAbsenceEquivalent = Math.max(0, sessions.length - requiredAttendanceCount);
-    } else {
-      maxAbsenceEquivalent = Math.max(0, toNumberWithDefault(maxAbsenceEquivalent, 0));
-    }
+    const criteria = resolveGraduationCriteria(variableConfig, sessions.length);
+    const requiredPositions = criteria.requiredPositions;
+    const lateToAbsenceRatio = criteria.lateToAbsenceRatio;
+    const requiredAttendanceCount = criteria.requiredAttendanceCount;
+    const maxAbsenceEquivalent = criteria.maxAbsenceEquivalent;
 
     const sessionStartCol = Math.max(0, memberSchema.sessionStartColIndex);
     const notes = sheet.getLastRow() >= 2 && sheet.getLastColumn() > sessionStartCol
@@ -823,9 +900,7 @@ function getGraduationReport(seasonName) {
           excusedCount++;
         } else {
           if (status === 'on_time' || status === 'late' || status === 'absent') {
-            if (now > session.lateDeadline) {
-              effectivePastCount++;
-            }
+            effectivePastCount++;
           }
 
           if (status === 'on_time' || status === 'late') {
@@ -859,20 +934,21 @@ function getGraduationReport(seasonName) {
         }
       });
 
-      const absenceEquivalent = absentCount + Math.floor(lateCount / lateToAbsenceRatio);
       const attendanceRate = effectivePastCount > 0
         ? Math.round((attendedCount / effectivePastCount) * 100)
         : 0;
-
-      const meetsAttendance = attendedCount >= requiredAttendanceCount;
-      const attendancePossible = attendedCount + futureCount >= requiredAttendanceCount;
-      const meetsAbsence = absenceEquivalent <= maxAbsenceEquivalent;
-      const requiredSatisfied = requiredCheck.satisfied;
-      const requiredPossible = requiredCheck.possible;
-
-      const isFinal = futureCount === 0;
-      const isGraduated = isFinal && requiredSatisfied && meetsAttendance && meetsAbsence;
-      const isGraduationPossible = requiredPossible && attendancePossible && meetsAbsence;
+      const assessment = buildGraduationAssessment({
+        attendedCount: attendedCount,
+        lateCount: lateCount,
+        absentCount: absentCount,
+        effectivePastCount: effectivePastCount,
+        futureCount: futureCount,
+        remainingSessions: remainingSessionCount,
+        requiredAttendanceCount: requiredAttendanceCount,
+        lateToAbsenceRatio: lateToAbsenceRatio,
+        maxAbsenceEquivalent: maxAbsenceEquivalent,
+        requiredCheck: requiredCheck
+      });
 
       members.push({
         name: member.name,
@@ -896,13 +972,13 @@ function getGraduationReport(seasonName) {
         effectivePastCount: effectivePastCount,
         futureCount: futureCount,
         attendanceRate: attendanceRate,
-        absenceEquivalent: absenceEquivalent,
-        requiredSessionsOk: requiredSatisfied,
-        requiredSessionsPossible: requiredPossible,
-        meetsAttendanceCount: meetsAttendance,
-        meetsAbsenceThreshold: meetsAbsence,
-        isGraduated: isGraduated,
-        isGraduationPossible: isGraduationPossible,
+        absenceEquivalent: assessment.absenceEquivalent,
+        requiredSessionsOk: assessment.requiredSessionsOk,
+        requiredSessionsPossible: assessment.requiredSessionsPossible,
+        meetsAttendanceCount: assessment.meetsAttendanceCount,
+        meetsAbsenceThreshold: assessment.meetsAbsenceThreshold,
+        isGraduated: assessment.isGraduated,
+        isGraduationPossible: assessment.isGraduationPossible,
         details: details
       });
     }

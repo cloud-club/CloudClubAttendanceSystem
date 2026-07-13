@@ -33,6 +33,8 @@
 3. GitHub Pages 배포
 4. `health`/`apiInfo`/인증 canary 검증
 
+학생 `status.data.insights`처럼 기존 공개 API에 필드만 추가하는 변경은 예외적으로 Pages를 먼저 배포할 수 있습니다. 이 경우 새 UI가 구버전 Apps Script의 기존 `status` 응답에서도 본인 출석률과 기본 조회를 유지하고, 새 인사이트 영역만 업데이트 안내로 대체해야 합니다. 이후 관련 `.gs` 파일을 한 deployment에 함께 반영하고 `apiInfo.capabilities.studentInsightsV1`와 관련 `runtimeChecks`가 모두 `true`인지 확인합니다.
+
 ## 롤백 원칙
 - `.../exec` URL 기준으로 운영 상태를 확인합니다.
 - 이상 시 이전 Apps Script 배포 버전으로 즉시 롤백합니다.

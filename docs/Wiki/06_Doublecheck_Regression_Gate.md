@@ -51,7 +51,10 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_static_guard.j
 4. `ACTION_ACCESS_LEVELS` fortune 액션이 admin 레벨
 5. 학생 운세 escape 적용
 6. 출석현황 event-status drilldown helper 중복 선언 금지
-7. 핵심 수정 파일 문법 체크
+7. 학생 평균 비교·수료 판정 순수 계산 회귀 테스트
+8. status 응답의 additive insights 및 개인정보 비노출 비교 테스트
+9. 학생 3탭·모바일 메뉴·구버전 Apps Script 폴백 wiring
+10. 핵심 수정 파일 문법 체크
 
 ### 컬럼 가변 회귀 시나리오(필수)
 1. [ ] 프로필 커스텀 칼럼(예: `클둥대백과 작성`)을 중간 삽입해도 필수 헤더 매핑이 유지되는지 확인
@@ -106,6 +109,7 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 1. `apiInfo.apiVersion` 차이
 2. `apiInfo.supportedActions`의 `fortune*` 추가
 3. 시간/랜덤 필드(`ts`, `timestamp`, 출석 `fortune/time`)
+4. `status.data.insights`의 additive 추가(기존 status 필드는 완전 동일해야 함)
 
 실패 조건:
 1. 기존 액션의 필수 키 삭제/타입 변경
@@ -117,10 +121,15 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 
 ### 학생
 1. [ ] 페이지 로드/카운트다운 정상
-2. [ ] 출석 성공 UX 정상
-3. [ ] 출석 실패(시간 종료/잘못된 번호) UX 정상
-4. [ ] 출석현황/순위 조회 정상
-5. [ ] 운세 텍스트 렌더링 시 HTML 주입 미실행(escape 확인)
+2. [ ] 데스크톱에서 3개 탭이 기존 상단 탭 형태로 보이고 전환 정상
+3. [ ] 모바일 375×667에서 기본 출석 입력·버튼·위치 상태가 첫 화면에 표시
+4. [ ] 모바일 메뉴 열기/닫기, 바깥 클릭, Escape, 포커스 복귀 정상
+5. [ ] 출석 성공 UX 정상
+6. [ ] 출석 실패(시간 종료/잘못된 번호) UX 정상
+7. [ ] 출석현황의 본인·평균·차이·전체 순위·횟수 지표 정상
+8. [ ] 출석현황 하단 기존 상위 랭킹 정상
+9. [ ] 수료 기준·남은 회차·최소 참여·환산 결석·필수 회차·가능 여부 정상
+10. [ ] 운세 텍스트 렌더링 시 HTML 주입 미실행(escape 확인)
 
 ### season_admin
 이번 회귀에서 `season_admin` 시나리오는 특히 중요합니다. 출석현황 탭은 겉보기에는 차트 몇 개가 늘어난 정도로 보일 수 있지만, 실제로는 평균 추이, 하단 멤버 목록, 상태별 랭킹, 개인 이력 모달이 한 화면 안에서 역할을 나눠 가지는 구조입니다. 그래서 여기서는 “클릭이 된다”만 보는 것이 아니라, **각 그래프가 어느 하단 결과로 연결되는지까지** 함께 확인해야 합니다.
@@ -167,11 +176,13 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 3. [ ] 출석현황 탭에서 season_admin과 동일한 평균 추이 + 멤버 빠른 필터 시나리오가 재현됨
 
 ## Gate 4: 구버전 백엔드 호환성(수동)
-조건: `fortune*` 미지원 백엔드 URL로 관리자 페이지 연결.
+조건: 학생 `status.data.insights`와 관리자 `fortune*`가 미지원인 백엔드 URL로 페이지 연결.
 
-1. [ ] 운세 탭에서만 “미지원” 차단 메시지 노출
-2. [ ] 다른 탭은 정상 동작
-3. [ ] 전역 JS 오류/화이트스크린 없음
+1. [ ] 학생 출석하기와 기존 출석 현황 조회는 정상 동작
+2. [ ] 학생 평균 비교와 수료 조건 영역에만 “Apps Script 업데이트 후 확인 가능” 안내 노출
+3. [ ] 관리자 운세 탭에서만 “미지원” 차단 메시지 노출
+4. [ ] 다른 탭은 정상 동작
+5. [ ] 전역 JS 오류/화이트스크린 없음
 
 ## Gate 5: 성능/운영 안전성
 1. [ ] 학생 첫 로드 체감(3회 평균) baseline 대비 10% 이내
@@ -194,6 +205,8 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 2. Gate B(역할별 스모크) 통과 전 배포 금지
 3. Gate C(구버전 호환성) 통과 전 배포 금지
 4. 실패 시 Apps Script 이전 배포 버전으로 즉시 롤백
+
+학생 `status.data.insights` additive 변경은 Gate C에서 구버전 Apps Script 연결 시 본인 출석률·기존 출석 조회가 유지되고 새 인사이트만 업데이트 안내로 대체되는 것을 확인한 경우에만 Pages-first 배포를 허용합니다. Pages 배포 뒤에는 `00_entry_api.gs`, `01_constants_access.gs`, `30_attendance_core.gs`, `33_graduation_manual_excused.gs`를 같은 Apps Script deployment에 반영하고 `studentInsightsV1` 및 세 런타임 무결성 항목을 확인합니다.
 
 ## 증빙 산출물
 아래 파일을 배포 PR/운영 기록에 첨부합니다.

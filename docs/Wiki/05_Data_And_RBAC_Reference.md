@@ -86,6 +86,22 @@ flowchart LR
 - 영향: 시즌 생성/업데이트, diff/finalize 안전장치
 - 필수 점검: `sheetSchemaAudit`, `seasonImport*` 게이트 통과
 
+## 학생 status 인사이트 계약
+공개 `status` 액션은 기존 응답 필드를 유지하면서 `data.insights`만 additive 형태로 추가합니다. 따라서 새 Pages를 먼저 배포해도 구버전 Apps Script에서 기존 출석 현황이 계속 동작하고, 인사이트 영역만 업데이트 안내를 표시합니다.
+
+- `insights.comparison`
+  - 본인 출석률, 시즌 전체 유효 출석 기회의 합계를 기준으로 계산한 가중 평균 출석률, 평균 대비 차이(%p)
+  - 전체 시즌 대상 순위, 대상 인원, 상위 비율
+  - 순위 정렬은 기존 랭킹과 동일하게 출석 횟수 → 평균 출석 오프셋 → 이름 순을 사용
+- `insights.completion`
+  - 필수 출석 횟수, 현재 출석·지각·결석·유고·미진행 횟수
+  - 남은 회차와 최소 추가 참여 횟수
+  - `결석 + floor(지각 / 지각 환산 비율)`로 계산한 환산 결석과 환산 결석률
+  - 필수 회차 충족 가능성, 출석 횟수 충족 가능성, 결석 한도 충족 여부
+  - 시즌 진행 중 수료 가능 여부와 시즌 종료 후 최종 수료 여부
+
+개인정보 경계는 그대로 유지합니다. 공개 `status`는 요청한 전화번호의 본인 결과만 반환하며, 비교 계산에 사용한 다른 회원의 전화번호·이메일·개별 기록은 응답하지 않습니다. 전체 회원 상세를 반환하는 `graduationReport`는 계속 Admin 전용입니다.
+
 ## 운세 데이터 운영 정책
 운세는 운영 공지성 텍스트지만, 런타임 응답에 직접 포함되므로 데이터 무결성과 보안 검증을 함께 적용합니다.
 
@@ -110,6 +126,8 @@ flowchart LR
 - 운세 builtin/fallback: [Appsscript/91_fortune.gs](../../Appsscript/91_fortune.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/91_fortune.gs)
 - 관리자 프런트: [web/admin/scripts/](../../web/admin/scripts/) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/tree/gh-pages/web/admin/scripts)
 - 학생 프런트: [web/student/student.js](../../web/student/student.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/student.js)
+- 학생 공개 status/비교 계산: [Appsscript/30_attendance_core.gs](../../Appsscript/30_attendance_core.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/30_attendance_core.gs)
+- 수료 판정 공통 계산: [Appsscript/33_graduation_manual_excused.gs](../../Appsscript/33_graduation_manual_excused.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/33_graduation_manual_excused.gs)
 
 ## 관련 문서
 - Admin Guide: [02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)

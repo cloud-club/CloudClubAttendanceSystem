@@ -216,6 +216,130 @@ function checkStudentFortuneEscape() {
   }
 }
 
+function checkStudentInsightContracts() {
+  const entryApi = readFile('Appsscript/00_entry_api.gs');
+  const accessConstants = readFile('Appsscript/01_constants_access.gs');
+  const attendanceCore = readFile('Appsscript/30_attendance_core.gs');
+  const graduationCore = readFile('Appsscript/33_graduation_manual_excused.gs');
+
+  assertRegex(
+    attendanceCore,
+    /function summarizeAttendanceComparison\(/,
+    '학생 평균 비교 순수 helper가 누락되었습니다.'
+  );
+  assertRegex(
+    graduationCore,
+    /function buildGraduationAssessment\(/,
+    '학생 수료 판정 순수 helper가 누락되었습니다.'
+  );
+  assertRegex(
+    attendanceCore,
+    /insights\s*:/,
+    '학생 status 응답의 additive insights 계약이 누락되었습니다.'
+  );
+  assertRegex(attendanceCore, /graduationEffectivePastCount\+\+;/, '진행 중 출석을 수료 계산 분모에 반영하지 않습니다.');
+  assertRegex(attendanceCore, /remainingSessions:\s*remainingSessionCount/, '수료 최종 판정이 남은 일정 수를 사용하지 않습니다.');
+  assertRegex(graduationCore, /const isFinal = remainingSessions === 0;/, '수료 최종 판정이 일정 종료 여부와 분리되어 있지 않습니다.');
+  assertRegex(graduationCore, /Math\.ceil\(Math\.max\(0, Number\(values\.requiredAttendanceCount\)/, '필수 출석 횟수의 정수 정규화가 누락되었습니다.');
+  assertRegex(accessConstants, /const API_VERSION = '2026\.07\.14-v6\.2';/, '학생 인사이트 Apps Script 버전 식별자가 갱신되지 않았습니다.');
+  ['summarizeAttendanceComparison', 'resolveGraduationCriteria', 'buildGraduationAssessment'].forEach((name) => {
+    assertRegex(entryApi, new RegExp(`${name}: typeof ${name} === 'function'`), `apiInfo.runtimeChecks 누락: ${name}`);
+  });
+  assertRegex(entryApi, /studentInsightsV1:\s*true/, '학생 인사이트 capability가 누락되었습니다.');
+}
+
+function checkStudentThreeTabNavigation() {
+  const studentHtml = readFile('web/student/latest/index.html');
+  const studentJs = readFile('web/student/student.js');
+
+  ['attend', 'status', 'completion'].forEach((tabName) => {
+    assertRegex(
+      studentHtml,
+      new RegExp(`role="tab"[^>]*data-student-tab="${tabName}"`),
+      `학생 데스크톱 탭이 누락되었습니다: ${tabName}`
+    );
+    assertRegex(
+      studentHtml,
+      new RegExp(`class="mobile-drawer-button[^>]*"[^>]*data-student-tab="${tabName}"`),
+      `학생 모바일 메뉴 항목이 누락되었습니다: ${tabName}`
+    );
+  });
+
+  assertRegex(
+    studentHtml,
+    /id="studentMenuButton"[\s\S]*aria-controls="studentMobileMenu"[\s\S]*aria-expanded="false"/,
+    '학생 모바일 메뉴 버튼의 접근성 상태가 누락되었습니다.'
+  );
+  assertRegex(
+    studentHtml,
+    /id="studentMobileMenu"[^>]*aria-hidden="true"[^>]*inert/,
+    '학생 모바일 메뉴의 초기 비활성 상태가 누락되었습니다.'
+  );
+  assertRegex(
+    studentJs,
+    /drawer\.toggleAttribute\('inert', !shouldOpen\)/,
+    '학생 모바일 메뉴의 inert 상태 동기화가 누락되었습니다.'
+  );
+  assertRegex(
+    studentJs,
+    /const firstButton = drawer\.querySelector\('\.mobile-drawer-button'\);[\s\S]*firstButton\.focus\(\)/,
+    '학생 모바일 메뉴가 첫 메뉴 항목으로 포커스를 이동하지 않습니다.'
+  );
+  assertRegex(
+    studentJs,
+    /event\.key === 'Escape'[\s\S]*setStudentMenuOpen\(false\)/,
+    '학생 모바일 메뉴 Escape 닫기가 누락되었습니다.'
+  );
+  assertRegex(
+    studentJs,
+    /const currentIndex = focusable\.indexOf\(document\.activeElement\);[\s\S]*event\.preventDefault\(\);[\s\S]*focusable\[\(currentIndex \+ offset \+ focusable\.length\) % focusable\.length\]\.focus\(\)/,
+    '학생 모바일 메뉴의 양방향 순환 포커스가 누락되었습니다.'
+  );
+  assertRegex(
+    studentJs,
+    /if \(tabName === 'status' && currentSeason\) loadRankings\(\)/,
+    '학생 순위의 출석 현황 탭 지연 로딩이 누락되었습니다.'
+  );
+  assertRegex(
+    studentJs,
+    /document\.getElementById\('status'\)\?\.classList\.contains\('active'\)[\s\S]*await loadRankings\(\)/,
+    '시즌 확인 전에 출석 현황 탭을 연 경우의 순위 로딩 복구가 누락되었습니다.'
+  );
+  assertRegex(
+    studentJs,
+    /Apps Script 업데이트 후 확인 가능/,
+    '구버전 Apps Script 연결 시 학생 인사이트 폴백 안내가 누락되었습니다.'
+  );
+  assertRegex(studentJs, /metric-grid single-metric[\s\S]*formatOneDecimal\(fallbackRate\)/, '구버전 Apps Script에서 본인 출석률 폴백이 누락되었습니다.');
+  assertRegex(studentJs, /getStatusCounts\(data, completion\)/, '현재 회차 출석 횟수에 completion/detail 우선 계산이 적용되지 않았습니다.');
+  assertRegex(studentJs, /studentStatusCacheGeneration\+\+/, '학생 상태 캐시 무효화 세대가 누락되었습니다.');
+  assertRegex(studentJs, /studentRankingRequest\.promise && studentRankingRequest\.season === seasonAlias/, '학생 순위 중복 요청 합치기가 누락되었습니다.');
+  assertRegex(studentJs, /requestGeneration !== studentRankingCacheGeneration/, '학생 순위 오래된 응답 차단이 누락되었습니다.');
+  assertRegex(studentJs, /prefers-reduced-motion: reduce/, '감소된 모션 환경의 confetti 차단이 누락되었습니다.');
+  assertRegex(
+    studentHtml,
+    /onsubmit="checkCompletionStatus\(event\)"/,
+    '수료 조건 확인 제출 wiring이 누락되었습니다.'
+  );
+  assertRegex(studentHtml, /id="completionPhoneInput"/, '수료 조건 확인 전화번호 입력이 누락되었습니다.');
+  assertRegex(
+    studentHtml,
+    /id="statusResult"[^>]*role="status"[^>]*aria-live="polite"/,
+    '학생 출석 현황 결과의 실시간 상태 알림이 누락되었습니다.'
+  );
+  assertRegex(studentJs, /class="ranking-table-scroll"[^>]*tabindex="0"/, '모바일 순위 표의 가로 스크롤 영역이 누락되었습니다.');
+  assertRegex(studentHtml, /\.legal-links a\s*\{[\s\S]*min-height:\s*44px/, '학생 정책 링크의 44px 터치 영역이 누락되었습니다.');
+  assertRegex(studentHtml, /fa-xmark menu-icon-close/, '모바일 메뉴의 시각적 닫기 아이콘이 누락되었습니다.');
+  assertRegex(studentHtml, /href="\.\.\/\.\.\/privacy\.html"/, '학생 개인정보 처리 안내 링크가 없습니다.');
+  assertRegex(studentHtml, /href="\.\.\/\.\.\/terms\.html"/, '학생 이용약관 링크가 없습니다.');
+}
+
+function checkSensitiveArtifactIgnore() {
+  const gitignore = readFile('.gitignore');
+  assertRegex(gitignore, /^\*\.har$/m, 'HAR 네트워크 캡처 파일 ignore 규칙이 누락되었습니다.');
+  assertNotRegex(gitignore, /\\n/, '.gitignore에 리터럴 \\n 문자열이 남아 있습니다.');
+}
+
 function checkImportUpdateColumnFlexibility() {
   const content = readFile('Appsscript/34_season_import.gs');
 
@@ -327,6 +451,7 @@ function checkSyntax() {
 
   const gsFiles = [
     'Appsscript/30_attendance_core.gs',
+    'Appsscript/33_graduation_manual_excused.gs',
     'Appsscript/32_schedule.gs',
     'Appsscript/34_season_import.gs',
     'Appsscript/35_fortune_admin.gs',
@@ -351,6 +476,12 @@ function checkSyntax() {
 
 function checkLocationPolicyRegression() {
   execSync(`node "${path.join(repoRoot, 'scripts/location_policy_test.js')}"`, { stdio: 'ignore' });
+}
+
+function checkStudentInsightRegression() {
+  execSync(`node "${path.join(repoRoot, 'scripts/student_insights_test.js')}"`, { stdio: 'ignore' });
+  execSync(`node "${path.join(repoRoot, 'scripts/student_client_behavior_test.js')}"`, { stdio: 'ignore' });
+  execSync(`node "${path.join(repoRoot, 'scripts/doublecheck_api_compare_test.js')}"`, { stdio: 'ignore' });
 }
 
 function checkLocationPrivacyAndPolicyUi() {
@@ -447,11 +578,15 @@ const checks = [
   ['호환 핸들러 등록', checkCompatHandlers],
   ['액션 접근 레벨', checkActionAccessLevels],
   ['학생 운세 escape', checkStudentFortuneEscape],
+  ['학생 비교·수료 인사이트 계약', checkStudentInsightContracts],
+  ['학생 3탭·모바일 메뉴 wiring', checkStudentThreeTabNavigation],
+  ['민감 네트워크 캡처 ignore', checkSensitiveArtifactIgnore],
   ['세션 헤더 동적 파싱 가드', checkSessionHeaderDynamicParsing],
   ['시즌업로드 컬럼 유연성 가드', checkImportUpdateColumnFlexibility],
   ['출석현황 드릴다운 helper 중복 선언 가드', checkAttendanceDashboardDrilldownHelpers],
   ['출석현황 live default scope persistence 가드', checkAttendanceDashboardLiveDefaultScopePersistence],
   ['위치 정책 회귀 테스트', checkLocationPolicyRegression],
+  ['학생 비교·수료 인사이트 회귀 테스트', checkStudentInsightRegression],
   ['위치 개인정보·Google Maps 정책 표면', checkLocationPrivacyAndPolicyUi],
   ['Pages 환경 주입 종료 코드 가드', checkPagesEnvInjectionExitStatus],
   ['수정 파일 문법 체크', checkSyntax]

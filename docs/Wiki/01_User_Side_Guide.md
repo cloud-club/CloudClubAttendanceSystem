@@ -5,34 +5,51 @@
 ## 빠른 흐름도
 ```mermaid
 flowchart LR
-  A["학생 페이지 접속"] --> B["출석하기 요청"]
+  A["학생 페이지 접속"] --> B["출석하기"]
   B --> C["정시/지각/실패 결과 확인"]
-  C --> D["출석현황 조회"]
-  D --> E["출석 랭킹 확인"]
-  C --> F["출석 성공 시 오늘의 운세 노출"]
+  C --> D["출석 현황"]
+  D --> E["평균 비교·순위 확인"]
+  C --> F["수료 조건 확인"]
+  F --> G["남은 최소 참여 횟수 확인"]
+  C --> H["출석 성공 시 오늘의 운세 노출"]
 ```
 
 ## 사용자 관점 시나리오
-학생 입장에서는 복잡한 기술 구조보다 “오늘 출석이 정상 처리됐는지”가 가장 중요합니다. 그래서 사용자 흐름은 접속 → 출석 요청 → 결과 확인 → 누적 현황 확인으로 단순하게 유지되어 있습니다.
+학생 입장에서는 “오늘 출석이 정상 처리됐는지”와 “현재 수료 가능한 상태인지”를 빠르게 아는 것이 가장 중요합니다. 학생 화면은 `출석하기`, `출석 현황`, `수료 조건 확인` 3개 탭으로 구성하며, 모바일에서는 오른쪽 위 메뉴 버튼으로 탭을 이동합니다.
 
 운영 측에서도 이 단순 흐름을 유지해야 안내 비용이 줄어듭니다. 아래 절차는 실제 학생 안내 메시지와 동일한 순서로 정리했습니다.
 
-### 1) 출석하기 및 출석 현황 확인
+### 1) 출석하기
 1. 학생은 기본 진입 경로인 `/web/student/latest/`로 접속합니다.
-2. `출석하기` 탭에서 전화번호(숫자 10~11자리)를 입력하고 출석을 요청합니다.
+2. `출석하기` 탭에서 `010`으로 시작하는 전화번호 11자리를 입력하고 출석을 요청합니다.
 3. 성공 시 `정시/지각` 판정과 현재 출석 통계를 바로 확인합니다.
-4. `출석현황` 탭에서 같은 전화번호로 누적 현황(출석/지각/결석/유고)을 조회합니다.
 
-### 2) 출석 랭킹 확인
+모바일 기본 화면은 출석 가능 시간, 전화번호 입력, 출석 버튼, 위치 확인 상태를 한 화면에서 확인할 수 있도록 압축합니다. 위치 확인이 필요한 회차에서만 브라우저의 위치 권한을 요청합니다.
+
+### 2) 출석 현황 확인
+1. `출석 현황` 탭에서 같은 전화번호로 누적 현황을 조회합니다.
+2. 본인의 출석률, 전체 사용자 평균 출석률, 평균과의 차이(%p), 전체 순위와 상위 비율을 확인합니다.
+3. 출석·지각·결석·유고 횟수와 회차별 기록을 확인합니다.
+4. 하단 랭킹 보드에서 기존 시즌 상위 순위를 확인합니다.
+
+### 3) 수료 조건 확인
+1. `수료 조건 확인` 탭에서 전화번호를 입력합니다. 마지막으로 사용한 번호는 세 탭의 입력란에 함께 반영됩니다.
+2. 시즌 수료 기준, 현재 출석·지각·결석·유고 횟수, 지각의 결석 환산 기준을 확인합니다.
+3. 앞으로 남은 수업 수와 그중 최소 참여해야 하는 횟수를 확인합니다.
+4. 필수 회차 충족 여부, 환산 결석률, 현재 기준 수료 가능 여부를 확인합니다.
+
+수료 가능 여부는 Apps Script가 계산한 값을 그대로 표시합니다. 시즌이 끝나기 전에는 `수료 가능/불가`, 모든 회차가 끝난 뒤에는 `수료/미수료`로 구분합니다.
+
+### 4) 출석 랭킹 확인
 랭킹은 단순 재미 요소가 아니라, 학생이 자신의 시즌 참여 상태를 빠르게 파악하는 지표입니다. 그래서 출석현황 조회 흐름과 같은 화면에서 자연스럽게 이어지도록 배치되어 있습니다.
 
 1. `출석현황` 탭 하단 랭킹 보드에서 시즌 랭킹을 확인합니다.
 2. 정렬 규칙은 `출석 횟수` 우선, 동률 시 `평균 출석 오프셋`, 최종 동률은 이름 순입니다.
 
-### 3) 오늘의 운세 확인
+### 5) 오늘의 운세 확인
 오늘의 운세는 독립 탭이 아니라 출석 성공 결과 카드의 일부입니다. 이 설계는 학생이 별도 액션 없이 출석 완료 맥락 안에서 메시지를 확인하도록 하기 위한 것입니다.
 
-1. 서버(`Code.gs`)는 출석 성공 응답에 `fortune` 값을 포함합니다.
+1. 서버(`Appsscript/30_attendance_core.gs`)는 출석 성공 응답에 `fortune` 값을 포함합니다.
 2. 학생 화면(`web/student/student.js`)은 같은 결과 카드에서 운세를 렌더링합니다.
 
 ## 왜 latest 진입 경로를 고정했는가
@@ -50,10 +67,14 @@ flowchart LR
 ### Q3. 오늘의 운세가 보이지 않습니다.
 운세는 출석 성공 시에만 노출됩니다. 실패 응답이나 조회 전용 동작에서는 표시되지 않습니다.
 
+### Q4. 평균 비교나 수료 조건에 “Apps Script 업데이트 후 확인 가능”이 표시됩니다.
+GitHub Pages가 Apps Script보다 먼저 배포된 호환 상태입니다. 출석과 기존 현황 조회는 계속 사용할 수 있으며, 운영자가 새 Apps Script 버전을 배포하면 추가 지표가 활성화됩니다.
+
 ## 관련 파일
 - 학생 HTML: [web/student/latest/index.html](../../web/student/latest/index.html) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/latest/index.html)
 - 학생 로직: [web/student/student.js](../../web/student/student.js) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/web/student/student.js)
-- 백엔드 출석 API: [Code.gs](../../Code.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Code.gs)
+- 백엔드 출석 API: [Appsscript/30_attendance_core.gs](../../Appsscript/30_attendance_core.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/30_attendance_core.gs)
+- 백엔드 수료 판정: [Appsscript/33_graduation_manual_excused.gs](../../Appsscript/33_graduation_manual_excused.gs) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/Appsscript/33_graduation_manual_excused.gs)
 
 ## 관련 문서
 - 관리자 가이드: [02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)

@@ -492,7 +492,10 @@ function getRuntimeIntegrityChecks() {
     collectSessionsFromSheet: typeof collectSessionsFromSheet === 'function',
     resolveSeasonSheetInfo: typeof resolveSeasonSheetInfo === 'function',
     getSeasonAttendanceSession: typeof getSeasonAttendanceSession === 'function',
-    getSeasonAttendanceRanking: typeof getSeasonAttendanceRanking === 'function'
+    getSeasonAttendanceRanking: typeof getSeasonAttendanceRanking === 'function',
+    summarizeAttendanceComparison: typeof summarizeAttendanceComparison === 'function',
+    resolveGraduationCriteria: typeof resolveGraduationCriteria === 'function',
+    buildGraduationAssessment: typeof buildGraduationAssessment === 'function'
   };
 }
 
@@ -527,6 +530,7 @@ function getApiInfo() {
     capabilities: {
       locationAttendanceV1: true,
       locationHeaderPolicyV1: true,
+      studentInsightsV1: true,
       googlePlacesServerConfigured: isGooglePlacesServerConfigured()
     },
     scriptTimeZone: Session.getScriptTimeZone(),

@@ -12,6 +12,16 @@
 3. GitHub Pages 재배포
 4. `apiInfo` / 로그인 canary / 역할별 계정 검증
 
+### 학생 인사이트 Pages-first 예외
+기존 `status` 액션에 additive 필드만 더하고, 새 Pages가 구버전 응답에서도 본인 출석률·기본 출석 조회를 유지하는 경우에는 Pages를 먼저 배포할 수 있습니다. 이 예외를 사용할 때는 구버전 백엔드 스모크를 먼저 통과시키고, 다음 네 파일을 Apps Script의 같은 deployment에 함께 반영합니다.
+
+- `Appsscript/00_entry_api.gs`
+- `Appsscript/01_constants_access.gs`
+- `Appsscript/30_attendance_core.gs`
+- `Appsscript/33_graduation_manual_excused.gs`
+
+배포 후 `apiInfo.apiVersion`이 `2026.07.14-v6.2`인지, `capabilities.studentInsightsV1`와 `runtimeChecks.summarizeAttendanceComparison`, `runtimeChecks.resolveGraduationCriteria`, `runtimeChecks.buildGraduationAssessment`가 모두 `true`인지 확인합니다.
+
 ## 같은 deployment 재배포 vs 새 deployment
 - 같은 deployment를 `Edit > Deploy`로 재배포하면 기존 `.../exec` URL 유지
 - 새 deployment를 만들면 URL이 바뀔 수 있음

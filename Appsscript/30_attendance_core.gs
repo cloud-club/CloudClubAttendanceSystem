@@ -652,6 +652,69 @@ function getSeasonAttendanceStatus(phoneNumber, seasonName) {
   }
 }
 
+function roundAttendanceComparisonMetric(value) {
+  const rounded = Math.round((Number(value) || 0) * 10) / 10;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function compareAttendanceRankingItems(a, b) {
+  const aAttended = Number(a && a.attendedCount || 0);
+  const bAttended = Number(b && b.attendedCount || 0);
+  if (bAttended !== aAttended) {
+    return bAttended - aAttended;
+  }
+
+  const aOffset = !a || a.avgAttendOffsetSeconds === null || a.avgAttendOffsetSeconds === undefined
+    ? Number.POSITIVE_INFINITY
+    : Number(a.avgAttendOffsetSeconds);
+  const bOffset = !b || b.avgAttendOffsetSeconds === null || b.avgAttendOffsetSeconds === undefined
+    ? Number.POSITIVE_INFINITY
+    : Number(b.avgAttendOffsetSeconds);
+  if (aOffset !== bOffset) {
+    return aOffset - bOffset;
+  }
+
+  return String(a && a.name || '').localeCompare(String(b && b.name || ''));
+}
+
+function summarizeAttendanceComparison(items, targetKey) {
+  const cohort = Array.isArray(items) ? items.slice() : [];
+  const normalizedTargetKey = String(targetKey || '');
+  const target = cohort.find(item => String(item && item.key || '') === normalizedTargetKey);
+
+  if (cohort.length === 0 || !target) {
+    return {
+      personalAttendanceRate: 0,
+      cohortAverageAttendanceRate: 0,
+      differencePercentagePoints: 0,
+      rank: null,
+      cohortSize: 0,
+      topPercentile: null
+    };
+  }
+
+  const cohortTotals = cohort.reduce((totals, item) => {
+    totals.attended += Math.max(0, Number(item && item.attendedCount) || 0);
+    totals.effective += Math.max(0, Number(item && item.totalSessions) || 0);
+    return totals;
+  }, { attended: 0, effective: 0 });
+  const averageRate = cohortTotals.effective > 0
+    ? (cohortTotals.attended / cohortTotals.effective) * 100
+    : 0;
+  const personalRate = Number(target.attendanceRate) || 0;
+  cohort.sort(compareAttendanceRankingItems);
+  const rank = cohort.findIndex(item => String(item && item.key || '') === normalizedTargetKey) + 1;
+
+  return {
+    personalAttendanceRate: roundAttendanceComparisonMetric(personalRate),
+    cohortAverageAttendanceRate: roundAttendanceComparisonMetric(averageRate),
+    differencePercentagePoints: roundAttendanceComparisonMetric(personalRate - averageRate),
+    rank: rank,
+    cohortSize: cohort.length,
+    topPercentile: Math.ceil((rank / cohort.length) * 100)
+  };
+}
+
 /**
  * 특정 시트에서 출석 현황을 조회합니다.
  */
@@ -663,7 +726,13 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
 
   const values = sheet.getDataRange().getValues();
   const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
+  const variableConfig = getVariableConfig();
+  const sessions = collectSessionsFromSheet(sheet, {
+    variableConfig: variableConfig,
+    createMissingMeta: false,
+    memberSchema: memberSchema
+  });
+  const graduationCriteria = resolveGraduationCriteria(variableConfig, sessions.length);
 
   const lookup = findMemberRowIndexByPhone(values, memberSchema, cleanedInputPhone);
   if (lookup.duplicateRowIndexes.length > 0) {
@@ -676,6 +745,7 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
   }
 
   const now = new Date();
+  const remainingSessionCount = sessions.filter(session => now <= session.lateDeadline).length;
   const member = readMemberFromRow(values[targetRowIndex], memberSchema);
 
   const attendanceDetails = [];
@@ -684,11 +754,19 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
   let effectivePastCount = 0;
   let lateCount = 0;
   let excusedCount = 0;
+  let graduationAttendedCount = 0;
+  let graduationLateCount = 0;
+  let graduationAbsentCount = 0;
+  let graduationExcusedCount = 0;
+  let graduationFutureCount = 0;
+  let graduationEffectivePastCount = 0;
+  const statusBySessionKey = {};
 
   sessions.forEach(session => {
     const cellValue = values[targetRowIndex][session.colIndex];
     const status = getAttendanceDetailType(cellValue, session, now);
     const isPast = now > session.lateDeadline;
+    statusBySessionKey[session.sessionKey] = status;
 
     if (isPast) {
       pastSessionCount++;
@@ -703,6 +781,23 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
         if (status === 'late') {
           lateCount++;
         }
+      }
+    }
+
+    if (status === 'future') {
+      graduationFutureCount++;
+    } else if (status === 'excused') {
+      graduationExcusedCount++;
+    } else {
+      graduationEffectivePastCount++;
+      if (status === 'on_time' || status === 'late') {
+        graduationAttendedCount++;
+      }
+      if (status === 'late') {
+        graduationLateCount++;
+      }
+      if (status === 'absent') {
+        graduationAbsentCount++;
       }
     }
 
@@ -721,6 +816,66 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
   const attendanceRate = effectivePastCount > 0
     ? Math.round((attendedCount / effectivePastCount) * 100)
     : 0;
+  const graduationAttendanceRate = graduationEffectivePastCount > 0
+    ? Math.round((graduationAttendedCount / graduationEffectivePastCount) * 100)
+    : 0;
+  const requiredCheck = evaluateRequiredSessions(
+    graduationCriteria.requiredPositions,
+    sessions,
+    statusBySessionKey
+  );
+  const graduationAssessment = buildGraduationAssessment({
+    attendedCount: graduationAttendedCount,
+    lateCount: graduationLateCount,
+    absentCount: graduationAbsentCount,
+    effectivePastCount: graduationEffectivePastCount,
+    futureCount: graduationFutureCount,
+    remainingSessions: remainingSessionCount,
+    requiredAttendanceCount: graduationCriteria.requiredAttendanceCount,
+    lateToAbsenceRatio: graduationCriteria.lateToAbsenceRatio,
+    maxAbsenceEquivalent: graduationCriteria.maxAbsenceEquivalent,
+    requiredCheck: requiredCheck
+  });
+  const comparisonItems = sessions.some(session => session.lateDeadline <= now)
+    ? buildAttendanceRankingItems(values, memberSchema, sessions.filter(session => session.lateDeadline <= now), now)
+    : [];
+  const comparison = summarizeAttendanceComparison(comparisonItems, cleanedInputPhone);
+  const requiredSessions = requiredCheck.details.map(required => {
+    const session = sessions.find(item => item.sessionKey === required.sessionKey);
+    return {
+      position: required.position,
+      sessionKey: required.sessionKey,
+      date: session ? formatDateTimeMinute(session.startTime) : '',
+      status: required.status,
+      satisfied: required.satisfied,
+      possible: required.possible
+    };
+  });
+  const completion = Object.assign({
+    requiredAttendanceCount: graduationCriteria.requiredAttendanceCount,
+    lateToAbsenceRatio: graduationCriteria.lateToAbsenceRatio,
+    maxAbsenceEquivalent: graduationCriteria.maxAbsenceEquivalent,
+    currentCounts: {
+      attended: graduationAttendedCount,
+      late: graduationLateCount,
+      absent: graduationAbsentCount,
+      excused: graduationExcusedCount,
+      future: graduationFutureCount
+    },
+    attendedCount: graduationAttendedCount,
+    lateCount: graduationLateCount,
+    absentCount: graduationAbsentCount,
+    excusedCount: graduationExcusedCount,
+    effectivePastCount: graduationEffectivePastCount,
+    futureCount: graduationFutureCount,
+    attendanceRate: graduationAttendanceRate,
+    requiredSessions: requiredSessions,
+    requiredCheck: {
+      satisfied: requiredCheck.satisfied,
+      possible: requiredCheck.possible,
+      details: requiredSessions
+    }
+  }, graduationAssessment);
 
   return {
     success: true,
@@ -737,7 +892,11 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
       excusedCount: excusedCount,
       lateCount: lateCount,
       rate: attendanceRate,
-      details: attendanceDetails
+      details: attendanceDetails,
+      insights: {
+        comparison: comparison,
+        completion: completion
+      }
     }
   };
 }
@@ -893,21 +1052,7 @@ function getSeasonAttendanceRanking(seasonName) {
   }
 }
 
-/**
- * 특정 시트에서 출석률 순위를 계산합니다.
- */
-function getAttendanceRankingFromSheet(sheet, seasonAlias) {
-  const values = sheet.getDataRange().getValues();
-  const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
-  const now = new Date();
-
-  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
-  const closedSessions = sessions.filter(session => session.lateDeadline <= now);
-
-  if (closedSessions.length === 0) {
-    return { success: true, data: [], seasonAlias: seasonAlias || toSeasonAlias(sheet.getName()) };
-  }
-
+function buildAttendanceRankingItems(values, memberSchema, closedSessions, now) {
   const rankings = [];
 
   for (let i = 1; i < values.length; i++) {
@@ -953,58 +1098,64 @@ function getAttendanceRankingFromSheet(sheet, seasonAlias) {
     const attendanceRate = effectiveSessionCount > 0
       ? (attendedCount / effectiveSessionCount) * 100
       : 0;
-
-    let avgAttendOffsetSeconds = null;
-    let avgAttendOffsetFormatted = '미출석';
-
-    if (validOffsetCount > 0) {
-      avgAttendOffsetSeconds = Math.round(totalAttendOffsetSeconds / validOffsetCount);
-      avgAttendOffsetFormatted = formatSignedOffset(avgAttendOffsetSeconds);
-    }
+    const avgAttendOffsetSeconds = validOffsetCount > 0
+      ? Math.round(totalAttendOffsetSeconds / validOffsetCount)
+      : null;
 
     rankings.push({
+      key: normalizePhone(member.phone),
       name: member.name,
       grade: member.seasonLabel || formatSeasonLabel(member.season),
       season: member.season,
       seasonLabel: member.seasonLabel || formatSeasonLabel(member.season),
       attendedCount: attendedCount,
       totalSessions: effectiveSessionCount,
-      attendanceRate: Math.round(attendanceRate),
+      attendanceRate: attendanceRate,
       avgAttendOffsetSeconds: avgAttendOffsetSeconds,
-      avgAttendOffset: avgAttendOffsetFormatted,
-      // 하위 호환: 기존 프런트 필드명 유지
-      avgAttendTimeSeconds: avgAttendOffsetSeconds === null ? 999999 : avgAttendOffsetSeconds,
-      avgAttendTime: avgAttendOffsetFormatted
+      avgAttendOffset: avgAttendOffsetSeconds === null ? '미출석' : formatSignedOffset(avgAttendOffsetSeconds)
     });
   }
 
-  rankings.sort((a, b) => {
-    const aAttended = Number(a.attendedCount || 0);
-    const bAttended = Number(b.attendedCount || 0);
-    if (bAttended !== aAttended) {
-      return bAttended - aAttended;
-    }
+  return rankings;
+}
 
-    const aOffset = a.avgAttendOffsetSeconds === null || a.avgAttendOffsetSeconds === undefined
-      ? Number.POSITIVE_INFINITY
-      : Number(a.avgAttendOffsetSeconds);
-    const bOffset = b.avgAttendOffsetSeconds === null || b.avgAttendOffsetSeconds === undefined
-      ? Number.POSITIVE_INFINITY
-      : Number(b.avgAttendOffsetSeconds);
-    if (aOffset !== bOffset) {
-      return aOffset - bOffset;
-    }
+/**
+ * 특정 시트에서 출석률 순위를 계산합니다.
+ */
+function getAttendanceRankingFromSheet(sheet, seasonAlias) {
+  const values = sheet.getDataRange().getValues();
+  const memberSchema = resolveMemberSchemaFromHeaders(values[0] || []);
+  const now = new Date();
 
-    return String(a.name || '').localeCompare(String(b.name || ''));
-  });
+  const sessions = collectSessionsFromSheet(sheet, { createMissingMeta: false, memberSchema: memberSchema });
+  const closedSessions = sessions.filter(session => session.lateDeadline <= now);
 
-  rankings.forEach((item, index) => {
-    item.rank = index + 1;
-  });
+  if (closedSessions.length === 0) {
+    return { success: true, data: [], seasonAlias: seasonAlias || toSeasonAlias(sheet.getName()) };
+  }
+
+  const rankings = buildAttendanceRankingItems(values, memberSchema, closedSessions, now);
+  rankings.sort(compareAttendanceRankingItems);
+
+  const publicRankings = rankings.slice(0, 10).map((item, index) => ({
+    name: item.name,
+    grade: item.grade,
+    season: item.season,
+    seasonLabel: item.seasonLabel,
+    attendedCount: item.attendedCount,
+    totalSessions: item.totalSessions,
+    attendanceRate: Math.round(item.attendanceRate),
+    avgAttendOffsetSeconds: item.avgAttendOffsetSeconds,
+    avgAttendOffset: item.avgAttendOffset,
+    // 하위 호환: 기존 프런트 필드명 유지
+    avgAttendTimeSeconds: item.avgAttendOffsetSeconds === null ? 999999 : item.avgAttendOffsetSeconds,
+    avgAttendTime: item.avgAttendOffset,
+    rank: index + 1
+  }));
 
   return {
     success: true,
     seasonAlias: seasonAlias || toSeasonAlias(sheet.getName()),
-    data: rankings.slice(0, 10)
+    data: publicRankings
   };
 }

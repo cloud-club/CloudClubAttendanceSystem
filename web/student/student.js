@@ -14,9 +14,22 @@ let studentRankingCache = {
   loadedAt: 0,
   response: null
 };
+let studentRankingRequest = {
+  season: '',
+  promise: null
+};
+let studentRankingCacheGeneration = 0;
+let studentStatusCache = {
+  key: '',
+  loadedAt: 0,
+  response: null
+};
+let studentStatusCacheGeneration = 0;
+let studentMenuReturnFocus = null;
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
 const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
 const STUDENT_RANKING_CACHE_TTL_MS = 10000;
+const STUDENT_STATUS_CACHE_TTL_MS = 10000;
 const ATTENDANCE_PHASE_NOTICE_TEXT = '지각 허용 시간 이후부터는 결석 처리됩니다';
 const STUDENT_ALLOWED_ACTIONS = {
   sheets: true,
@@ -435,6 +448,8 @@ function escapeHtml(value) {
 }
 
 function createConfetti() {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
   const canvas = document.getElementById('confetti-canvas');
   const ctx = canvas.getContext('2d');
   canvas.width = window.innerWidth;
@@ -504,6 +519,82 @@ function buildSeasonParams(extraParams) {
     params.adminToken = studentAdminToken;
   }
   return params;
+}
+
+function normalizeStudentPhone(value) {
+  return String(value || '').replace(/[^0-9]/g, '').slice(0, 11);
+}
+
+function isValidStudentPhone(value) {
+  return /^010[0-9]{8}$/.test(normalizeStudentPhone(value));
+}
+
+function syncStudentPhoneInputs(value, sourceInput) {
+  const phone = normalizeStudentPhone(value);
+  ['phoneInput', 'statusPhoneInput', 'completionPhoneInput'].forEach(id => {
+    const input = document.getElementById(id);
+    if (input && input !== sourceInput) input.value = phone;
+  });
+  return phone;
+}
+
+function saveLastUsedStudentPhone(value) {
+  const phone = syncStudentPhoneInputs(value);
+  try {
+    localStorage.setItem('lastUsedPhone', phone);
+  } catch (error) {
+    return phone;
+  }
+  return phone;
+}
+
+function invalidateStudentStatusCache() {
+  studentStatusCacheGeneration++;
+  studentStatusCache = {
+    key: '',
+    loadedAt: 0,
+    response: null
+  };
+}
+
+function invalidateStudentRankingCache() {
+  studentRankingCacheGeneration++;
+  studentRankingCache = {
+    season: '',
+    loadedAt: 0,
+    response: null
+  };
+  studentRankingRequest = {
+    season: '',
+    promise: null
+  };
+}
+
+async function fetchStudentStatus(phoneNumber) {
+  const phone = normalizeStudentPhone(phoneNumber);
+  const cacheKey = `${normalizeSeasonAlias(currentSeason)}:${phone}`;
+  const now = Date.now();
+  if (
+    studentStatusCache.response
+    && studentStatusCache.key === cacheKey
+    && (now - Number(studentStatusCache.loadedAt || 0)) < STUDENT_STATUS_CACHE_TTL_MS
+  ) {
+    return studentStatusCache.response;
+  }
+
+  const requestGeneration = studentStatusCacheGeneration;
+  const response = await callStudentApi('status', buildSeasonParams({ phone: phone }));
+  if (requestGeneration !== studentStatusCacheGeneration) {
+    return fetchStudentStatus(phone);
+  }
+  if (response && response.success) {
+    studentStatusCache = {
+      key: cacheKey,
+      loadedAt: Date.now(),
+      response: response
+    };
+  }
+  return response;
 }
 
 function toSafeInteger(value, fallbackValue) {
@@ -800,20 +891,36 @@ async function loadRankings() {
     return;
   }
 
-  try {
-    const response = await callStudentApi('ranking', buildSeasonParams());
-    if (response && response.success) {
-      studentRankingCache = {
-        season: seasonAlias,
-        loadedAt: Date.now(),
-        response: response
-      };
-    }
-    displayRankings(response);
-  } catch (error) {
-    if (handleHistoricalAccessError(error)) return;
-    handleRankingError(error);
+  if (studentRankingRequest.promise && studentRankingRequest.season === seasonAlias) {
+    return studentRankingRequest.promise;
   }
+
+  const requestGeneration = studentRankingCacheGeneration;
+  const requestPromise = (async () => {
+    try {
+      const response = await callStudentApi('ranking', buildSeasonParams());
+      if (requestGeneration !== studentRankingCacheGeneration) return;
+      if (response && response.success) {
+        studentRankingCache = {
+          season: seasonAlias,
+          loadedAt: Date.now(),
+          response: response
+        };
+      }
+      displayRankings(response);
+    } catch (error) {
+      if (requestGeneration !== studentRankingCacheGeneration) return;
+      if (handleHistoricalAccessError(error)) return;
+      handleRankingError(error);
+    } finally {
+      if (studentRankingRequest.promise === requestPromise) {
+        studentRankingRequest = { season: '', promise: null };
+      }
+    }
+  })();
+
+  studentRankingRequest = { season: seasonAlias, promise: requestPromise };
+  return requestPromise;
 }
 
 function handleHistoricalAccessError(error) {
@@ -835,6 +942,13 @@ function handleHistoricalAccessError(error) {
 
 function normalizeAndSortRankings(items) {
   const list = Array.isArray(items) ? items.slice() : [];
+  const hasServerRanks = list.length > 0 && list.every(item => Number.isFinite(Number(item && item.rank)) && Number(item.rank) > 0);
+
+  if (hasServerRanks) {
+    return list
+      .sort((a, b) => Number(a.rank) - Number(b.rank))
+      .map(item => Object.assign({}, item, { rank: Math.trunc(Number(item.rank)) }));
+  }
 
   list.sort((a, b) => {
     const aAttended = Number(a && a.attendedCount || 0);
@@ -851,7 +965,7 @@ function normalizeAndSortRankings(items) {
       return aOffset - bOffset;
     }
 
-    return String(a && a.name || '').localeCompare(String(b && b.name || ''), 'ko');
+    return String(a && a.name || '').localeCompare(String(b && b.name || ''));
   });
 
   return list.map((item, index) => Object.assign({}, item, { rank: index + 1 }));
@@ -872,7 +986,8 @@ function displayRankings(response) {
   }
 
   let tableHTML = `
-    <table class="ranking-table">
+    <div class="ranking-table-scroll" role="region" aria-label="출석률 순위 표" tabindex="0">
+      <table class="ranking-table">
       <thead>
         <tr>
           <th>순위</th>
@@ -913,7 +1028,7 @@ function displayRankings(response) {
     `;
   });
 
-  tableHTML += '</tbody></table>';
+  tableHTML += '</tbody></table></div>';
   rankingBoard.innerHTML = tableHTML;
 }
 
@@ -923,15 +1038,118 @@ function handleRankingError(error) {
   console.error('Ranking error:', error);
 }
 
-function openTab(tabName, evt) {
-  document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-  document.querySelectorAll('.tab-button').forEach(tb => tb.classList.remove('active'));
-  document.getElementById(tabName).classList.add('active');
-  evt.currentTarget.classList.add('active');
+function setStudentMenuOpen(open, options) {
+  const menuButton = document.getElementById('studentMenuButton');
+  const drawer = document.getElementById('studentMobileMenu');
+  const backdrop = document.getElementById('studentMenuBackdrop');
+  if (!menuButton || !drawer || !backdrop) return;
 
-  if (tabName === 'status') {
-    loadRankings();
+  const shouldOpen = !!open;
+  const opts = options || {};
+  menuButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  menuButton.setAttribute('aria-label', shouldOpen ? '메뉴 닫기' : '메뉴 열기');
+  drawer.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+  drawer.toggleAttribute('inert', !shouldOpen);
+  drawer.classList.toggle('is-open', shouldOpen);
+  backdrop.classList.toggle('is-open', shouldOpen);
+  document.body.classList.toggle('menu-open', shouldOpen);
+
+  if (shouldOpen) {
+    studentMenuReturnFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : menuButton;
+    const firstButton = drawer.querySelector('.mobile-drawer-button');
+    if (firstButton) firstButton.focus();
+    return;
   }
+
+  if (opts.restoreFocus !== false && studentMenuReturnFocus instanceof HTMLElement) {
+    studentMenuReturnFocus.focus();
+  }
+  studentMenuReturnFocus = null;
+}
+
+function openTab(tabName) {
+  const targetPanel = document.getElementById(tabName);
+  if (!targetPanel || !targetPanel.classList.contains('tab-content')) return;
+
+  document.querySelectorAll('.tab-content').forEach(panel => {
+    const isActive = panel === targetPanel;
+    panel.classList.toggle('active', isActive);
+    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+  });
+
+  document.querySelectorAll('[data-student-tab]').forEach(button => {
+    const isActive = button.getAttribute('data-student-tab') === tabName;
+    button.classList.toggle('active', isActive);
+    if (button.getAttribute('role') === 'tab') {
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      button.setAttribute('tabindex', isActive ? '0' : '-1');
+    }
+  });
+
+  setStudentMenuOpen(false);
+  if (tabName === 'status' && currentSeason) loadRankings();
+}
+
+function initializeStudentNavigation() {
+  const menuButton = document.getElementById('studentMenuButton');
+  const backdrop = document.getElementById('studentMenuBackdrop');
+
+  document.querySelectorAll('[data-student-tab]').forEach(button => {
+    button.addEventListener('click', () => openTab(button.getAttribute('data-student-tab')));
+  });
+
+  if (menuButton) {
+    menuButton.addEventListener('click', () => {
+      setStudentMenuOpen(menuButton.getAttribute('aria-expanded') !== 'true');
+    });
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener('click', () => setStudentMenuOpen(false));
+  }
+
+  document.addEventListener('keydown', event => {
+    const menuIsOpen = menuButton && menuButton.getAttribute('aria-expanded') === 'true';
+    if (event.key === 'Escape' && menuIsOpen) {
+      event.preventDefault();
+      setStudentMenuOpen(false);
+      return;
+    }
+
+    if (event.key === 'Tab' && menuIsOpen) {
+      const drawer = document.getElementById('studentMobileMenu');
+      const focusable = drawer
+        ? Array.from(drawer.querySelectorAll('.mobile-drawer-button')).concat(menuButton)
+        : [];
+      if (!focusable.length) return;
+      const currentIndex = focusable.indexOf(document.activeElement);
+      if (currentIndex < 0) return;
+      event.preventDefault();
+      const offset = event.shiftKey ? -1 : 1;
+      focusable[(currentIndex + offset + focusable.length) % focusable.length].focus();
+    }
+  });
+
+  document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('keydown', event => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      const buttons = Array.from(document.querySelectorAll('.tab-button'));
+      const currentIndex = buttons.indexOf(button);
+      const offset = event.key === 'ArrowRight' ? 1 : -1;
+      const nextButton = buttons[(currentIndex + offset + buttons.length) % buttons.length];
+      openTab(nextButton.getAttribute('data-student-tab'));
+      nextButton.focus();
+    });
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 768 && menuButton && menuButton.getAttribute('aria-expanded') === 'true') {
+      setStudentMenuOpen(false, { restoreFocus: false });
+    }
+  });
 }
 
 function captureAttendanceLocation() {
@@ -979,15 +1197,14 @@ function captureAttendanceLocation() {
 async function doAttendance(event) {
   event.preventDefault();
 
-  const phoneNumber = document.getElementById('phoneInput').value.trim();
+  const phoneNumber = normalizeStudentPhone(document.getElementById('phoneInput').value);
 
   if (!phoneNumber) {
     alert('전화번호를 입력해주세요.');
     return;
   }
 
-  const phoneRegex = /^010[0-9]{8}$/;
-  if (!phoneRegex.test(phoneNumber)) {
+  if (!isValidStudentPhone(phoneNumber)) {
     alert('올바른 전화번호 형식이 아닙니다. (예: 01012345678)');
     return;
   }
@@ -1012,7 +1229,7 @@ async function doAttendance(event) {
     ? '<span class="loader"></span> <span>위치 확인 중...</span>'
     : '<span class="loader"></span> <span>처리 중...</span>';
 
-  localStorage.setItem('lastUsedPhone', phoneNumber);
+  saveLastUsedStudentPhone(phoneNumber);
 
   try {
     let response;
@@ -1042,8 +1259,8 @@ function handleAttendanceResponse(response) {
 
   if (response.success) {
     setAttendanceLocationStatus(response.locationVerified ? '현재 위치 확인이 완료되었습니다.' : '', response.locationVerified ? 'success' : '');
-    studentRankingCache.loadedAt = 0;
-    studentRankingCache.response = null;
+    invalidateStudentRankingCache();
+    invalidateStudentStatusCache();
 
     createConfetti();
 
@@ -1054,7 +1271,13 @@ function handleAttendanceResponse(response) {
     const safeName = escapeHtml(response.name || '회원');
     const safeTime = escapeHtml(response.time || '');
 
-    let message = `✅ <span class="grade-badge">${safeSeasonLabel}</span>${safeName}님, ${safeTime} 출석 완료! ${typeBadge}`;
+    let message = `
+      <div class="attendance-result-headline">
+        <i class="fas fa-circle-check" aria-hidden="true"></i>
+        <span><span class="grade-badge">${safeSeasonLabel}</span>${safeName}님 출석 완료</span>
+      </div>
+      <p class="attendance-result-meta">${safeTime} ${typeBadge}</p>
+    `;
 
     if (response.attendanceInfo) {
       const info = buildLiveAttendanceProgress(response.attendanceInfo);
@@ -1144,27 +1367,26 @@ function handleAttendanceError(error) {
 async function checkAttendanceStatus(event) {
   event.preventDefault();
 
-  const phoneNumber = document.getElementById('statusPhoneInput').value.trim();
+  const phoneNumber = normalizeStudentPhone(document.getElementById('statusPhoneInput').value);
 
   if (!phoneNumber) {
     alert('전화번호를 입력해주세요.');
     return;
   }
 
-  const phoneRegex = /^010[0-9]{8}$/;
-  if (!phoneRegex.test(phoneNumber)) {
+  if (!isValidStudentPhone(phoneNumber)) {
     alert('올바른 전화번호 형식이 아닙니다. (예: 01012345678)');
     return;
   }
 
-  localStorage.setItem('lastUsedPhone', phoneNumber);
+  saveLastUsedStudentPhone(phoneNumber);
 
   const statusResult = document.getElementById('statusResult');
   statusResult.innerHTML = '<div class="loader" style="margin: 32px auto;"></div>';
   statusResult.style.display = 'block';
 
   try {
-    const response = await callStudentApi('status', buildSeasonParams({ phone: phoneNumber }));
+    const response = await fetchStudentStatus(phoneNumber);
     handleStatusResponse(response);
   } catch (error) {
     if (handleHistoricalAccessError(error)) return;
@@ -1172,80 +1394,188 @@ async function checkAttendanceStatus(event) {
   }
 }
 
+function toSafeNumber(value, fallbackValue) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed)) return parsed;
+  const fallback = Number(fallbackValue);
+  return Number.isFinite(fallback) ? fallback : 0;
+}
+
+function formatOneDecimal(value) {
+  return toSafeNumber(value, 0).toFixed(1);
+}
+
+function getStatusCounts(data, completion) {
+  const details = Array.isArray(data && data.details) ? data.details : [];
+  const derived = { attended: 0, late: 0, absent: 0, excused: 0, future: 0 };
+
+  details.forEach(detail => {
+    const type = String((detail && detail.attendanceType) || '');
+    if (type === 'on_time' || type === 'late') derived.attended++;
+    if (type === 'late') derived.late++;
+    if (type === 'absent') derived.absent++;
+    if (type === 'excused') derived.excused++;
+    if (type === 'future') derived.future++;
+  });
+
+  const currentCounts = completion && completion.currentCounts && typeof completion.currentCounts === 'object'
+    ? completion.currentCounts
+    : {};
+  const hasDetails = details.length > 0;
+  const resolveCount = (completionValue, derivedValue, legacyValue) => {
+    if (Number.isFinite(Number(completionValue))) {
+      return Math.max(0, toSafeInteger(completionValue, 0));
+    }
+    return Math.max(0, hasDetails ? derivedValue : toSafeInteger(legacyValue, derivedValue));
+  };
+
+  return {
+    attended: resolveCount(currentCounts.attended ?? completion?.attendedCount, derived.attended, data && data.attended),
+    late: resolveCount(currentCounts.late ?? completion?.lateCount, derived.late, data && data.lateCount),
+    absent: resolveCount(currentCounts.absent ?? completion?.absentCount, derived.absent, data && data.absentCount),
+    excused: resolveCount(currentCounts.excused ?? completion?.excusedCount, derived.excused, data && data.excusedCount),
+    future: resolveCount(currentCounts.future ?? completion?.futureCount, derived.future, data && data.futureCount)
+  };
+}
+
+function renderUpgradeNotice(title) {
+  return `
+    <div class="upgrade-notice">
+      <strong>${escapeHtml(title || '추가 지표 준비 중')}</strong>
+      Apps Script 업데이트 후 확인 가능
+    </div>
+  `;
+}
+
+function renderStatusComparison(comparison, fallbackRate) {
+  if (!comparison || typeof comparison !== 'object') {
+    return `
+      <div class="metric-grid single-metric">
+        <div class="metric-card">
+          <span class="metric-label">내 출석률</span>
+          <span class="metric-value highlight">${formatOneDecimal(fallbackRate)}%</span>
+          <span class="metric-note">현재까지 반영</span>
+        </div>
+      </div>
+      ${renderUpgradeNotice('전체 평균 비교와 전체 순위')}
+    `;
+  }
+
+  const personalRate = toSafeNumber(comparison.personalAttendanceRate, fallbackRate);
+  const cohortRate = toSafeNumber(comparison.cohortAverageAttendanceRate, 0);
+  const difference = toSafeNumber(comparison.differencePercentagePoints, personalRate - cohortRate);
+  const rank = Number.isFinite(Number(comparison.rank)) ? Math.max(1, toSafeInteger(comparison.rank, 1)) : null;
+  const cohortSize = Math.max(0, toSafeInteger(comparison.cohortSize, 0));
+  const topPercentile = Number.isFinite(Number(comparison.topPercentile))
+    ? Math.max(0, toSafeNumber(comparison.topPercentile, 0))
+    : null;
+  const differenceDirection = Math.abs(difference) < 0.05
+    ? '평균과 같아요'
+    : `평균보다 ${formatOneDecimal(Math.abs(difference))}%p ${difference > 0 ? '높아요' : '낮아요'}`;
+  const rankText = rank && cohortSize ? `${rank}위` : '-';
+  const percentileText = topPercentile === null ? '전체 순위 기준' : `상위 ${formatOneDecimal(topPercentile)}%`;
+
+  return `
+    <div class="metric-grid">
+      <div class="metric-card">
+        <span class="metric-label">내 출석률</span>
+        <span class="metric-value highlight">${formatOneDecimal(personalRate)}%</span>
+        <span class="metric-note">현재까지 반영</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">전체 평균</span>
+        <span class="metric-value">${formatOneDecimal(cohortRate)}%</span>
+        <span class="metric-note">전체 사용자 기준</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">전체 순위</span>
+        <span class="metric-value">${rankText}</span>
+        <span class="metric-note">${escapeHtml(percentileText)} · ${cohortSize}명</span>
+      </div>
+    </div>
+    <div class="comparison-summary">
+      <i class="fas fa-arrow-trend-up" aria-hidden="true"></i>
+      <span><strong>${escapeHtml(differenceDirection)}</strong><br>차이는 퍼센트포인트(%p) 기준입니다.</span>
+    </div>
+  `;
+}
+
+function renderAttendanceDetails(details) {
+  const list = Array.isArray(details) ? details : [];
+  if (!list.length) return '<p class="info-text">표시할 회차별 출석 내역이 없습니다.</p>';
+
+  return list.map(detail => {
+    const type = String((detail && detail.attendanceType) || 'absent');
+    const statusByType = {
+      future: { css: 'future', icon: 'fa-clock', text: '예정' },
+      on_time: { css: 'present', icon: 'fa-check-circle', text: '출석' },
+      late: { css: 'late', icon: 'fa-hourglass-half', text: '지각' },
+      excused: { css: 'excused', icon: 'fa-notes-medical', text: '유고' },
+      absent: { css: 'absent', icon: 'fa-times-circle', text: '결석' }
+    };
+    const status = statusByType[type] || statusByType.absent;
+    const itemClass = type === 'future' ? 'future' : '';
+    const date = escapeHtml(String((detail && (detail.date || detail.sessionKey)) || '-'));
+
+    return `
+      <div class="attendance-item ${itemClass}">
+        <div class="attendance-date">${date}</div>
+        <div class="attendance-status ${status.css}">
+          <i class="fas ${status.icon}" aria-hidden="true"></i>
+          <span>${status.text}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function handleStatusResponse(response) {
   const statusResult = document.getElementById('statusResult');
 
   if (response.success) {
-    const data = response.data;
-    const liveProgress = buildStatusProgressFromDetails(data.details);
-    let detailsHTML = '';
-
-    data.details.forEach(detail => {
-      let statusClass;
-      let statusIcon;
-      let statusText;
-
-      if (detail.attendanceType === 'future') {
-        statusClass = 'future';
-        statusIcon = '<i class="fas fa-clock"></i>';
-        statusText = '예정';
-      } else if (detail.attendanceType === 'on_time') {
-        statusClass = 'present';
-        statusIcon = '<i class="fas fa-check-circle"></i>';
-        statusText = '출석';
-      } else if (detail.attendanceType === 'late') {
-        statusClass = 'late';
-        statusIcon = '<i class="fas fa-hourglass-half"></i>';
-        statusText = '지각';
-      } else if (detail.attendanceType === 'excused') {
-        statusClass = 'excused';
-        statusIcon = '<i class="fas fa-notes-medical"></i>';
-        statusText = '유고';
-      } else {
-        statusClass = 'absent';
-        statusIcon = '<i class="fas fa-times-circle"></i>';
-        statusText = '결석';
-      }
-
-      const itemClass = detail.attendanceType === 'future' ? 'future' : '';
-
-      detailsHTML += `
-        <div class="attendance-item ${itemClass}">
-          <div class="attendance-date">${detail.date}</div>
-          <div class="attendance-status ${statusClass}">
-            ${statusIcon}
-            <span>${statusText}</span>
-          </div>
-        </div>
-      `;
-    });
+    const data = response.data || {};
+    const details = Array.isArray(data.details) ? data.details : [];
+    const liveProgress = buildStatusProgressFromDetails(details);
+    const insights = data.insights && typeof data.insights === 'object' ? data.insights : {};
+    const comparison = insights.comparison;
+    const completion = insights.completion;
+    const counts = getStatusCounts(data, completion);
+    const displayRate = comparison && Number.isFinite(Number(comparison.personalAttendanceRate))
+      ? toSafeNumber(comparison.personalAttendanceRate, liveProgress.rate)
+      : toSafeNumber(data.rate, liveProgress.rate);
+    const safeSeasonLabel = escapeHtml(String(data.seasonLabel || data.grade || '-'));
+    const safeName = escapeHtml(String(data.name || '회원'));
 
     statusResult.innerHTML = `
       <div class="card">
-        <div class="attendance-info">
-          <h3><span class="grade-badge">${data.seasonLabel || data.grade || '-'}</span>${data.name}님 출석 현황</h3>
-          <div class="attendance-stats">
-            <div class="stat-item">
-              <div class="stat-label">출석 횟수</div>
-              <div class="stat-value">${liveProgress.attended}/${liveProgress.currentSession}</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">출석률</div>
-              <div class="stat-value highlight">${liveProgress.rate}%</div>
-            </div>
+        <h3 class="identity-heading"><span class="grade-badge">${safeSeasonLabel}</span>${safeName}님 출석 현황</h3>
+        ${renderStatusComparison(comparison, displayRate)}
+        <div class="metric-grid count-grid">
+          <div class="metric-card">
+            <span class="metric-label">출석</span>
+            <span class="metric-value">${counts.attended}회</span>
           </div>
-          <p class="info-text" style="margin-top: 12px;">
-            현재까지 ${liveProgress.currentSession}회차 중 ${liveProgress.attended}회 출석
-          </p>
+          <div class="metric-card">
+            <span class="metric-label">지각</span>
+            <span class="metric-value">${counts.late}회</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">결석</span>
+            <span class="metric-value">${counts.absent}회</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">유고</span>
+            <span class="metric-value">${counts.excused}회</span>
+          </div>
         </div>
-        <div class="attendance-details">
-          <h4 style="color: #e2e8f0; margin-bottom: 16px; font-size: 18px;">출석 상세 내역</h4>
-          ${detailsHTML}
-        </div>
+        <details class="status-details">
+          <summary>회차별 출석 상세</summary>
+          <div class="attendance-details">${renderAttendanceDetails(details)}</div>
+        </details>
       </div>
     `;
   } else {
-    statusResult.innerHTML = `<div class="error">❌ ${response.message}</div>`;
+    statusResult.innerHTML = `<div class="error">❌ ${escapeHtml(response.message || '출석 현황을 불러오지 못했습니다.')}</div>`;
   }
 
   statusResult.style.display = 'block';
@@ -1253,8 +1583,192 @@ function handleStatusResponse(response) {
 
 function handleStatusError(error) {
   const statusResult = document.getElementById('statusResult');
-  statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${getDisplayErrorMessage(error, '알 수 없는 오류')}</div>`;
+  statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${escapeHtml(getDisplayErrorMessage(error, '알 수 없는 오류'))}</div>`;
   statusResult.style.display = 'block';
+}
+
+function getRequiredSessions(completion) {
+  if (Array.isArray(completion && completion.requiredSessions)) return completion.requiredSessions;
+  const requiredCheck = completion && completion.requiredCheck;
+  return requiredCheck && Array.isArray(requiredCheck.details) ? requiredCheck.details : [];
+}
+
+function renderRequiredSessionCriteria(completion) {
+  const sessions = getRequiredSessions(completion);
+  if (!sessions.length) {
+    return `
+      <li class="criteria-item ${completion.requiredSessionsOk ? 'is-satisfied' : (completion.requiredSessionsPossible ? '' : 'is-blocked')}">
+        <i class="fas ${completion.requiredSessionsOk ? 'fa-circle-check' : 'fa-calendar-check'}" aria-hidden="true"></i>
+        <div>
+          <strong>필수 회차 참여</strong>
+          <span>${completion.requiredSessionsOk ? '필수 회차 조건을 충족했습니다.' : (completion.requiredSessionsPossible ? '남은 필수 회차에 참여하면 충족할 수 있습니다.' : '필수 회차 조건을 충족하기 어렵습니다.')}</span>
+        </div>
+      </li>
+    `;
+  }
+
+  const statusText = {
+    on_time: '출석',
+    late: '지각',
+    excused: '유고',
+    absent: '결석',
+    future: '예정'
+  };
+
+  return sessions.map((session, index) => {
+    const satisfied = !!session.satisfied;
+    const possible = !!session.possible;
+    const css = satisfied ? 'is-satisfied' : (possible ? '' : 'is-blocked');
+    const icon = satisfied ? 'fa-circle-check' : (possible ? 'fa-clock' : 'fa-circle-xmark');
+    const position = String(session.position || '');
+    const label = position === 'first'
+      ? '첫 회차'
+      : (position === 'last' ? '마지막 회차' : `필수 회차 ${index + 1}`);
+    const date = String(session.date || session.sessionKey || '').trim();
+    const state = statusText[String(session.status || '')] || (possible ? '참여 가능' : '미충족');
+    const detail = date ? `${date} · ${state}` : state;
+
+    return `
+      <li class="criteria-item ${css}">
+        <i class="fas ${icon}" aria-hidden="true"></i>
+        <div>
+          <strong>${escapeHtml(label)}</strong>
+          <span>${escapeHtml(detail)}</span>
+        </div>
+      </li>
+    `;
+  }).join('');
+}
+
+function renderCompletionAssessment(data, completion) {
+  const safeSeasonLabel = escapeHtml(String(data.seasonLabel || data.grade || '-'));
+  const safeName = escapeHtml(String(data.name || '회원'));
+  const requiredAttendanceCount = Math.max(0, toSafeInteger(completion.requiredAttendanceCount, 0));
+  const attendedCount = Math.max(0, toSafeInteger(completion.attendedCount, data.attended));
+  const lateCount = Math.max(0, toSafeInteger(completion.lateCount, data.lateCount));
+  const absentCount = Math.max(0, toSafeInteger(completion.absentCount, data.absentCount));
+  const excusedCount = Math.max(0, toSafeInteger(completion.excusedCount, data.excusedCount));
+  const remainingSessions = Math.max(0, toSafeInteger(completion.remainingSessions, completion.futureCount));
+  const minimumFutureParticipation = Math.max(0, toSafeInteger(completion.minimumFutureParticipation, 0));
+  const lateRatio = Math.max(1, toSafeInteger(completion.lateToAbsenceRatio, 1));
+  const absenceEquivalent = Math.max(0, toSafeNumber(completion.absenceEquivalent, absentCount));
+  const absenceEquivalentRate = Math.max(0, toSafeNumber(completion.absenceEquivalentRate, 0));
+  const maxAbsenceEquivalent = Math.max(0, toSafeNumber(completion.maxAbsenceEquivalent, 0));
+  const remainingAllowance = Math.max(0, toSafeNumber(completion.remainingAbsenceAllowance, 0));
+  const isFinal = !!completion.isFinal;
+  const isEligible = isFinal ? !!completion.isGraduated : !!completion.isGraduationPossible;
+  const summaryTitle = isFinal
+    ? (isEligible ? '최종 수료 조건을 충족했습니다' : '최종 수료 조건을 충족하지 못했습니다')
+    : (isEligible ? '현재 기준 수료 가능합니다' : '현재 기준 수료가 어렵습니다');
+  const summaryDetail = isFinal
+    ? '모든 예정 회차가 종료된 최종 판정입니다.'
+    : (isEligible
+      ? `남은 ${remainingSessions}회 중 최소 ${minimumFutureParticipation}회 참여가 필요합니다.`
+      : '아래 미충족 조건과 남은 참여 가능 횟수를 확인해 주세요.');
+
+  return `
+    <div class="card">
+      <h3 class="identity-heading"><span class="grade-badge">${safeSeasonLabel}</span>${safeName}님 수료 조건</h3>
+      <div class="completion-summary ${isEligible ? 'is-positive' : 'is-negative'}">
+        <i class="fas ${isEligible ? 'fa-circle-check' : 'fa-circle-exclamation'}" aria-hidden="true"></i>
+        <span><strong>${summaryTitle}</strong><br>${summaryDetail}</span>
+      </div>
+      <div class="metric-grid count-grid">
+        <div class="metric-card">
+          <span class="metric-label">수료 필요 출석</span>
+          <span class="metric-value">${requiredAttendanceCount}회</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">현재 출석</span>
+          <span class="metric-value highlight">${attendedCount}회</span>
+          <span class="metric-note">유고 ${excusedCount}회</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">남은 수업</span>
+          <span class="metric-value">${remainingSessions}회</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">최소 참여 필요</span>
+          <span class="metric-value">${minimumFutureParticipation}회</span>
+        </div>
+      </div>
+      <div class="metric-grid count-grid">
+        <div class="metric-card">
+          <span class="metric-label">현재 지각</span>
+          <span class="metric-value">${lateCount}회</span>
+          <span class="metric-note">지각 ${lateRatio}회 = 결석 1회</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">환산 결석</span>
+          <span class="metric-value">${formatOneDecimal(absenceEquivalent)}회</span>
+          <span class="metric-note">결석 ${absentCount}회 포함</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">현재 환산 결석률</span>
+          <span class="metric-value">${formatOneDecimal(absenceEquivalentRate)}%</span>
+          <span class="metric-note">지각을 결석으로 환산</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">남은 결석 여유</span>
+          <span class="metric-value">${formatOneDecimal(remainingAllowance)}회</span>
+          <span class="metric-note">최대 ${formatOneDecimal(maxAbsenceEquivalent)}회</span>
+        </div>
+      </div>
+      <ul class="criteria-list">
+        <li class="criteria-item ${completion.meetsAttendanceCount ? 'is-satisfied' : (completion.attendancePossible ? '' : 'is-blocked')}">
+          <i class="fas ${completion.meetsAttendanceCount ? 'fa-circle-check' : 'fa-user-check'}" aria-hidden="true"></i>
+          <div>
+            <strong>출석 횟수 기준</strong>
+            <span>${attendedCount}/${requiredAttendanceCount}회 · ${completion.meetsAttendanceCount ? '충족' : (completion.attendancePossible ? '남은 회차로 충족 가능' : '충족 불가')}</span>
+          </div>
+        </li>
+        <li class="criteria-item ${completion.meetsAbsenceThreshold ? 'is-satisfied' : 'is-blocked'}">
+          <i class="fas ${completion.meetsAbsenceThreshold ? 'fa-circle-check' : 'fa-circle-xmark'}" aria-hidden="true"></i>
+          <div>
+            <strong>환산 결석 기준</strong>
+            <span>${formatOneDecimal(absenceEquivalent)}/${formatOneDecimal(maxAbsenceEquivalent)}회 · ${completion.meetsAbsenceThreshold ? '충족' : '초과'}</span>
+          </div>
+        </li>
+        ${renderRequiredSessionCriteria(completion)}
+      </ul>
+    </div>
+  `;
+}
+
+async function checkCompletionStatus(event) {
+  event.preventDefault();
+  const phoneNumber = normalizeStudentPhone(document.getElementById('completionPhoneInput').value);
+  if (!phoneNumber) {
+    alert('전화번호를 입력해주세요.');
+    return;
+  }
+  if (!isValidStudentPhone(phoneNumber)) {
+    alert('올바른 전화번호 형식이 아닙니다. (예: 01012345678)');
+    return;
+  }
+
+  saveLastUsedStudentPhone(phoneNumber);
+  const completionResult = document.getElementById('completionResult');
+  completionResult.innerHTML = '<div class="loader" style="margin: 32px auto;"></div>';
+
+  try {
+    const response = await fetchStudentStatus(phoneNumber);
+    if (!response || !response.success) {
+      completionResult.innerHTML = `<div class="error">❌ ${escapeHtml((response && response.message) || '수료 조건을 불러오지 못했습니다.')}</div>`;
+      return;
+    }
+
+    const data = response.data || {};
+    const insights = data.insights && typeof data.insights === 'object' ? data.insights : {};
+    if (!insights.completion || typeof insights.completion !== 'object') {
+      completionResult.innerHTML = renderUpgradeNotice('수료 조건과 가능 여부');
+      return;
+    }
+    completionResult.innerHTML = renderCompletionAssessment(data, insights.completion);
+  } catch (error) {
+    if (handleHistoricalAccessError(error)) return;
+    completionResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${escapeHtml(getDisplayErrorMessage(error, '알 수 없는 오류'))}</div>`;
+  }
 }
 
 function showSeasonWarning(message) {
@@ -1298,26 +1812,31 @@ async function initializeStudentPage() {
   if (studentPageInitialized) return;
   studentPageInitialized = true;
 
-  const savedPhone = localStorage.getItem('lastUsedPhone');
-  if (savedPhone) {
-    document.getElementById('phoneInput').value = savedPhone;
-    document.getElementById('statusPhoneInput').value = savedPhone;
+  let savedPhone = '';
+  try {
+    savedPhone = normalizeStudentPhone(localStorage.getItem('lastUsedPhone'));
+  } catch (error) {
+    savedPhone = '';
   }
+  if (savedPhone) syncStudentPhoneInputs(savedPhone);
 
-  document.getElementById('phoneInput').addEventListener('click', function () {
-    this.focus();
-  });
-  document.getElementById('statusPhoneInput').addEventListener('click', function () {
-    this.focus();
+  ['phoneInput', 'statusPhoneInput', 'completionPhoneInput'].forEach(id => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener('click', function () {
+      this.focus();
+    });
+    input.addEventListener('input', function () {
+      this.value = normalizeStudentPhone(this.value);
+      syncStudentPhoneInputs(this.value, this);
+    });
   });
 
-  await Promise.all([
-    checkAttendanceSession(),
-    loadRankings()
-  ]);
+  await checkAttendanceSession();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initializeStudentNavigation();
   const seasonResult = await ensureInitialSeasonAlias();
   updateSeasonInfoBadge();
 
@@ -1337,4 +1856,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   await initializeStudentPage();
+  if (document.getElementById('status')?.classList.contains('active')) {
+    await loadRankings();
+  }
 });
