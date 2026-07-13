@@ -33,7 +33,7 @@ const ADMIN_RECORDS_CACHE_TTL_SECONDS = 300;
 const SEASON_SHEET_META_CACHE_KEY = 'season_sheet_meta_v1';
 const SEASON_SHEET_META_CACHE_TTL_SECONDS = 300;
 const GOOGLE_TOKENINFO_ENDPOINT = 'https://oauth2.googleapis.com/tokeninfo?id_token=';
-const API_VERSION = '2026.07.13-v6.0';
+const API_VERSION = '2026.07.14-v6.1';
 const ATTENDANCE_DASHBOARD_CACHE_TTL_SECONDS = 90;
 const ATTENDANCE_DASHBOARD_LIVE_CACHE_TTL_SECONDS = 15;
 const ATTENDANCE_DASHBOARD_CACHE_MAX_BYTES = 90000;
@@ -226,10 +226,10 @@ const ACTION_ACCESS_LEVELS = Object.freeze({
   adminUsersUpsert: ACTION_ACCESS_SUPER,
   adminUsersDelete: ACTION_ACCESS_SUPER,
   setActiveSheet: ACTION_ACCESS_SUPER,
-  variablesGet: ACTION_ACCESS_SUPER,
-  variablesUpdate: ACTION_ACCESS_SUPER,
-  variablesNormalize: ACTION_ACCESS_SUPER,
-  variablesResetTemplate: ACTION_ACCESS_SUPER,
+  variablesGet: ACTION_ACCESS_ADMIN,
+  variablesUpdate: ACTION_ACCESS_ADMIN,
+  variablesNormalize: ACTION_ACCESS_ADMIN,
+  variablesResetTemplate: ACTION_ACCESS_ADMIN,
   seasonImportBegin: ACTION_ACCESS_SUPER,
   seasonImportChunk: ACTION_ACCESS_SUPER,
   seasonImportDiff: ACTION_ACCESS_SUPER,

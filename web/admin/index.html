@@ -3777,7 +3777,7 @@
         <i class="fas fa-qrcode"></i>
         <span>QR코드 관리</span>
       </button>
-      <button class="tab-button tab-super-only" data-super-only="true" onclick="openTab('variables', event)">
+      <button class="tab-button" onclick="openTab('variables', event)">
         <i class="fas fa-sliders-h"></i>
         <span>변수명 관리</span>
       </button>
@@ -4509,7 +4509,7 @@
           <i class="fas fa-cogs card-icon"></i>
           <h2 class="card-title">variable 시트 변수 편집</h2>
         </div>
-        <p class="info-text"><code>key | value | type | description | editable | updated_at | applies_to | applies_when | used_in</code> 단일 테이블(A:I) 기준입니다. 운영자는 <strong>value만 수정</strong>하며, 실제 사용처는 탭 기준으로 표시됩니다.</p>
+        <p class="info-text"><code>key | value | type | description | editable | updated_at | applies_to | applies_when | used_in</code> 단일 테이블(A:I) 기준입니다. 운영자는 <strong>value만 수정</strong>하며, 변경값은 향후 회차의 전역 운영 정책에 적용됩니다. 저장 후 수료 판정 등 실제 사용처를 다시 확인하세요.</p>
         <div id="variablesCompatibilityNotice" class="compat-notice">
           <div><strong>백엔드 버전 확인 중...</strong></div>
         </div>

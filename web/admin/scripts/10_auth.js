@@ -501,7 +501,6 @@ async function refreshSeasonData() {
   }
 
   if (activeTab === 'variables') {
-    if (!isSuperAdmin()) return;
     await loadVariables();
     return;
   }

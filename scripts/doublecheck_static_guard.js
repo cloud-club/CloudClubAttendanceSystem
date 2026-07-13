@@ -70,13 +70,70 @@ function checkSuperOnlyTabsInvariance() {
     throw new Error('SUPER_ONLY_TABS 선언을 찾지 못했습니다.');
   }
   const keys = parseObjectKeys(match[1]).sort();
-  const expected = ['adminUsers', 'seasonImport', 'variables'];
+  const expected = ['adminUsers', 'seasonImport'];
   if (JSON.stringify(keys) !== JSON.stringify(expected)) {
     throw new Error(`SUPER_ONLY_TABS 불일치: expected=${expected.join(',')} actual=${keys.join(',')}`);
   }
   if (keys.includes('fortune')) {
     throw new Error('fortune 탭이 SUPER_ONLY_TABS에 포함되어 있습니다.');
   }
+}
+
+function checkVariableManagementAccessPolicy() {
+  const accessContent = readFile('Appsscript/01_constants_access.gs');
+  const routerContent = readFile('Appsscript/00_entry_api.gs');
+  const authContent = readFile('web/admin/scripts/10_auth.js');
+  const variablesContent = readFile('web/admin/scripts/24_variables.js');
+  const indexHtml = readFile('web/admin/index.html');
+  const variableActions = [
+    'variablesGet',
+    'variablesUpdate',
+    'variablesNormalize',
+    'variablesResetTemplate'
+  ];
+
+  variableActions.forEach((action) => {
+    if (!accessContent.includes(`${action}: ACTION_ACCESS_ADMIN`)) {
+      throw new Error(`일반 운영진 변수 관리 권한 누락: ${action}`);
+    }
+  });
+
+  const variableCases = routerContent.match(/case 'variablesGet':[\s\S]*?case 'scheduleList':/) || [];
+  assertNotRegex(
+    variableCases[0] || '',
+    /ensureSuper\(\)/,
+    'variables 라우터 case에 Super 전용 중복 가드가 남아 있습니다.'
+  );
+  assertRegex(
+    authContent,
+    /if \(activeTab === 'variables'\)\s*\{\s*await loadVariables\(\);\s*return;\s*\}/,
+    'season_admin의 variables 탭 새로고침 경로가 열려 있지 않습니다.'
+  );
+  assertRegex(
+    variablesContent,
+    /const required = \['apiInfo', 'variablesGet', 'variablesUpdate', 'variablesNormalize', 'variablesResetTemplate'\];/,
+    '변수 API 호환성 검사에 variablesUpdate가 포함되어 있지 않습니다.'
+  );
+  assertRegex(
+    variablesContent,
+    /variableActions\.every\(action => accessLevelByAction\[action\] === 'admin'\)/,
+    'season_admin 변수 탭이 apiInfo의 admin 접근 레벨을 확인하지 않습니다.'
+  );
+  assertNotRegex(
+    indexHtml,
+    /<button[^>]*data-super-only="true"[^>]*openTab\('variables', event\)/,
+    'variables 탭 버튼이 Super 전용으로 표시되어 있습니다.'
+  );
+  assertRegex(
+    indexHtml,
+    /<button[^>]*data-super-only="true"[^>]*openTab\('seasonImport', event\)/,
+    'seasonImport 탭의 Super 전용 표시가 누락되었습니다.'
+  );
+  assertRegex(
+    indexHtml,
+    /<button[^>]*data-super-only="true"[^>]*openTab\('adminUsers', event\)/,
+    'adminUsers 탭의 Super 전용 표시가 누락되었습니다.'
+  );
 }
 
 function checkFortuneTabWiring() {
@@ -259,6 +316,7 @@ function checkSyntax() {
     'web/admin/scripts/22_location.js',
     'web/admin/scripts/22_schedule.js',
     'web/admin/scripts/23_import.js',
+    'web/admin/scripts/24_variables.js',
     'web/admin/scripts/28_fortune.js',
     'web/admin/scripts/99_compat_handlers.js',
     'web/student/student.js'
@@ -383,6 +441,7 @@ function checkPagesEnvInjectionExitStatus() {
 const checks = [
   ['API 라우터 불변성', checkApiRouterInvariance],
   ['SUPER_ONLY_TABS 불변성', checkSuperOnlyTabsInvariance],
+  ['일반 운영진 변수 관리 권한', checkVariableManagementAccessPolicy],
   ['운세 탭 wiring', checkFortuneTabWiring],
   ['openTab/refreshSeasonData 분기', checkFortuneBranchInOpenTabAndRefresh],
   ['호환 핸들러 등록', checkCompatHandlers],

@@ -118,7 +118,6 @@ const ADMIN_TOKEN_STORAGE_KEY = 'cc_admin_token';
 const ADMIN_ROLE_SUPER = 'super';
 const ADMIN_ROLE_SEASON_ADMIN = 'season_admin';
 const SUPER_ONLY_TABS = {
-  variables: true,
   seasonImport: true,
   adminUsers: true
 };

@@ -106,7 +106,7 @@ function setVariableTabBlocked(blocked, message, info) {
 }
 
 function hasRequiredVariableActions(supportedActions) {
-  const required = ['apiInfo', 'variablesGet', 'variablesNormalize', 'variablesResetTemplate'];
+  const required = ['apiInfo', 'variablesGet', 'variablesUpdate', 'variablesNormalize', 'variablesResetTemplate'];
   const actionSet = {};
   (supportedActions || []).forEach(action => {
     actionSet[String(action || '').trim()] = true;
@@ -130,12 +130,25 @@ async function ensureVariableApiCompatibility() {
 
     const supportedActions = Array.isArray(info.supportedActions) ? info.supportedActions : [];
     const compatible = hasRequiredVariableActions(supportedActions);
+    const variableActions = ['variablesGet', 'variablesUpdate', 'variablesNormalize', 'variablesResetTemplate'];
+    const accessLevelByAction = info.accessLevelByAction || {};
+    const accessCompatible = isSuperAdmin()
+      || variableActions.every(action => accessLevelByAction[action] === 'admin');
     variableApiInfo = info;
 
     if (!compatible) {
       setVariableTabBlocked(
         true,
         'variablesGet/variablesNormalize/variablesResetTemplate 미지원 백엔드입니다. Apps Script와 GitHub Pages를 최신으로 재배포하세요.',
+        info
+      );
+      return false;
+    }
+
+    if (!accessCompatible) {
+      setVariableTabBlocked(
+        true,
+        '일반 운영진 변수 관리 권한이 아직 Apps Script에 배포되지 않았습니다. Apps Script를 최신 버전으로 재배포하세요.',
         info
       );
       return false;

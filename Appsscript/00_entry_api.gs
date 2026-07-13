@@ -283,24 +283,20 @@ function handleApiRequest(params) {
       }
 
       case 'variablesGet':
-        ensureSuper();
         data = getVariablesPayload();
         break;
 
       case 'variablesUpdate': {
-        ensureSuper();
         const items = parseItemsJson(params.itemsJson || params.items || '[]');
         data = updateVariables(items);
         break;
       }
 
       case 'variablesNormalize':
-        ensureSuper();
         data = normalizeVariablesPayload();
         break;
 
       case 'variablesResetTemplate':
-        ensureSuper();
         data = resetVariablesTemplate(params.mode || 'preserve');
         break;
 

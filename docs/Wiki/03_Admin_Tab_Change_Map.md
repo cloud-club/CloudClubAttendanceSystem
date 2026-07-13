@@ -103,8 +103,8 @@ flowchart LR
 ## 권한 체크 포인트
 권한 경계는 기능 성공 여부만큼 중요합니다. 수정 중에는 아래 조건을 항상 함께 확인해야 운영 회귀를 막을 수 있습니다.
 
-- Super 전용 탭: `변수명 관리`, `시즌 생성/업로드`, `관리자 관리`
-- 운세 탭: `admin` 접근 가능, Super 전용 아님 (`season_admin` 포함)
+- Admin 접근 가능 탭: `변수명 관리`, `운세 관리` (`season_admin` 포함)
+- Super 전용 탭: `시즌 생성/업로드`, `관리자 관리`
 - 공통 인증 가드: `authGoogleLogin`, `authSession`, `ACTION_ACCESS_LEVELS`
 - 시즌 접근 가드: `requireSeasonAccess`
 - 호환성 가드: `apiInfo.supportedActions`에 `fortune*` 액션 존재 여부를 탭 진입 전에 확인

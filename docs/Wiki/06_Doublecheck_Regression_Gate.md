@@ -46,7 +46,7 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_static_guard.j
 
 검증 항목:
 1. 기존 API 라우터 핵심 case 경로 존재
-2. `SUPER_ONLY_TABS` 불변(`variables`, `seasonImport`, `adminUsers`)
+2. `SUPER_ONLY_TABS` 불변(`seasonImport`, `adminUsers`) 및 variables 일반 운영진 접근 유지
 3. 운세 탭 삽입 위치/스크립트 로딩/핸들러 연결
 4. `ACTION_ACCESS_LEVELS` fortune 액션이 admin 레벨
 5. 학생 운세 escape 적용
@@ -132,7 +132,7 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 5. [ ] 새 일정 모달 안의 날짜 필드/달력 버튼으로 날짜를 자연스럽게 바꿀 수 있다
 6. [ ] 목록 `수정` 버튼이 같은 일정 모달을 편집 모드로 연다
 7. [ ] 삭제는 편집 모달 안에서만 노출되고, 별도 삭제/초기화 버튼은 사라진다
-7. [ ] Super 전용 탭 접근 차단 유지
+7. [ ] 변수명 관리 탭 접근/조회/저장/원복 정상, seasonImport/adminUsers Super 전용 차단 유지
 8. [ ] 운세 탭 접근/검증/저장/다운로드 정상
 9. [ ] 출석현황 탭에서 멤버 미선택 시 상단 3번째 차트가 전체 평균으로 보임
 10. [ ] 멤버 1명 선택 시 상단 3번째 차트가 개인 추이처럼 해석 가능함

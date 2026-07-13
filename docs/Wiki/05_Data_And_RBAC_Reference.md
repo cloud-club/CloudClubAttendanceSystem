@@ -55,15 +55,17 @@ flowchart LR
 역할 모델은 간단하지만, 각 역할의 책임이 분명해야 운영이 안정됩니다. 아래 정의는 운영 안내, 코드 검증, 장애 분석에서 공통으로 사용하는 기준입니다.
 
 - `user`: 공개 액션만 허용
-- `admin`(`season_admin`): 시즌 범위 내 관리자 액션 허용
-- `super`: 전체 시즌 + 계정/변수/업로드 관리 허용
+- `admin`(`season_admin`): 시즌 범위 내 관리자 액션과 전역 운영 변수 관리 허용
+- `super`: 전체 시즌 + 계정/업로드 관리 허용
 
 ## 액션 레벨 기준 (정본: ACTION_ACCESS_LEVELS)
 문서에 있는 권한 그룹은 설명용 요약이고, 최종 판정 기준은 항상 `Appsscript/01_constants_access.gs`의 `ACTION_ACCESS_LEVELS`입니다. 권한 이슈가 발생하면 문서보다 코드 상수를 우선 확인합니다.
 
 - Public: `session`, `attendance`, `attendanceLocation`(POST), `locationResult`, `status`, `ranking`, `latestSeason`, `authGoogleConfig`, `authGoogleLogin`
-- Admin: `attendanceDashboardSummary`, `schedule*`, `manualApprove*`, `excusedSet`, `graduationReport`, `sheetSchemaAudit`, `fortuneVersionList`, `fortuneVersionGet`, `fortuneUploadBegin`, `fortuneUploadChunk`, `fortuneUploadFinalize`, `fortuneUploadAbort`
-- Super: `adminUsers*`, `variables*`, `seasonImport*`, `setActiveSheet`
+- Admin: `attendanceDashboardSummary`, `schedule*`, `manualApprove*`, `excusedSet`, `graduationReport`, `sheetSchemaAudit`, `variables*`, `fortuneVersionList`, `fortuneVersionGet`, `fortuneUploadBegin`, `fortuneUploadChunk`, `fortuneUploadFinalize`, `fortuneUploadAbort`
+- Super: `adminUsers*`, `seasonImport*`, `setActiveSheet`
+
+`variables*`는 `season_admin`에게도 허용되지만 `variable` 시트 자체는 시즌별이 아닌 전역 정책 저장소입니다. 일반 운영진이 변경한 값도 향후 회차 전반에 적용되므로 저장 후 관련 수료·출석 판정 결과를 반드시 재확인합니다.
 
 ## 변경 영향도 (공개 API 불변 영역 vs 시즌업데이트 리스크 영역)
 정책 변경은 단일 파일 수정처럼 보여도 여러 경로에 파급됩니다. 아래 영향도를 먼저 보고 변경 범위를 확정합니다.
