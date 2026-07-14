@@ -27,11 +27,14 @@ let studentStatusCache = {
 let studentStatusCacheGeneration = 0;
 let studentStatusRequestSequence = 0;
 let studentStatusViewGeneration = 0;
+let studentCompletionRequestGeneration = 0;
+let studentCompletionRequestKey = '';
 let studentStatusDetails = [];
 let studentAttendanceDetailTrigger = null;
 let studentAttendanceDetailPreviousBodyOverflow = null;
 let studentAttendanceDetailInitialized = false;
 let studentAttendanceDetailFocusGeneration = 0;
+let studentAttendanceDetailFocusTimer = null;
 let studentMenuReturnFocus = null;
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
 const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
@@ -565,6 +568,11 @@ function invalidateStudentStatusCache() {
     loadedAt: 0,
     response: null
   };
+}
+
+function invalidateStudentCompletionRequest() {
+  studentCompletionRequestGeneration++;
+  studentCompletionRequestKey = '';
 }
 
 function invalidateStudentRankingCache() {
@@ -1103,6 +1111,7 @@ function openTab(tabName) {
 
   setStudentMenuOpen(false);
   if (tabName !== 'status') resetStudentStatusResult();
+  if (tabName !== 'completion') invalidateStudentCompletionRequest();
   if (tabName === 'status' && currentSeason) loadRankings();
 }
 
@@ -1564,11 +1573,13 @@ function getStudentAttendanceStatusMeta(type) {
 
 function sanitizeStudentAttendanceDetails(details) {
   const allowedTypes = ['future', 'on_time', 'late', 'excused', 'absent'];
+  const reasonAllowedTypes = ['on_time', 'late', 'excused', 'absent'];
   const list = Array.isArray(details) ? details : [];
 
   return list.map(detail => {
     const source = detail && typeof detail === 'object' ? detail : {};
-    const rawType = String(source.attendanceType || '').trim();
+    const sourceType = typeof source.attendanceType === 'string' ? source.attendanceType : '';
+    const rawType = sourceType.trim();
     const attendanceType = allowedTypes.includes(rawType) ? rawType : 'absent';
     const rawDate = typeof source.date === 'string'
       ? source.date.trim()
@@ -1577,8 +1588,14 @@ function sanitizeStudentAttendanceDetails(details) {
     const dateTimeMatch = rawDate.match(/^(.+?)[T\s]+(\d{1,2}:\d{2})(?::\d{2})?$/);
     const date = dateTimeMatch ? dateTimeMatch[1].trim() : (rawDate || '-');
     const time = rawTime || (dateTimeMatch ? dateTimeMatch[2] : '-');
-    const trimmedReason = typeof source.displayReason === 'string' ? source.displayReason.trim() : '';
-    const displayReason = trimmedReason && Array.from(trimmedReason).length <= 300 ? trimmedReason : '';
+    const rawReason = typeof source.displayReason === 'string' ? source.displayReason : '';
+    const trimmedReason = rawReason.trim();
+    const displayReason = reasonAllowedTypes.includes(sourceType)
+      && trimmedReason
+      && Array.from(trimmedReason).length <= 300
+      && !/[\r\n\u0085\u2028\u2029]/.test(rawReason)
+      ? trimmedReason
+      : '';
 
     return { attendanceType, date, time, displayReason };
   });
@@ -1611,6 +1628,14 @@ function closeStudentAttendanceDetailDialog(options) {
   const dialog = document.getElementById('studentAttendanceDetailDialog');
   const trigger = studentAttendanceDetailTrigger;
   const wasOpen = !!(dialog && dialog.getAttribute('aria-hidden') === 'false');
+  const activeElement = document.activeElement;
+  const focusWasInDialog = !!(dialog && dialog.contains(activeElement));
+  const focusWasOnTrigger = !!(trigger && activeElement === trigger);
+  const focusWasPending = studentAttendanceDetailFocusTimer !== null;
+  if (focusWasPending) {
+    clearTimeout(studentAttendanceDetailFocusTimer);
+    studentAttendanceDetailFocusTimer = null;
+  }
   studentAttendanceDetailFocusGeneration++;
 
   if (dialog) {
@@ -1647,8 +1672,7 @@ function closeStudentAttendanceDetailDialog(options) {
   } else if (
     opts.restoreFocus === false
     && wasOpen
-    && dialog
-    && dialog.contains(document.activeElement)
+    && (focusWasInDialog || focusWasOnTrigger || (focusWasPending && (!activeElement || activeElement === document.body)))
     && canFocusFallback
   ) {
     fallbackFocus.focus();
@@ -1681,6 +1705,10 @@ function openStudentAttendanceDetailDialog(index, trigger) {
   const dialog = document.getElementById('studentAttendanceDetailDialog');
   const closeButton = document.getElementById('studentAttendanceDetailClose');
   if (!dialog || !closeButton) return false;
+  if (studentAttendanceDetailFocusTimer !== null) {
+    clearTimeout(studentAttendanceDetailFocusTimer);
+    studentAttendanceDetailFocusTimer = null;
+  }
   const focusGeneration = ++studentAttendanceDetailFocusGeneration;
 
   const status = getStudentAttendanceStatusMeta(detail.attendanceType);
@@ -1698,6 +1726,14 @@ function openStudentAttendanceDetailDialog(index, trigger) {
   dialog.setAttribute('aria-hidden', 'false');
   dialog.classList.add('is-open');
   closeButton.focus();
+  studentAttendanceDetailFocusTimer = setTimeout(() => {
+    studentAttendanceDetailFocusTimer = null;
+    if (focusGeneration !== studentAttendanceDetailFocusGeneration
+        || dialog.getAttribute('aria-hidden') !== 'false'
+        || dialog.hasAttribute('inert')
+        || !closeButton.isConnected) return;
+    closeButton.focus();
+  }, 0);
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       if (focusGeneration !== studentAttendanceDetailFocusGeneration
@@ -2028,7 +2064,9 @@ function renderCompletionAssessment(data, completion) {
 
 async function checkCompletionStatus(event) {
   event.preventDefault();
-  const phoneNumber = normalizeStudentPhone(document.getElementById('completionPhoneInput').value);
+  invalidateStudentCompletionRequest();
+  const completionPhoneInput = document.getElementById('completionPhoneInput');
+  const phoneNumber = normalizeStudentPhone(completionPhoneInput.value);
   if (!phoneNumber) {
     alert('전화번호를 입력해주세요.');
     return;
@@ -2038,12 +2076,23 @@ async function checkCompletionStatus(event) {
     return;
   }
 
+  const requestGeneration = studentCompletionRequestGeneration;
+  studentCompletionRequestKey = phoneNumber;
+  const requestOwnsCompletionSurface = () => {
+    const currentInput = document.getElementById('completionPhoneInput');
+    return requestGeneration === studentCompletionRequestGeneration
+      && studentCompletionRequestKey === phoneNumber
+      && currentInput
+      && normalizeStudentPhone(currentInput.value) === phoneNumber;
+  };
+
   saveLastUsedStudentPhone(phoneNumber);
   const completionResult = document.getElementById('completionResult');
   completionResult.innerHTML = '<div class="loader" style="margin: 32px auto;"></div>';
 
   try {
     const response = await fetchStudentStatus(phoneNumber);
+    if (!requestOwnsCompletionSurface()) return;
     if (!response || !response.success) {
       completionResult.innerHTML = `<div class="error">❌ ${escapeHtml((response && response.message) || '수료 조건을 불러오지 못했습니다.')}</div>`;
       return;
@@ -2057,6 +2106,7 @@ async function checkCompletionStatus(event) {
     }
     completionResult.innerHTML = renderCompletionAssessment(data, insights.completion);
   } catch (error) {
+    if (!requestOwnsCompletionSurface()) return;
     if (handleHistoricalAccessError(error)) return;
     completionResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${escapeHtml(getDisplayErrorMessage(error, '알 수 없는 오류'))}</div>`;
   }
@@ -2121,6 +2171,7 @@ async function initializeStudentPage() {
     input.addEventListener('input', function () {
       this.value = normalizeStudentPhone(this.value);
       syncStudentPhoneInputs(this.value, this);
+      invalidateStudentCompletionRequest();
     });
   });
 

@@ -124,6 +124,78 @@ test('Given a valid public leading region, the first non-empty reason wins befor
   assert.strictEqual(sandbox.extractStudentDisplayReason(emptyThenInternal, 'excused'), '');
 });
 
+test('Given every supported line separator, public reasons stop before the internal note region', () => {
+  // Given
+  const separators = ['\r', '\u0085', '\u2028', '\u2029'];
+
+  // When / Then
+  separators.forEach(separator => {
+    assert.strictEqual(
+      sandbox.extractStudentDisplayReason(`유고 사유: 공개${separator}[기존 메모] 내부${separator}유고 사유: 비공개`, 'excused'),
+      '공개'
+    );
+    assert.strictEqual(
+      sandbox.extractStudentDisplayReason(`[수동출석] 내부${separator}유고 사유: 비공개`, 'excused'),
+      ''
+    );
+  });
+  assert.strictEqual(
+    sandbox.extractStudentDisplayReason('\r\n유고 사유:\u0085유고 사유: 첫 공개\u2028[기존 메모] 내부\r유고 사유: 비공개', 'excused'),
+    '첫 공개'
+  );
+});
+
+test('Given excused public input, the server boundary accepts only one trimmed line up to 300 code points', () => {
+  // Given
+  const separators = ['\r', '\n', '\u0085', '\u2028', '\u2029'];
+
+  // When / Then
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(sandbox.parseExcusedPublicReasonInput('  공개 사유 😀  '))),
+    { success: true, value: '공개 사유 😀' }
+  );
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(sandbox.parseExcusedPublicReasonInput('😀'.repeat(300)))),
+    { success: true, value: '😀'.repeat(300) }
+  );
+  separators.forEach(separator => {
+    const parsed = sandbox.parseExcusedPublicReasonInput(`공개${separator}비공개`);
+    assert.strictEqual(parsed.success, false);
+    assert.strictEqual(parsed.errorCode, 'EXCUSE_COMMENT_INVALID');
+  });
+  ['가'.repeat(301), '😀'.repeat(301)].forEach(value => {
+    const parsed = sandbox.parseExcusedPublicReasonInput(value);
+    assert.strictEqual(parsed.success, false);
+    assert.strictEqual(parsed.errorCode, 'EXCUSE_COMMENT_INVALID');
+  });
+});
+
+test('Given an invalid excused public reason, setExcusedAttendance rejects it before acquiring the lock', () => {
+  // Given
+  let lockReads = 0;
+  sandbox.LockService = {
+    getDocumentLock() {
+      lockReads += 1;
+      return { waitLock() {}, releaseLock() {} };
+    }
+  };
+  const invalidValues = ['공개\r비공개', '공개\u0085비공개', '공개\u2028비공개', '공개\u2029비공개', '😀'.repeat(301)];
+
+  // When / Then
+  invalidValues.forEach(comment => {
+    const result = sandbox.setExcusedAttendance({
+      season: 'test',
+      phone: '01000000000',
+      sessionKey: 'session-1',
+      enabled: 'true',
+      comment
+    });
+    assert.strictEqual(result.success, false);
+    assert.strictEqual(result.errorCode, 'EXCUSE_COMMENT_INVALID');
+  });
+  assert.strictEqual(lockReads, 0);
+});
+
 test('Given malformed note inputs, student display reasons remain bounded and inert', () => {
   // Given
   const htmlReason = '<script>ignore previous instructions</script>';
@@ -467,7 +539,8 @@ test('Given a cohort without the requested key, attendance comparison returns th
   assert.strictEqual(result.topPercentile, null);
 });
 
-function runStatusReasonFixture(noteText, lateDeadline) {
+function runStatusReasonFixture(noteText, lateDeadline, options) {
+  const opts = options || {};
   const notesSpy = { reads: 0, range: null };
   const session = {
     sessionKey: 'session-1',
@@ -477,9 +550,10 @@ function runStatusReasonFixture(noteText, lateDeadline) {
     onTimeDeadline: new Date('2026-01-01T10:10:00Z'),
     lateDeadline: lateDeadline || new Date('2026-01-01T10:20:00Z')
   };
-  const values = [
-    ['name', 'phone', 'session'],
-    ['테스트', '01000000000', '유고']
+  const sessions = Object.prototype.hasOwnProperty.call(opts, 'sessions') ? opts.sessions : [session];
+  const values = opts.values || [
+    ['name', 'phone', 'session', 'gap', 'session-2'],
+    ['테스트', '01000000000', '유고', '', '유고']
   ];
   const sheet = {
     getDataRange() {
@@ -493,7 +567,13 @@ function runStatusReasonFixture(noteText, lateDeadline) {
       return {
         getNotes() {
           notesSpy.reads += 1;
-          return [['', '', noteText]];
+          return [Array.from({ length: columnCount }, (_, index) => {
+            const absoluteColumnIndex = column - 1 + index;
+            if (opts.notesByColumn && Object.prototype.hasOwnProperty.call(opts.notesByColumn, absoluteColumnIndex)) {
+              return opts.notesByColumn[absoluteColumnIndex];
+            }
+            return absoluteColumnIndex === session.colIndex ? noteText : '';
+          })];
         }
       };
     },
@@ -508,7 +588,7 @@ function runStatusReasonFixture(noteText, lateDeadline) {
     late_to_absence_ratio: 3,
     max_absence_equivalent: 1
   });
-  sandbox.collectSessionsFromSheet = () => [session];
+  sandbox.collectSessionsFromSheet = () => sessions;
   sandbox.findMemberRowIndexByPhone = () => ({ rowIndex: 1, duplicateRowIndexes: [] });
   sandbox.readMemberFromRow = () => ({ name: '테스트', phone: '01000000000', season: 'test', seasonLabel: '테스트' });
   sandbox.formatDateTimeMinute = () => '2026-01-01 19:00';
@@ -529,12 +609,58 @@ test('Given a target member public reason, status reads one bounded note row and
 
   // Then
   assert.strictEqual(historicalFixture.notesSpy.reads, 1);
-  assert.deepStrictEqual(historicalFixture.notesSpy.range, [2, 1, 1, 3]);
+  assert.deepStrictEqual(historicalFixture.notesSpy.range, [2, 3, 1, 1]);
   assert.strictEqual(historicalFixture.result.data.details[0].displayReason, '공결');
   assert.strictEqual(futureFixture.notesSpy.reads, 1);
   assert.strictEqual(futureFixture.result.data.details[0].displayReason, '사전 공결');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(historicalFixture.result.data.details[0], 'note'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(historicalFixture.result.data.details[0], 'rawNote'), false);
+});
+
+test('Given sparse session columns, status reads their bounded span once and maps notes by relative offset', () => {
+  // Given
+  const sessions = [
+    {
+      sessionKey: 'session-1',
+      colIndex: 2,
+      startTime: new Date('2026-01-01T10:00:00Z'),
+      openTime: new Date('2026-01-01T09:50:00Z'),
+      onTimeDeadline: new Date('2026-01-01T10:10:00Z'),
+      lateDeadline: new Date('2026-01-01T10:20:00Z')
+    },
+    {
+      sessionKey: 'session-2',
+      colIndex: 4,
+      startTime: new Date('2026-01-08T10:00:00Z'),
+      openTime: new Date('2026-01-08T09:50:00Z'),
+      onTimeDeadline: new Date('2026-01-08T10:10:00Z'),
+      lateDeadline: new Date('2026-01-08T10:20:00Z')
+    }
+  ];
+
+  // When
+  const fixture = runStatusReasonFixture('', undefined, {
+    sessions,
+    notesByColumn: { 2: '유고 사유: 첫 사유', 4: '유고 사유: 둘째 사유' }
+  });
+
+  // Then
+  assert.strictEqual(fixture.notesSpy.reads, 1);
+  assert.deepStrictEqual(fixture.notesSpy.range, [2, 3, 1, 3]);
+  assert.deepStrictEqual(
+    Array.from(fixture.result.data.details, detail => detail.displayReason),
+    ['첫 사유', '둘째 사유']
+  );
+});
+
+test('Given no attendance sessions, status skips the Note read entirely', () => {
+  // Given / When
+  const fixture = runStatusReasonFixture('', undefined, { sessions: [] });
+
+  // Then
+  assert.strictEqual(fixture.notesSpy.reads, 0);
+  assert.strictEqual(fixture.notesSpy.range, null);
+  assert.strictEqual(fixture.result.data.details.length, 0);
 });
 
 test('Given only private target-member notes, status omits the optional reason without changing legacy detail fields', () => {
@@ -559,6 +685,114 @@ test('Given only private target-member notes, status omits the optional reason w
     'attendTime',
     'isPast'
   ]);
+});
+
+test('Given an admin graduation report, raw notes stay internal while only the extracted public reason is separate', () => {
+  // Given
+  const rawNote = '유고 사유: 공개 <b>사유</b>\r[수동출석] 운영 감사\u2028[기존 메모] <script>내부</script>';
+  const session = {
+    sessionKey: 'session-1',
+    colIndex: 2,
+    startTime: new Date('2026-01-01T10:00:00Z'),
+    openTime: new Date('2026-01-01T09:50:00Z'),
+    onTimeDeadline: new Date('2026-01-01T10:10:00Z'),
+    lateDeadline: new Date('2026-01-01T10:20:00Z')
+  };
+  const values = [
+    ['name', 'phone', 'session'],
+    ['테스트', '01000000000', '유고']
+  ];
+  const sheet = {
+    getDataRange() { return { getValues: () => values }; },
+    getLastRow() { return 2; },
+    getLastColumn() { return 3; },
+    getRange() { return { getNotes: () => [[rawNote]] }; }
+  };
+  sandbox.getRequestedSeasonSheetInfo = () => ({ sheet, seasonAlias: 'test', currentSheet: 'season_test' });
+  sandbox.resolveMemberSchemaFromHeaders = () => ({ sessionStartColIndex: 2 });
+  sandbox.getVariableConfig = () => ({
+    official_session_min_recommended: 0,
+    official_session_max_recommended: 0
+  });
+  sandbox.collectSessionsFromSheet = () => [session];
+  sandbox.resolveGraduationCriteria = () => ({
+    requiredPositions: [],
+    lateToAbsenceRatio: 3,
+    requiredAttendanceCount: 0,
+    maxAbsenceEquivalent: 1
+  });
+  sandbox.readMemberFromRow = () => ({ name: '테스트', phone: '01000000000', season: 'test', seasonLabel: '테스트' });
+  sandbox.formatDateTimeMinute = () => '2026-01-01 19:00';
+  sandbox.formatSeasonLabel = value => value;
+  sandbox.ON_TIME_COLOR = '#a';
+  sandbox.LATE_COLOR = '#b';
+  sandbox.ABSENT_COLOR = '#c';
+  sandbox.EXCUSED_COLOR = '#d';
+
+  // When
+  const report = sandbox.getGraduationReport('test');
+
+  // Then
+  assert.strictEqual(report.success, true);
+  assert.strictEqual(report.members[0].details[0].note, rawNote);
+  assert.strictEqual(report.members[0].details[0].displayReason, '공개 <b>사유</b>');
+});
+
+test('Given an attendance override, a safe public reason is stored before the preserved internal audit note', () => {
+  // Given
+  const existingNote = '[수동출석] 운영 감사\r[기존 메모] <script>내부</script>\u2028유고 사유: 비공개';
+  const writes = { value: null, background: null, note: null };
+  const targetRange = {
+    getValue() { return '2026-01-01 10:00:00'; },
+    getNote() { return existingNote; },
+    setValue(value) { writes.value = value; },
+    setBackground(value) { writes.background = value; },
+    setNote(value) { writes.note = value; },
+    clearContent() {},
+    clearNote() {}
+  };
+  const sheet = {
+    getDataRange() {
+      return { getValues: () => [['name', 'phone', 'session'], ['테스트', '01000000000', '']] };
+    },
+    getRange() { return targetRange; }
+  };
+  const session = {
+    sessionKey: 'session-1',
+    colIndex: 2,
+    openTime: new Date('2026-01-01T09:50:00Z'),
+    onTimeDeadline: new Date('2026-01-01T10:10:00Z'),
+    lateDeadline: new Date('2026-01-01T10:20:00Z')
+  };
+  sandbox.LockService = {
+    getDocumentLock() {
+      return { waitLock() {}, releaseLock() {} };
+    }
+  };
+  sandbox.resolveSeasonSheetInfo = () => ({ sheet, seasonAlias: 'test' });
+  sandbox.resolveMemberSchemaFromHeaders = () => ({ sessionStartColIndex: 2 });
+  sandbox.collectSessionsFromSheet = () => [session];
+  sandbox.findMemberRowIndexByPhone = () => ({ rowIndex: 1, duplicateRowIndexes: [] });
+  sandbox.formatDateTime = () => '2026-01-01 10:00:00';
+  sandbox.EXCUSED_COLOR = '#d9e2f3';
+
+  // When
+  const result = sandbox.setExcusedAttendance({
+    season: 'test',
+    phone: '01000000000',
+    sessionKey: 'session-1',
+    enabled: 'true',
+    forceOverride: 'true',
+    comment: '안전 공개 사유'
+  });
+
+  // Then
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(writes.value, '유고');
+  assert.match(writes.note, /^유고 사유: 안전 공개 사유\n\[덮어쓰기\]/);
+  assert.match(writes.note, /\[기존 메모\] \[수동출석\] 운영 감사/);
+  assert.match(writes.note, /<script>내부<\/script>/);
+  assert.strictEqual(sandbox.extractStudentDisplayReason(writes.note, 'excused'), '안전 공개 사유');
 });
 
 console.log('All student insight regression tests passed.');

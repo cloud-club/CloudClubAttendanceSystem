@@ -55,7 +55,7 @@ function extractStudentDisplayReason(noteText, attendanceType) {
       return '';
   }
 
-  const lines = noteText.split(/\r?\n/);
+  const lines = noteText.split(/\r\n|[\n\r\u0085\u2028\u2029]/);
   for (let i = 0; i < lines.length; i++) {
     const line = String(lines[i] || '').trim();
     if (!line) continue;
@@ -778,9 +778,20 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
     return { success: false, message: '등록되지 않은 전화번호입니다.' };
   }
 
-  const targetMemberNoteColumnCount = sheet.getLastColumn();
-  const targetMemberNotes = targetMemberNoteColumnCount > 0
-    ? (sheet.getRange(targetRowIndex + 1, 1, 1, targetMemberNoteColumnCount).getNotes()[0] || [])
+  const sessionColumnIndexes = sessions.map(session => session.colIndex);
+  const targetMemberNoteStartColIndex = sessionColumnIndexes.length > 0
+    ? Math.min.apply(null, sessionColumnIndexes)
+    : -1;
+  const targetMemberNoteEndColIndex = sessionColumnIndexes.length > 0
+    ? Math.max.apply(null, sessionColumnIndexes)
+    : -1;
+  const targetMemberNotes = targetMemberNoteStartColIndex >= 0
+    ? (sheet.getRange(
+      targetRowIndex + 1,
+      targetMemberNoteStartColIndex + 1,
+      1,
+      targetMemberNoteEndColIndex - targetMemberNoteStartColIndex + 1
+    ).getNotes()[0] || [])
     : [];
 
   const now = new Date();
@@ -850,7 +861,10 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
       attendTime: attended ? (cellValue ? String(cellValue) : null) : null,
       isPast: isPast
     };
-    const displayReason = extractStudentDisplayReason(targetMemberNotes[session.colIndex], status);
+    const displayReason = extractStudentDisplayReason(
+      targetMemberNotes[session.colIndex - targetMemberNoteStartColIndex],
+      status
+    );
     if (displayReason) {
       detail.displayReason = displayReason;
     }

@@ -45,7 +45,7 @@
 학생 v6.3은 기존 `status`와 `insights`를 유지하면서 선택적 안전 필드 `details[].displayReason`만 additive로 추가합니다. 구버전 Apps Script에서도 기존 기능이 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다. 따라서 구버전 백엔드 스모크가 통과한 경우 Pages를 먼저 배포할 수 있으며, Pages 워크플로우 자체는 v6.3을 필수 조건으로 만들지 않습니다.
 
 ### 학생 v6.3 수동 동기화 파일
-다음 네 파일을 Apps Script의 같은 deployment에 함께 동기화합니다. `Appsscript/33_graduation_manual_excused.gs`는 이번 변경에서 코드가 바뀌지 않았어도 수료 helper의 런타임 완전성을 위해 반드시 포함합니다.
+다음 네 파일을 Apps Script의 같은 deployment에 함께 동기화합니다. `Appsscript/33_graduation_manual_excused.gs`는 공개 사유 입력을 줄바꿈 없는 유니코드 코드 포인트 300개 이하로 검증하고, 내부 감사 `Note`를 보존한 채 관리자 응답에 안전한 `displayReason`을 별도로 제공합니다.
 
 - `Appsscript/00_entry_api.gs`
 - `Appsscript/01_constants_access.gs`

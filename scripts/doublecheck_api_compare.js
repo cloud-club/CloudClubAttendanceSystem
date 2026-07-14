@@ -342,8 +342,16 @@ function validateAndStripStatusDisplayReasons(baseData, candData) {
 
     if (Object.prototype.hasOwnProperty.call(detail, 'displayReason')) {
       const reason = detail.displayReason;
-      if (typeof reason !== 'string' || Array.from(reason).length > 300 || reason.trim().length === 0 || reason !== reason.trim()) {
-        failures.push(`status.data.details[${index}].displayReason이 비어 있지 않은 300자 이하 문자열이 아닙니다.`);
+      const eligibleStatus = ['on_time', 'late', 'absent', 'excused'].includes(detail.attendanceType);
+      if (
+        typeof reason !== 'string'
+        || Array.from(reason).length > 300
+        || reason.trim().length === 0
+        || reason !== reason.trim()
+        || /[\r\n\u0085\u2028\u2029]/.test(reason)
+        || !eligibleStatus
+      ) {
+        failures.push(`status.data.details[${index}].displayReason이 허용된 상태의 단일 300자 이하 문자열이 아닙니다.`);
       }
       delete detail.displayReason;
     }

@@ -24,9 +24,9 @@
 
 ## 검증자가 발견한 수정
 - `prototype-key`: 상태별 prefix 조회가 객체 prototype의 키를 잘못 상속하지 않도록 소유 키만 인정했다.
-- `부분 동기화`: 수동 반영 목록에서 변경되지 않은 `Appsscript/33_graduation_manual_excused.gs`를 빠뜨리면 기존 수료 helper 런타임이 불완전해질 수 있어, 네 파일 정확 일치 가드와 체크리스트를 추가했다.
+- `부분 동기화`: `Appsscript/33_graduation_manual_excused.gs`는 공개 사유 입력을 줄바꿈 없는 유니코드 코드 포인트 300개 이하로 검증하고 내부 감사 `Note`를 보존한 채 관리자 응답에 안전한 `displayReason`을 별도로 제공하므로, 네 파일 정확 일치 가드와 체크리스트를 추가했다.
 - `stale request`: 전화번호나 조회 세대가 바뀐 뒤 도착한 이전 응답이 최신 화면과 상세 데이터를 덮지 못하게 했다.
-- `cache sanitization`: 브라우저 임시 캐시에는 서버 응답 전체나 원본 Note가 아니라 정규화된 공개 필드만 남기도록 했다.
+- `cache sanitization`: 브라우저 임시 캐시는 응답 외곽과 `insights`를 호환성 때문에 유지하되, `details` 배열은 렌더링 허용 필드만 새 객체로 재구성해 원본 Note·감사 필드가 남지 않도록 했다.
 - `detached focus`: 새 조회로 기존 행이 DOM에서 분리된 상태에서는 닫기 동작이 사라진 트리거에 포커스를 강제하지 않도록 했다.
 
 ## 검증
@@ -42,7 +42,7 @@
 1. `Appsscript/00_entry_api.gs`
 2. `Appsscript/01_constants_access.gs`
 3. `Appsscript/30_attendance_core.gs`
-4. 변경 없음이 요구되는 `Appsscript/33_graduation_manual_excused.gs`
+4. `Appsscript/33_graduation_manual_excused.gs`
 
 배포 후 확인은 `apiInfo.apiVersion = 2026.07.14-v6.3`, `apiInfo.capabilities.studentAttendanceReasonV1 = true`, `apiInfo.runtimeChecks.extractStudentDisplayReason = true` 세 항목이다. 같은 deployment를 재배포하면 기존 `.../exec` URL을 유지한다. 새 deployment로 URL이 바뀌면 GitHub Secret `APPS_SCRIPT_WEB_APP_URL`을 갱신하고 Pages를 다시 배포한다. Pages 워크플로우 자체는 v6.3을 강제하지 않는다.
 

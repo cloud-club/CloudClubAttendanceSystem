@@ -8,19 +8,23 @@ const vm = require('vm');
 const repoRoot = path.resolve(__dirname, '..');
 const studentSource = fs.readFileSync(path.join(repoRoot, 'web/student/student.js'), 'utf8');
 const studentHtmlSource = fs.readFileSync(path.join(repoRoot, 'web/student/latest/index.html'), 'utf8');
+const adminExcuseSource = fs.readFileSync(path.join(repoRoot, 'web/admin/scripts/25_graduation_excused.js'), 'utf8');
+const adminRollbackSource = fs.readFileSync(path.join(repoRoot, 'web/admin/admin.js'), 'utf8');
 
-function extractFunction(name) {
+function extractFunction(name, source, label) {
+  const targetSource = source || studentSource;
+  const sourceLabel = label || 'student source';
   const functionPattern = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`, 'g');
-  const match = functionPattern.exec(studentSource);
-  if (!match) throw new Error(`함수를 찾지 못했습니다: ${name}`);
+  const match = functionPattern.exec(targetSource);
+  if (!match) throw new Error(`${sourceLabel}에서 함수를 찾지 못했습니다: ${name}`);
   const start = match.index;
-  const bodyStart = studentSource.indexOf('{', start);
+  const bodyStart = targetSource.indexOf('{', start);
   let depth = 0;
   let quote = '';
   let escaped = false;
 
-  for (let index = bodyStart; index < studentSource.length; index++) {
-    const char = studentSource[index];
+  for (let index = bodyStart; index < targetSource.length; index++) {
+    const char = targetSource[index];
     if (quote) {
       if (escaped) {
         escaped = false;
@@ -38,16 +42,122 @@ function extractFunction(name) {
     if (char === '{') depth++;
     if (char === '}') {
       depth--;
-      if (depth === 0) return studentSource.slice(start, index + 1);
+      if (depth === 0) return targetSource.slice(start, index + 1);
     }
   }
-  throw new Error(`함수 끝을 찾지 못했습니다: ${name}`);
+  throw new Error(`${sourceLabel}에서 함수 끝을 찾지 못했습니다: ${name}`);
 }
 
 function createContext(setup, functionNames) {
   const context = vm.createContext({ console, Date, Math, Promise, setTimeout, clearTimeout });
-  vm.runInContext(`${setup}\n${functionNames.map(extractFunction).join('\n')}`, context);
+  vm.runInContext(`${setup}\n${functionNames.map(name => extractFunction(name)).join('\n')}`, context);
   return context;
+}
+
+async function testAdminExcusePrefillUsesOnlySafePublicReason() {
+  const rawNote = '[수동출석] 운영 감사\r[기존 메모] <script>내부</script>\u2028유고 사유: 비공개';
+  const publicReason = '안전 <b> 공개';
+  const sourceContext = vm.createContext({ console, Promise });
+  vm.runInContext(`
+    let excuseModalState = null;
+    const input = { value: '', focus() {} };
+    const modal = { style: {} };
+    const target = { textContent: '' };
+    const disclosure = {};
+    const document = {
+      getElementById(id) {
+        if (id === 'excuseModal') return modal;
+        if (id === 'excuseModalTargetText') return target;
+        if (id === 'excuseModalDisclosureText') return disclosure;
+        if (id === 'excuseCommentInput') return input;
+        return null;
+      }
+    };
+    function setTimeout(callback) { callback(); }
+    function confirm() { return true; }
+    async function applyExcusedChange() { return { success: true }; }
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function getMatrixCellLabel() { return '결석'; }
+  `, sourceContext);
+  vm.runInContext([
+    'buildGraduationMatrixRowHtml',
+    'openExcuseModal',
+    'onMatrixCellClick'
+  ].map(name => extractFunction(name, adminExcuseSource, 'admin split source')).join('\n'), sourceContext);
+  sourceContext.rawNote = rawNote;
+  sourceContext.publicReason = publicReason;
+
+  const sourceMarkup = vm.runInContext(`buildGraduationMatrixRowHtml({
+    phone: '01000000000',
+    name: '회원',
+    details: [{ sessionKey: 'session-1', status: 'absent', note: rawNote, displayReason: publicReason }]
+  }, [{ sessionKey: 'session-1', date: '2026-07-14' }])`, sourceContext);
+  assert.doesNotMatch(sourceMarkup, /data-note|수동출석|기존 메모|script|비공개/);
+  assert.match(sourceMarkup, /data-public-reason="안전 &lt;b&gt; 공개"/);
+
+  await vm.runInContext(`onMatrixCellClick({ currentTarget: {
+    disabled: false,
+    dataset: {
+      status: 'absent',
+      phone: '01000000000',
+      name: '회원',
+      sessionKey: 'session-1',
+      note: rawNote,
+      publicReason: publicReason
+    }
+  } })`, sourceContext);
+  assert.strictEqual(vm.runInContext('input.value', sourceContext), publicReason);
+  assert.strictEqual(vm.runInContext('excuseModalState.publicReason', sourceContext), publicReason);
+  assert.strictEqual(vm.runInContext("Object.prototype.hasOwnProperty.call(excuseModalState, 'note')", sourceContext), false);
+
+  const rollbackContext = vm.createContext({ console, Promise });
+  vm.runInContext(`
+    let excuseModalState = null;
+    const input = { value: '', focus() {} };
+    const modal = { style: {} };
+    const target = { textContent: '' };
+    const disclosure = {};
+    const document = {
+      getElementById(id) {
+        if (id === 'excuseModal') return modal;
+        if (id === 'excuseModalTargetText') return target;
+        if (id === 'excuseModalDisclosureText') return disclosure;
+        if (id === 'excuseCommentInput') return input;
+        return null;
+      }
+    };
+    function setTimeout(callback) { callback(); }
+    function confirm() { return true; }
+    async function applyExcusedChange() { return { success: true }; }
+  `, rollbackContext);
+  vm.runInContext([
+    'openExcuseModal',
+    'onMatrixCellClick'
+  ].map(name => extractFunction(name, adminRollbackSource, 'admin rollback source')).join('\n'), rollbackContext);
+  rollbackContext.rawNote = rawNote;
+  rollbackContext.publicReason = publicReason;
+  await vm.runInContext(`onMatrixCellClick({ currentTarget: {
+    disabled: false,
+    dataset: {
+      status: 'absent',
+      phone: '01000000000',
+      name: '회원',
+      sessionKey: 'session-1',
+      note: rawNote,
+      publicReason: publicReason
+    }
+  } })`, rollbackContext);
+  assert.strictEqual(vm.runInContext('input.value', rollbackContext), publicReason);
+  assert.strictEqual(vm.runInContext('excuseModalState.publicReason', rollbackContext), publicReason);
+  assert.strictEqual(vm.runInContext("Object.prototype.hasOwnProperty.call(excuseModalState, 'note')", rollbackContext), false);
+  assert.doesNotMatch(extractFunction('renderGraduationMatrix', adminRollbackSource, 'admin rollback source'), /data-note|detail\.note/);
 }
 
 function testLegacyStatusCompatibility() {
@@ -92,6 +202,7 @@ function testCurrentStatusBaselineCharacterization() {
     let studentAttendanceDetailTrigger = null;
     let studentAttendanceDetailPreviousBodyOverflow = null;
     let studentAttendanceDetailFocusGeneration = 0;
+    let studentAttendanceDetailFocusTimer = null;
     const statusResult = { innerHTML: '', style: {} };
     const document = {
       body: { style: { overflow: '' } },
@@ -245,6 +356,7 @@ function createStatusRendererContext() {
     let studentAttendanceDetailTrigger = null;
     let studentAttendanceDetailPreviousBodyOverflow = null;
     let studentAttendanceDetailFocusGeneration = 0;
+    let studentAttendanceDetailFocusTimer = null;
     const statusResult = { innerHTML: '', style: {} };
     const document = {
       body: { style: { overflow: '' } },
@@ -441,7 +553,12 @@ function testReasonDialogStaticAndRowContract() {
     { attendanceType: 'absent', date: '2026-07-21 19:00' },
     { attendanceType: 'late', date: '2026-07-28 19:00', displayReason: '   ' },
     { attendanceType: 'absent', date: '2026-08-04 19:00', displayReason: 123 },
-    { attendanceType: 'future', date: '2026-08-11 19:00', displayReason: '가'.repeat(301) }
+    { attendanceType: 'future', date: '2026-08-11 19:00', displayReason: '미래 사유' },
+    { attendanceType: 'excused', date: '2026-08-18 19:00', displayReason: '공개\r비공개' },
+    { attendanceType: 'late', date: '2026-08-25 19:00', displayReason: '공개\u0085비공개' },
+    { attendanceType: 'absent', date: '2026-09-01 19:00', displayReason: '공개\u2028비공개' },
+    { attendanceType: 'on_time', date: '2026-09-08 19:00', displayReason: '공개\u2029비공개' },
+    { attendanceType: 'excused', date: '2026-09-15 19:00', displayReason: '공개\r\n\u2028비공개' }
   ];
   const whenDetailsRender = renderStatusFixture({
     personalAttendanceRate: 82.5,
@@ -454,7 +571,7 @@ function testReasonDialogStaticAndRowContract() {
 
   const thenOnlySafeReasonRowIsDialogTrigger = whenDetailsRender;
   assert.match(thenOnlySafeReasonRowIsDialogTrigger, /<button type="button"[^>]*data-attendance-detail-index="0"[^>]*aria-haspopup="dialog"/);
-  ['1', '2', '3', '4'].forEach(index => {
+  ['1', '2', '3', '4', '5', '6', '7', '8', '9'].forEach(index => {
     assert.doesNotMatch(thenOnlySafeReasonRowIsDialogTrigger, new RegExp(`data-attendance-detail-index="${index}"`));
   });
   assert.doesNotMatch(thenOnlySafeReasonRowIsDialogTrigger, /정상 공개 사유|displayReason|data-[^=]*reason/);
@@ -469,6 +586,56 @@ function testReasonDialogStaticAndRowContract() {
   assert.match(studentHtmlSource, /id="studentAttendanceDetailClose"[^>]*type="button"/);
 }
 
+function testDisplayReasonClientTrustBoundary() {
+  // Given exact public statuses plus separator-bearing, future, and legacy payloads
+  const context = createContext('', [
+    'sanitizeStudentAttendanceDetails',
+    'sanitizeStudentStatusResponseForCache'
+  ]);
+  const sanitized = JSON.parse(vm.runInContext(`JSON.stringify(sanitizeStudentAttendanceDetails([
+    { attendanceType: 'on_time', displayReason: '정시 사유' },
+    { attendanceType: 'late', displayReason: '지각 사유' },
+    { attendanceType: 'absent', displayReason: '결석 사유' },
+    { attendanceType: 'excused', displayReason: '유고 사유' },
+    { attendanceType: 'on_time', displayReason: '앞\\r\\n뒤' },
+    { attendanceType: 'late', displayReason: '앞\\n뒤' },
+    { attendanceType: 'absent', displayReason: '앞\\r뒤' },
+    { attendanceType: 'excused', displayReason: '앞\\u0085뒤' },
+    { attendanceType: 'on_time', displayReason: '앞\\u2028뒤' },
+    { attendanceType: 'late', displayReason: '앞\\u2029뒤' },
+    { attendanceType: 'absent', displayReason: '\\u2028앞' },
+    { attendanceType: 'excused', displayReason: '뒤\\u2029' },
+    { attendanceType: 'future', displayReason: '예정 사유' },
+    { attendanceType: 'ABSENT', displayReason: '대문자 상태 사유' },
+    { attendanceType: ' absent ', displayReason: '공백 상태 사유' },
+    { attendanceType: '__proto__', displayReason: '레거시 상태 사유' }
+  ]))`, context));
+
+  // When the untrusted details cross the client boundary
+  const exactStatusReasons = sanitized.slice(0, 4).map(detail => detail.displayReason);
+  const rejectedReasons = sanitized.slice(4).map(detail => detail.displayReason);
+
+  // Then only single-line reasons on the four exact public statuses survive
+  assert.deepStrictEqual(exactStatusReasons, ['정시 사유', '지각 사유', '결석 사유', '유고 사유']);
+  assert.deepStrictEqual(rejectedReasons, Array(rejectedReasons.length).fill(''));
+
+  const cachedDetails = JSON.parse(vm.runInContext(`JSON.stringify(sanitizeStudentStatusResponseForCache({
+    success: true,
+    data: {
+      details: [
+        { attendanceType: 'excused', date: '2026-07-14', displayReason: '안전 사유', rawNote: true },
+        { attendanceType: 'future', date: '2026-07-21', displayReason: '예정 사유', rawNote: true },
+        { attendanceType: 'absent', date: '2026-07-28', displayReason: '앞\\u2028뒤', rawNote: true }
+      ]
+    }
+  }).data.details)`, context));
+  assert.deepStrictEqual(cachedDetails.map(detail => Object.keys(detail).sort()), [
+    ['attendanceType', 'date', 'displayReason', 'time'],
+    ['attendanceType', 'date', 'time'],
+    ['attendanceType', 'date', 'time']
+  ]);
+}
+
 function createReasonDialogContext() {
   return createContext(`
     let studentStatusDetails = [];
@@ -476,6 +643,7 @@ function createReasonDialogContext() {
     let studentAttendanceDetailPreviousBodyOverflow = null;
     let studentAttendanceDetailInitialized = false;
     let studentAttendanceDetailFocusGeneration = 0;
+    let studentAttendanceDetailFocusTimer = null;
     let studentStatusViewGeneration = 0;
     const focusLog = [];
     const animationFrames = [];
@@ -689,6 +857,69 @@ function testReasonDialogPointerFocusSettlementAndStaleGuards() {
   assert.strictEqual(vm.runInContext(`document.activeElement === closeButton`, context), true);
 }
 
+function testReasonDialogRepeatedPointerAndPendingResetFocus() {
+  const context = createReasonDialogContext();
+  vm.runInContext(`
+    studentStatusDetails = sanitizeStudentAttendanceDetails([
+      { attendanceType: 'late', date: '2026-07-14 19:00', displayReason: '반복 사유' }
+    ]);
+    initializeStudentAttendanceDetailDialog();
+  `, context);
+
+  // Given repeated native pointer focus returns to the trigger after delegated click
+  for (let cycle = 0; cycle < 10; cycle++) {
+    vm.runInContext(`
+      listeners.statusResult.click({ target: { closest() { return trigger; } } });
+      document.activeElement = trigger;
+      flushAnimationFrames();
+      flushAnimationFrames();
+    `, context);
+
+    // When focus settlement completes, then every open owns focus and every close restores exact state
+    assert.strictEqual(vm.runInContext(`document.activeElement === closeButton`, context), true);
+    vm.runInContext(`listeners.close.click()`, context);
+    assert.strictEqual(vm.runInContext(`document.activeElement === trigger`, context), true);
+    assert.strictEqual(vm.runInContext(`document.body.style.overflow`, context), 'clip');
+    assert.strictEqual(vm.runInContext(`dialog.getAttribute('aria-hidden')`, context), 'true');
+  }
+
+  // Given reset occurs while the pointer-settlement task is still pending
+  vm.runInContext(`
+    openStudentAttendanceDetailDialog('0', trigger);
+    document.activeElement = trigger;
+    resetStudentStatusResult();
+    flushAnimationFrames();
+    flushAnimationFrames();
+  `, context);
+
+  // Then reset moves focus to the connected safe field and stale work cannot reclaim it
+  assert.strictEqual(vm.runInContext(`document.activeElement === nodes.statusPhoneInput`, context), true);
+  assert.strictEqual(vm.runInContext(`document.body.style.overflow`, context), 'clip');
+
+  vm.runInContext(`
+    studentStatusDetails = sanitizeStudentAttendanceDetails([
+      { attendanceType: 'late', date: '2026-07-14 19:00', displayReason: '반복 사유' }
+    ]);
+    trigger.isConnected = false;
+    openStudentAttendanceDetailDialog('0', trigger);
+    document.activeElement = trigger;
+    resetStudentStatusResult();
+  `, context);
+  assert.strictEqual(vm.runInContext(`document.activeElement === nodes.statusPhoneInput`, context), true);
+
+  vm.runInContext(`
+    studentStatusDetails = sanitizeStudentAttendanceDetails([
+      { attendanceType: 'late', date: '2026-07-14 19:00', displayReason: '반복 사유' }
+    ]);
+    trigger.isConnected = true;
+    nodes.externalControl = createNode('externalControl', 'document');
+    openStudentAttendanceDetailDialog('0', trigger);
+    document.activeElement = nodes.externalControl;
+    resetStudentStatusResult();
+  `, context);
+  assert.strictEqual(vm.runInContext(`document.activeElement === nodes.externalControl`, context), true);
+}
+
 function testDetachedReasonTriggerFallsBackToSafeFocus() {
   const context = createReasonDialogContext();
   vm.runInContext(`
@@ -888,7 +1119,9 @@ async function testStatusCacheRetainsOnlyRenderSafeDetailFields() {
             name: true
           },
           { attendanceType: 'absent', date: '2026-07-21', time: '19:00', displayReason: '   ', note: true },
-          { attendanceType: 'late', date: '2026-07-28', time: '19:00', displayReason: '가'.repeat(301), rawNote: true }
+          { attendanceType: 'late', date: '2026-07-28', time: '19:00', displayReason: '가'.repeat(301), rawNote: true },
+          { attendanceType: 'excused', date: '2026-08-04', time: '19:00', displayReason: '공개\u2028비공개', rawNote: true },
+          { attendanceType: 'future', date: '2026-08-11', time: '19:00', displayReason: '미래 사유', rawNote: true }
         ]
       }
     };
@@ -906,6 +1139,8 @@ async function testStatusCacheRetainsOnlyRenderSafeDetailFields() {
     Array.from(cachedDetailKeys, keys => Array.from(keys)),
     [
       ['attendanceType', 'date', 'displayReason', 'time'],
+      ['attendanceType', 'date', 'time'],
+      ['attendanceType', 'date', 'time'],
       ['attendanceType', 'date', 'time'],
       ['attendanceType', 'date', 'time']
     ]
@@ -1184,6 +1419,8 @@ function testStudentVisualPolishStaticContracts() {
 
 async function testCompletionLookupStateCharacterization() {
   const context = createContext(`
+    let studentCompletionRequestGeneration = 0;
+    let studentCompletionRequestKey = '';
     let inputValue = '01012345678';
     let fetchMode = 'pending';
     let resolveFetch;
@@ -1223,7 +1460,7 @@ async function testCompletionLookupStateCharacterization() {
       return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
     function alert() { alertCount++; }
-  `, ['checkCompletionStatus']);
+  `, ['invalidateStudentCompletionRequest', 'checkCompletionStatus']);
   context.event = { preventDefault() {} };
 
   const pending = vm.runInContext('checkCompletionStatus(event)', context);
@@ -1254,7 +1491,124 @@ async function testCompletionLookupStateCharacterization() {
   assert.strictEqual(vm.runInContext('alertCount', context), 1);
 }
 
+function createCompletionLookupRaceContext() {
+  return createContext(`
+    let studentCompletionRequestGeneration = 0;
+    let studentCompletionRequestKey = '';
+    const completionPhoneInput = { value: '01011111111' };
+    const completionResult = { innerHTML: '' };
+    const requests = [];
+    const renderedMarkers = [];
+    const document = {
+      getElementById(id) {
+        if (id === 'completionPhoneInput') return completionPhoneInput;
+        if (id === 'completionResult') return completionResult;
+        return null;
+      }
+    };
+    function normalizeStudentPhone(value) { return String(value || '').replace(/[^0-9]/g, '').slice(0, 11); }
+    function isValidStudentPhone(value) { return /^010[0-9]{8}$/.test(value); }
+    function saveLastUsedStudentPhone() {}
+    function fetchStudentStatus(phone) {
+      return new Promise((resolve, reject) => requests.push({ phone, resolve, reject }));
+    }
+    function renderCompletionAssessment(data) {
+      renderedMarkers.push(data.marker);
+      return '<div data-marker="' + data.marker + '">' + data.marker + '</div>';
+    }
+    function renderUpgradeNotice(title) { return '<div data-completion-state="legacy">' + title + '</div>'; }
+    function handleHistoricalAccessError() { return false; }
+    function getDisplayErrorMessage(error, fallback) { return error && error.message ? error.message : fallback; }
+    function escapeHtml(value) {
+      return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function alert() {}
+  `, ['invalidateStudentCompletionRequest', 'checkCompletionStatus']);
+}
+
+async function testNewestCompletionSuccessOwnsUi() {
+  // Given two completion lookups whose responses settle newest first
+  const context = createCompletionLookupRaceContext();
+  context.event = { preventDefault() {} };
+  const older = vm.runInContext('checkCompletionStatus(event)', context);
+  vm.runInContext("completionPhoneInput.value = '01022222222'", context);
+  const newer = vm.runInContext('checkCompletionStatus(event)', context);
+
+  // When the newer success settles before the older success
+  vm.runInContext("requests[1].resolve({ success: true, data: { marker: 'newest', insights: { completion: {} } } })", context);
+  await newer;
+  vm.runInContext("requests[0].resolve({ success: true, data: { marker: 'older', insights: { completion: {} } } })", context);
+  await older;
+
+  // Then only the newest response owns the completion surface
+  assert.deepStrictEqual(Array.from(vm.runInContext('renderedMarkers', context)), ['newest']);
+  assert.match(vm.runInContext('completionResult.innerHTML', context), /data-marker="newest"/);
+}
+
+async function testNewestCompletionErrorOwnsUi() {
+  // Given an older success pending behind a newer lookup
+  const context = createCompletionLookupRaceContext();
+  context.event = { preventDefault() {} };
+  const older = vm.runInContext('checkCompletionStatus(event)', context);
+  vm.runInContext("completionPhoneInput.value = '01022222222'", context);
+  const newer = vm.runInContext('checkCompletionStatus(event)', context);
+
+  // When the newer lookup fails and the older success settles afterward
+  vm.runInContext("requests[1].resolve({ success: false, message: '<newest error>' })", context);
+  await newer;
+  vm.runInContext("requests[0].resolve({ success: true, data: { marker: 'older', insights: { completion: {} } } })", context);
+  await older;
+
+  // Then the newer error remains visible and the older success never renders
+  assert.deepStrictEqual(Array.from(vm.runInContext('renderedMarkers', context)), []);
+  assert.match(vm.runInContext('completionResult.innerHTML', context), /&lt;newest error&gt;/);
+}
+
+async function testCompletionPhoneChangeInvalidatesPendingResponse() {
+  // Given a completion lookup pending for the current phone
+  const context = createCompletionLookupRaceContext();
+  context.event = { preventDefault() {} };
+  const pending = vm.runInContext('checkCompletionStatus(event)', context);
+
+  // When the synchronized phone field changes before the response settles
+  vm.runInContext("completionPhoneInput.value = '01022222222'", context);
+  vm.runInContext("requests[0].resolve({ success: true, data: { marker: 'stale', insights: { completion: {} } } })", context);
+  await pending;
+
+  // Then the stale response cannot replace the pending surface for the new phone
+  assert.deepStrictEqual(Array.from(vm.runInContext('renderedMarkers', context)), []);
+  assert.match(vm.runInContext('completionResult.innerHTML', context), /class="loader"/);
+}
+
+async function testCompletionTabTransitionInvalidatesPendingResponse() {
+  // Given a completion lookup whose tab is about to be left
+  const context = createCompletionLookupRaceContext();
+  context.event = { preventDefault() {} };
+  const pending = vm.runInContext('checkCompletionStatus(event)', context);
+
+  // When navigation invalidates the completion request generation
+  vm.runInContext("studentCompletionRequestGeneration++; studentCompletionRequestKey = ''", context);
+  vm.runInContext("requests[0].resolve({ success: true, data: { marker: 'stale', insights: { completion: {} } } })", context);
+  await pending;
+
+  // Then the response no longer owns the hidden completion surface
+  assert.deepStrictEqual(Array.from(vm.runInContext('renderedMarkers', context)), []);
+  assert.match(vm.runInContext('completionResult.innerHTML', context), /class="loader"/);
+}
+
+function testCompletionInvalidationWiringContract() {
+  // Given phone synchronization and tab navigation are the two external invalidation paths
+  const navigationSource = extractFunction('openTab');
+  const initializationSource = extractFunction('initializeStudentPage');
+
+  // Then both paths explicitly invalidate completion ownership
+  assert.match(navigationSource, /tabName\s*!==\s*'completion'[\s\S]*invalidateStudentCompletionRequest\(\)/);
+  assert.match(initializationSource, /input[\s\S]*syncStudentPhoneInputs\(this\.value, this\)[\s\S]*invalidateStudentCompletionRequest\(\)/);
+}
+
 (async () => {
+  await testAdminExcusePrefillUsesOnlySafePublicReason();
+  console.log('PASS admin excused modal prefills only the safe public reason in source and rollback bundle');
   testLegacyStatusCompatibility();
   console.log('PASS legacy status keeps personal rate and live detail counts');
   testCurrentStatusBaselineCharacterization();
@@ -1273,10 +1627,14 @@ async function testCompletionLookupStateCharacterization() {
   console.log('PASS status renderer escapes identity strings and keeps displayReason out of result markup');
   testReasonDialogStaticAndRowContract();
   console.log('PASS safe reason rows alone expose numeric dialog triggers outside the status live region');
+  testDisplayReasonClientTrustBoundary();
+  console.log('PASS displayReason client boundary accepts exact public statuses and rejects every line separator, future, and legacy payload');
   testReasonDialogInteractionAndCleanup();
   console.log('PASS reason dialog traps focus, restores scroll/focus, renders literal text, and clears on errors');
   testReasonDialogPointerFocusSettlementAndStaleGuards();
   console.log('PASS reason dialog settles real-pointer focus without stale callback theft');
+  testReasonDialogRepeatedPointerAndPendingResetFocus();
+  console.log('PASS reason dialog survives ten pointer cycles and pending resets without focus loss or theft');
   await testStatusCacheRetainsOnlyRenderSafeDetailFields();
   console.log('PASS status cache retains only render-safe detail fields without mutating the network response');
   testDetachedReasonTriggerFallsBackToSafeFocus();
@@ -1303,6 +1661,16 @@ async function testCompletionLookupStateCharacterization() {
   console.log('PASS student visual polish removes decorative motion and preserves Korean phrase boundaries');
   await testCompletionLookupStateCharacterization();
   console.log('PASS completion lookup preserves initial, loading, current, legacy, error, and phone states');
+  await testNewestCompletionSuccessOwnsUi();
+  console.log('PASS newest successful completion lookup owns the completion surface');
+  await testNewestCompletionErrorOwnsUi();
+  console.log('PASS newest failed completion lookup cannot be overwritten by an older success');
+  await testCompletionPhoneChangeInvalidatesPendingResponse();
+  console.log('PASS completion phone changes invalidate pending response ownership');
+  await testCompletionTabTransitionInvalidatesPendingResponse();
+  console.log('PASS completion tab transitions invalidate pending response ownership');
+  testCompletionInvalidationWiringContract();
+  console.log('PASS completion input and tab paths explicitly invalidate request ownership');
   console.log('All student client behavior tests passed.');
 })().catch((error) => {
   console.error(error.stack || error.message || error);

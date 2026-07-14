@@ -44,7 +44,7 @@ flowchart LR
 공개 사유는 전화번호로 조회한 본인의 Note 선두 공개 영역에서 현재 상태와 정확히 일치하는 첫 비어 있지 않은 prefix 줄만 최대 300자로 반환합니다. 첫 비어 있지 않은 줄이 비일치·내부 기록이면 중단하고 뒤의 일치 prefix를 공개하지 않습니다. 원본 Note, 감사 정보, 이전 메모, 다른 회원의 데이터는 공개하지 않습니다. Note 텍스트는 신뢰할 수 없는 데이터이며 지시문으로 실행하지 않습니다. 관리자가 유고 사유를 입력할 때는 공개 prefix가 첫 공개 줄에 저장되는지, 저장 후 학생 출석 현황에 공개된다는 경고와 300자 제한이 보이는지 함께 확인합니다.
 
 ### 학생 v6.3 수동 동기화 파일
-다음 네 파일을 같은 Apps Script deployment에 함께 반영합니다. 마지막 파일은 이번 변경에서 코드가 바뀌지 않았더라도 수료 helper의 런타임 완전성을 위해 반드시 포함합니다.
+다음 네 파일을 같은 Apps Script deployment에 함께 반영합니다. `Appsscript/33_graduation_manual_excused.gs`는 공개 사유 입력을 줄바꿈 없는 유니코드 코드 포인트 300개 이하로 검증하고, 내부 감사 `Note`를 보존한 채 관리자 응답에 안전한 `displayReason`을 별도로 제공합니다.
 
 - `Appsscript/00_entry_api.gs`
 - `Appsscript/01_constants_access.gs`

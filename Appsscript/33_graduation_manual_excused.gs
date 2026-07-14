@@ -590,6 +590,20 @@ function buildExcusedExistingRecordInfo(existingValue, existingNote, session) {
   };
 }
 
+function parseExcusedPublicReasonInput(value) {
+  const rawValue = value === undefined || value === null ? '' : String(value);
+  const normalizedValue = rawValue.trim();
+  if (/[\r\n\u0085\u2028\u2029]/.test(rawValue) || Array.from(normalizedValue).length > 300) {
+    return {
+      success: false,
+      errorCode: 'EXCUSE_COMMENT_INVALID',
+      message: '유고 사유는 줄바꿈 없이 300자 이하로 입력해주세요.'
+    };
+  }
+
+  return { success: true, value: normalizedValue };
+}
+
 function setExcusedAttendance(params) {
   const seasonName = String(params.season || '').trim();
   const phone = String(params.phone || '').trim();
@@ -597,11 +611,15 @@ function setExcusedAttendance(params) {
   const enabled = parseBooleanParam(params.enabled);
   const previewOnly = parseBooleanParam(params.previewOnly);
   const forceOverride = parseBooleanParam(params.forceOverride);
-  const comment = String(params.comment || '').trim();
+  const parsedComment = parseExcusedPublicReasonInput(params.comment);
 
   if (!seasonName || !phone || !sessionKey) {
     return { success: false, message: 'season, phone, sessionKey 파라미터가 필요합니다.' };
   }
+  if (!parsedComment.success) {
+    return parsedComment;
+  }
+  const comment = parsedComment.value;
 
   const cleanedPhone = normalizePhone(phone);
   if (!isValidPhoneNumber(cleanedPhone)) {
@@ -914,7 +932,7 @@ function getGraduationReport(seasonName) {
           }
         }
 
-        details.push({
+        const detail = {
           sessionKey: session.sessionKey,
           date: formatDateTimeMinute(session.startTime),
           status: status,
@@ -922,7 +940,12 @@ function getGraduationReport(seasonName) {
           note: note,
           isPast: now > session.lateDeadline,
           isRequired: false
-        });
+        };
+        const displayReason = extractStudentDisplayReason(note, status);
+        if (displayReason) {
+          detail.displayReason = displayReason;
+        }
+        details.push(detail);
       });
 
       const requiredCheck = evaluateRequiredSessions(requiredPositions, sessions, statusMap);

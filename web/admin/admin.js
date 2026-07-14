@@ -8446,7 +8446,7 @@ function renderGraduationMatrix(report) {
     });
 
     const cells = sessions.map(session => {
-      const detail = detailMap[session.sessionKey] || { status: 'future', note: '' };
+      const detail = detailMap[session.sessionKey] || { status: 'future', displayReason: '' };
       const status = detail.status || 'future';
       const label = getMatrixCellLabel(status);
       const disabled = status === 'future' ? 'disabled' : '';
@@ -8461,7 +8461,7 @@ function renderGraduationMatrix(report) {
             data-session-key="${escapeHtml(session.sessionKey)}"
             data-session-date="${escapeHtml(session.date)}"
             data-status="${escapeHtml(status)}"
-            data-note="${escapeHtml(detail.note || '')}"
+            data-public-reason="${escapeHtml(detail.displayReason || '')}"
             onclick="onMatrixCellClick(event)"
             ${disabled}
           >${label}</button>
@@ -8549,7 +8549,7 @@ function openExcuseModal(state) {
   if (!modal || !target || !disclosure || !input) return;
 
   target.textContent = `${state.memberName} / ${state.sessionKey} 에 유고 사유를 저장합니다.`;
-  input.value = state.note || '';
+  input.value = state.publicReason || '';
   modal.style.display = 'flex';
   setTimeout(() => input.focus(), 0);
 }
@@ -8673,7 +8673,7 @@ async function onMatrixCellClick(event) {
   const phone = btn.dataset.phone;
   const memberName = btn.dataset.name;
   const sessionKey = btn.dataset.sessionKey;
-  const note = btn.dataset.note || '';
+  const publicReason = btn.dataset.publicReason || '';
 
   if (!phone || !sessionKey) return;
 
@@ -8702,7 +8702,7 @@ async function onMatrixCellClick(event) {
     phone,
     sessionKey,
     memberName,
-    note,
+    publicReason,
     preWarned: status === 'on_time' || status === 'late'
   });
 }

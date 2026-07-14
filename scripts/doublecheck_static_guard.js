@@ -330,6 +330,31 @@ function findHtmlElementByClass(html, tagName, className) {
   throw new Error(`${className} 클래스를 가진 ${tagName} 요소를 찾지 못했습니다.`);
 }
 
+function findHtmlElementById(html, id) {
+  const tags = scanHtmlTags(html);
+  const tagIndex = tags.findIndex(tag => !tag.isClosing && tag.attributes.id === id);
+  if (tagIndex < 0) throw new Error(`${id} ID를 가진 요소를 찾지 못했습니다.`);
+
+  const openingTag = tags[tagIndex];
+  let depth = 1;
+  for (let candidateIndex = tagIndex + 1; candidateIndex < tags.length; candidateIndex += 1) {
+    const candidate = tags[candidateIndex];
+    if (candidate.tagName !== openingTag.tagName) continue;
+    depth += candidate.isClosing ? -1 : 1;
+    if (depth !== 0) continue;
+    return {
+      start: openingTag.start,
+      openingTag: openingTag.raw,
+      openingEnd: openingTag.end,
+      closingStart: candidate.start,
+      end: candidate.end,
+      innerHtml: html.slice(openingTag.end, candidate.start),
+      outerHtml: html.slice(openingTag.start, candidate.end)
+    };
+  }
+  throw new Error(`${id} 요소의 닫는 ${openingTag.tagName} 태그를 찾지 못했습니다.`);
+}
+
 function getDirectChildElements(element) {
   const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
   const children = [];
@@ -675,9 +700,27 @@ function checkStudentV63PrivacyAndOperatorWarning() {
   if (sourceFunction !== rollbackFunction) {
     throw new Error('관리자 유고 모달 source/bundle openExcuseModal이 동기화되지 않았습니다.');
   }
+  const sourceClickFunction = extractNamedFunction(adminExcuseSource, 'onMatrixCellClick', '분할 관리자 소스');
+  const rollbackClickFunction = extractNamedFunction(adminRollbackBundle, 'onMatrixCellClick', '관리자 롤백 bundle');
+  if (sourceClickFunction !== rollbackClickFunction) {
+    throw new Error('관리자 유고 모달 source/bundle onMatrixCellClick이 동기화되지 않았습니다.');
+  }
+  const sourceMatrixFunction = extractNamedFunction(adminExcuseSource, 'buildGraduationMatrixRowHtml', '분할 관리자 소스');
+  const rollbackMatrixFunction = extractNamedFunction(adminRollbackBundle, 'renderGraduationMatrix', '관리자 롤백 bundle');
+  [sourceMatrixFunction, rollbackMatrixFunction].forEach((matrixFunction, index) => {
+    assertNotRegex(matrixFunction, /data-note|detail\.note/, `관리자 ${index === 0 ? '분할 소스' : '롤백 bundle'} matrix가 원본 Note를 DOM에 보관합니다.`);
+    assertRegex(matrixFunction, /data-public-reason="\$\{escapeHtml\(detail\.displayReason \|\| ''\)\}"/, `관리자 ${index === 0 ? '분할 소스' : '롤백 bundle'} matrix의 공개 사유 필드가 누락되었습니다.`);
+  });
+  [sourceClickFunction, rollbackClickFunction].forEach((clickFunction, index) => {
+    assertNotRegex(clickFunction, /dataset\.note|state\.note/, `관리자 ${index === 0 ? '분할 소스' : '롤백 bundle'} click 경로가 원본 Note를 사용합니다.`);
+    assertRegex(clickFunction, /const publicReason = btn\.dataset\.publicReason \|\| '';/, `관리자 ${index === 0 ? '분할 소스' : '롤백 bundle'} click 경로가 공개 사유만 읽지 않습니다.`);
+    assertRegex(clickFunction, /publicReason,/, `관리자 ${index === 0 ? '분할 소스' : '롤백 bundle'} modal state에 공개 사유가 누락되었습니다.`);
+  });
   assertRegex(sourceFunction, /const disclosure = document\.getElementById\('excuseModalDisclosureText'\);/, '관리자 유고 모달이 독립 공개 경고를 확인하지 않습니다.');
   assertRegex(sourceFunction, /if \(!modal \|\| !target \|\| !disclosure \|\| !input\) return;/, '관리자 유고 모달의 공개 경고 필수 노드 가드가 누락되었습니다.');
   assertRegex(sourceFunction, /target\.textContent = `\$\{state\.memberName\} \/ \$\{state\.sessionKey\} 에 유고 사유를 저장합니다\.`;/, '관리자 유고 모달의 대상 문맥 textContent 갱신이 누락되었습니다.');
+  assertRegex(sourceFunction, /input\.value = state\.publicReason \|\| '';/, '관리자 유고 모달이 안전한 공개 사유만 prefill하지 않습니다.');
+  assertNotRegex(sourceFunction, /state\.note/, '관리자 유고 모달이 원본 Note를 prefill합니다.');
   assertNotRegex(sourceFunction, /disclosure\.(?:textContent|innerHTML)\s*=/, '관리자 유고 모달이 열릴 때 고정 공개 경고를 덮어씁니다.');
 }
 
@@ -1055,8 +1098,8 @@ function checkStudentCompletionDesktopComposition() {
   }
 }
 
-function checkStudentAttendanceReasonDialog() {
-  const studentHtml = maskHtmlComments(readFile('web/student/latest/index.html'));
+function checkStudentAttendanceReasonDialog(studentHtmlSource = readFile('web/student/latest/index.html')) {
+  const studentHtml = maskHtmlComments(studentHtmlSource);
   const studentJs = readFile('web/student/student.js');
 
   assertRegex(
@@ -1070,11 +1113,19 @@ function checkStudentAttendanceReasonDialog() {
   });
 
   const startTags = scanHtmlTags(studentHtml).filter(tag => !tag.isClosing);
-  const statusResult = startTags.find(tag => tag.attributes.id === 'statusResult');
-  const dialog = startTags.find(tag => tag.attributes.id === 'studentAttendanceDetailDialog');
-  if (!statusResult || !dialog || dialog.start <= statusResult.end) {
+  const statusResult = findHtmlElementById(studentHtml, 'statusResult');
+  const dialog = findHtmlElementById(studentHtml, 'studentAttendanceDetailDialog');
+  if (dialog.start >= statusResult.openingEnd && dialog.end <= statusResult.closingStart) {
     throw new Error('학생 출석 사유 다이얼로그는 statusResult 원자적 live region 밖에 있어야 합니다.');
   }
+  startTags
+    .filter(tag => Object.prototype.hasOwnProperty.call(tag.attributes, 'aria-live') && tag.attributes.id)
+    .forEach(tag => {
+      const liveRegion = findHtmlElementById(studentHtml, tag.attributes.id);
+      if (dialog.start >= liveRegion.openingEnd && dialog.end <= liveRegion.closingStart) {
+        throw new Error(`학생 출석 사유 다이얼로그는 ${tag.attributes.id} 원자적 live region 밖에 있어야 합니다.`);
+      }
+    });
 
   assertRegex(studentJs, /data-attendance-detail-index="\$\{index\}"[\s\S]*aria-haspopup="dialog"/, '안전 사유 행의 숫자 인덱스 dialog trigger가 누락되었습니다.');
   assertNotRegex(studentJs, /data-[a-z0-9-]*(?:reason|note)[a-z0-9-]*=/i, '학생 사유 또는 Note가 data 속성으로 노출됩니다.');
@@ -1348,6 +1399,15 @@ function checkStudentLayoutStructuralFixtures() {
   const source = readFile('web/student/latest/index.html');
   const primaryGrid = findHtmlElementByClass(source, 'div', 'attendance-primary-grid');
   const actionCard = findHtmlElementByClass(primaryGrid.outerHtml, 'div', 'attendance-action-card').outerHtml;
+  const statusResult = findHtmlElementByClass(source, 'div', 'compact-result-region');
+  const reasonDialog = findHtmlElementByClass(source, 'div', 'student-attendance-detail-dialog');
+  if (!/\bid=["']statusResult["']/.test(statusResult.openingTag)) {
+    throw new Error('mutation fixture용 statusResult를 찾지 못했습니다.');
+  }
+  const sourceWithoutReasonDialog = source.slice(0, reasonDialog.start) + source.slice(reasonDialog.end);
+  const reasonDialogNestedInStatusResult = sourceWithoutReasonDialog.slice(0, statusResult.closingStart)
+    + reasonDialog.outerHtml
+    + sourceWithoutReasonDialog.slice(statusResult.closingStart);
   const phoneInputTag = scanHtmlTags(source).find(tag => !tag.isClosing && tag.tagName === 'input' && tag.attributes.id === 'phoneInput');
   if (!phoneInputTag) throw new Error('mutation fixture용 출석 전화번호 입력을 찾지 못했습니다.');
   const phoneInput = source.slice(phoneInputTag.start, phoneInputTag.end);
@@ -1398,6 +1458,7 @@ function checkStudentLayoutStructuralFixtures() {
     try {
       checkStudentLayoutCharacterization(candidate);
       checkStudentCompactResponsiveGeometry(candidate);
+      checkStudentAttendanceReasonDialog(candidate);
     } catch (error) {
       throw new Error(`학생 layout 가드가 harmless fixture를 거부했습니다: ${name}: ${error.message}`);
     }
@@ -1412,7 +1473,8 @@ function checkStudentLayoutStructuralFixtures() {
     ['required phone/action nodes only inside HTML comment', requiredNodesOnlyInComment, 'doAttendance 제출 폼'],
     ['section wrapper makes action card indirect', indirectActionWrapper, '직접 자식'],
     ['nested second desktop media block', nestedDesktopMedia, 'media block은 정확히 하나'],
-    ['mobile dangerous scroll override', dangerousMobileOverride, '위험한 overflow override']
+    ['mobile dangerous scroll override', dangerousMobileOverride, '위험한 overflow override'],
+    ['reason dialog nested inside statusResult live region', reasonDialogNestedInStatusResult, '원자적 live region 밖']
   ];
   rejectedFixtures.forEach(([name, candidate, expectedMessage]) => {
     if (candidate === source) throw new Error(`학생 layout rejection fixture가 원본을 변경하지 못했습니다: ${name}`);
@@ -1420,6 +1482,7 @@ function checkStudentLayoutStructuralFixtures() {
     try {
       checkStudentLayoutCharacterization(candidate);
       checkStudentCompactResponsiveGeometry(candidate);
+      checkStudentAttendanceReasonDialog(candidate);
     } catch (error) {
       rejectionMessage = error.message;
     }

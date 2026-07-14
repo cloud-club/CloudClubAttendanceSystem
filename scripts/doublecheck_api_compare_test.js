@@ -150,6 +150,16 @@ try {
   const unicodeDisplayReason = runCompare(unicodeDisplayReasonCandidate);
   assert.strictEqual(unicodeDisplayReason.status, 0, unicodeDisplayReason.stderr || unicodeDisplayReason.stdout);
 
+  ['on_time', 'late', 'absent', 'excused'].forEach(attendanceType => {
+    const statusBaseline = JSON.parse(JSON.stringify(legacyData));
+    statusBaseline.details[0].attendanceType = attendanceType;
+    const statusCandidate = JSON.parse(JSON.stringify(statusBaseline));
+    statusCandidate.details[0].displayReason = '공개 사유';
+    statusCandidate.insights = validInsights;
+    const allowedStatusResult = runSnapshotCompare(snapshot(statusBaseline), snapshot(statusCandidate));
+    assert.strictEqual(allowedStatusResult.status, 0, allowedStatusResult.stderr || allowedStatusResult.stdout);
+  });
+
   const missingInsights = runCompare(legacyData);
   assert.strictEqual(missingInsights.status, 0, missingInsights.stderr || missingInsights.stdout);
 
@@ -160,6 +170,21 @@ try {
     assert.strictEqual(invalidReasonResult.status, 1);
     assert.match(invalidReasonResult.stderr, /displayReason/);
   });
+
+  ['\r', '\n', '\u0085', '\u2028', '\u2029', '\r\n\u2028'].forEach(separator => {
+    const separatedReasonCandidate = JSON.parse(JSON.stringify(displayReasonCandidate));
+    separatedReasonCandidate.details[0].displayReason = `공개${separator}비공개`;
+    const separatedReasonResult = runCompare(separatedReasonCandidate);
+    assert.strictEqual(separatedReasonResult.status, 1);
+    assert.match(separatedReasonResult.stderr, /displayReason/);
+  });
+
+  const futureReasonCandidate = JSON.parse(JSON.stringify(displayReasonCandidate));
+  futureReasonCandidate.details[0].attendanceType = 'future';
+  futureReasonCandidate.details[0].displayReason = '미래 사유';
+  const futureReasonResult = runCompare(futureReasonCandidate);
+  assert.strictEqual(futureReasonResult.status, 1);
+  assert.match(futureReasonResult.stderr, /displayReason/);
 
   ['note', 'rawNote', 'unexpected'].forEach(fieldName => {
     const leakedDetailCandidate = JSON.parse(JSON.stringify(displayReasonCandidate));
