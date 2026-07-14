@@ -33,7 +33,33 @@
 3. GitHub Pages 배포
 4. `health`/`apiInfo`/인증 canary 검증
 
-학생 `status.data.insights`처럼 기존 공개 API에 필드만 추가하는 변경은 예외적으로 Pages를 먼저 배포할 수 있습니다. 이 경우 새 UI가 구버전 Apps Script의 기존 `status` 응답에서도 본인 출석률과 기본 조회를 유지하고, 새 인사이트 영역만 업데이트 안내로 대체해야 합니다. 이후 관련 `.gs` 파일을 한 deployment에 함께 반영하고 `apiInfo.capabilities.studentInsightsV1`와 관련 `runtimeChecks`가 모두 `true`인지 확인합니다.
+### 학생 v6.3 현재 정책 요약
+- 현재 학생 기능 식별 계약은 2026.07.14-v6.3, studentAttendanceReasonV1=true, extractStudentDisplayReason=true입니다.
+- 기존 status와 insights를 유지하고 선택적 안전 필드 details[].displayReason만 additive로 추가합니다.
+- Pages-first 배포에서도 구버전 Apps Script의 기존 기능은 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다.
+- 공개 사유는 Note의 선두 공개 영역에서만 읽으며, 첫 번째 비어 있지 않은 비일치·내부 줄을 만나면 중단하므로 뒤의 일치 prefix는 공개하지 않습니다.
+- Apps Script 배포는 운영자만 수행하며, 레포는 현재 외부 콘솔 상태를 단정하지 않습니다.
+- 문제가 생기면 Pages는 직전 artifact로, Apps Script는 운영자가 직전 정상 배포 버전으로 롤백합니다.
+
+### 학생 v6.3 Pages-first 예외
+학생 v6.3은 기존 `status`와 `insights`를 유지하면서 선택적 안전 필드 `details[].displayReason`만 additive로 추가합니다. 구버전 Apps Script에서도 기존 기능이 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다. 따라서 구버전 백엔드 스모크가 통과한 경우 Pages를 먼저 배포할 수 있으며, Pages 워크플로우 자체는 v6.3을 필수 조건으로 만들지 않습니다.
+
+### 학생 v6.3 수동 동기화 파일
+다음 네 파일을 Apps Script의 같은 deployment에 함께 동기화합니다. `Appsscript/33_graduation_manual_excused.gs`는 이번 변경에서 코드가 바뀌지 않았어도 수료 helper의 런타임 완전성을 위해 반드시 포함합니다.
+
+- `Appsscript/00_entry_api.gs`
+- `Appsscript/01_constants_access.gs`
+- `Appsscript/30_attendance_core.gs`
+- `Appsscript/33_graduation_manual_excused.gs`
+
+### 학생 v6.3 배포 후 확인
+다음 세 항목만 학생 v6.3 배포 식별 체크로 사용합니다.
+
+1. `apiInfo.apiVersion = 2026.07.14-v6.3`
+2. `apiInfo.capabilities.studentAttendanceReasonV1 = true`
+3. `apiInfo.runtimeChecks.extractStudentDisplayReason = true`
+
+외부 Apps Script 배포는 운영자만 수행하며, 레포만으로 현재 콘솔 값이나 배포 상태를 단정하지 않습니다. 같은 deployment를 재배포하면 기존 `.../exec` URL을 유지합니다. 새 deployment로 URL이 바뀌면 GitHub Secret `APPS_SCRIPT_WEB_APP_URL`을 갱신하고 Pages를 다시 배포합니다. 문제가 생기면 Pages는 직전 artifact로, Apps Script는 운영자가 직전 배포 버전으로 되돌립니다.
 
 ## 롤백 원칙
 - `.../exec` URL 기준으로 운영 상태를 확인합니다.

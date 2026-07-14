@@ -52,7 +52,6 @@
       font-size: clamp(2.5rem, 6vw, 4rem);
       font-weight: 900;
       margin-bottom: 16px;
-      animation: fadeInUp 0.8s ease-out;
       line-height: 1.1;
     }
     
@@ -69,7 +68,6 @@
       color: #94a3b8;
       font-weight: 400;
       margin-bottom: 16px;
-      animation: fadeInUp 1s ease-out;
     }
     
     .season-info {
@@ -81,7 +79,6 @@
       border-radius: 20px;
       margin: 16px auto;
       display: inline-block;
-      animation: fadeIn 1.2s ease-out;
     }
     
     .divider {
@@ -90,7 +87,6 @@
       background: linear-gradient(to right, #3b82f6, #60a5fa);
       margin: 24px auto;
       border-radius: 2px;
-      animation: fadeIn 1.2s ease-out;
     }
     
     .tab-nav {
@@ -103,7 +99,6 @@
       backdrop-filter: blur(10px);
       border: 1px solid rgba(255, 255, 255, 0.1);
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-      animation: fadeInUp 0.8s ease-out;
     }
     
     .tab-button {
@@ -165,6 +160,27 @@
     
     .tab-content.active {
       display: block;
+    }
+
+    .attendance-primary-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      min-width: 0;
+    }
+
+    .attendance-action-card,
+    .compact-query-card,
+    .compact-result-region {
+      min-width: 0;
+    }
+
+    .compact-query-form {
+      width: 100%;
+    }
+
+    .compact-result-region {
+      max-width: 100%;
+      width: 100%;
     }
     
     .card {
@@ -606,6 +622,70 @@
       color: #f87171;
     }
 
+    .completion-study-note {
+      align-items: flex-start;
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(96, 165, 250, 0.28);
+      border-radius: 16px;
+      color: #bfdbfe;
+      display: flex;
+      gap: 10px;
+      line-height: 1.55;
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      text-align: left;
+    }
+
+    .completion-study-note i {
+      color: #60a5fa;
+      flex: 0 0 auto;
+      margin-top: 4px;
+    }
+
+    .completion-study-note p {
+      margin: 0;
+      overflow-wrap: break-word;
+      word-break: keep-all;
+    }
+
+    .completion-study-note-tail {
+      white-space: nowrap;
+    }
+
+    .completion-assessment-layout {
+      align-items: start;
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.9fr);
+      margin-top: 14px;
+    }
+
+    .completion-overview .completion-summary {
+      margin-top: 0;
+    }
+
+    .completion-metric-grid {
+      margin: 12px 0 0;
+    }
+
+    .completion-criteria {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .completion-section-title {
+      color: #f8fafc;
+      font-size: 16px;
+      margin: 0;
+      text-align: left;
+    }
+
+    .completion-criteria .criteria-list {
+      margin-top: 12px;
+    }
+
     .upgrade-notice {
       background: rgba(59, 130, 246, 0.08);
       border: 1px dashed rgba(96, 165, 250, 0.35);
@@ -678,6 +758,11 @@
       margin-top: 4px;
     }
 
+    .criteria-item > div {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
     .criteria-item.is-satisfied i {
       color: #4ade80;
     }
@@ -698,6 +783,8 @@
       font-size: 12px;
       line-height: 1.45;
       margin-top: 3px;
+      overflow-wrap: break-word;
+      word-break: keep-all;
     }
     
     .fortune-card {
@@ -745,9 +832,22 @@
       transition: all 0.3s ease;
     }
     
-    .attendance-item:hover {
+    .attendance-detail-trigger:hover {
       background: rgba(255, 255, 255, 0.08);
       border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    button.attendance-item {
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      text-align: initial;
+      width: 100%;
+    }
+
+    .attendance-detail-trigger:focus-visible {
+      outline: 3px solid rgba(96, 165, 250, 0.75);
+      outline-offset: 2px;
     }
     
     .attendance-item.future {
@@ -757,6 +857,24 @@
     .attendance-date {
       color: #e2e8f0;
       font-weight: 500;
+    }
+
+    .attendance-status-group {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      justify-content: flex-end;
+    }
+
+    .attendance-detail-affordance {
+      align-items: center;
+      color: #93c5fd;
+      display: inline-flex;
+      font-size: 12px;
+      font-weight: 700;
+      gap: 6px;
+      white-space: nowrap;
     }
     
     .attendance-status {
@@ -783,6 +901,124 @@
     
     .attendance-status.future {
       color: #64748b;
+    }
+
+    .student-attendance-detail-dialog {
+      align-items: center;
+      background: rgba(2, 6, 23, 0.78);
+      display: flex;
+      inset: 0;
+      justify-content: center;
+      opacity: 0;
+      padding: 16px;
+      pointer-events: none;
+      position: fixed;
+      transition: opacity 0.2s ease, visibility 0s linear 0.2s;
+      visibility: hidden;
+      z-index: 1100;
+    }
+
+    .student-attendance-detail-dialog.is-open {
+      opacity: 1;
+      pointer-events: auto;
+      transition-delay: 0s;
+      visibility: visible;
+    }
+
+    .student-attendance-detail-panel {
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+      max-height: calc(100dvh - 32px);
+      max-width: 480px;
+      overflow-y: auto;
+      padding: 20px;
+      transform: translateY(12px);
+      transition: transform 0.2s ease;
+      width: 100%;
+    }
+
+    .student-attendance-detail-dialog.is-open .student-attendance-detail-panel {
+      transform: translateY(0);
+    }
+
+    .student-attendance-detail-heading {
+      align-items: flex-start;
+      display: flex;
+      gap: 16px;
+      justify-content: space-between;
+    }
+
+    .student-attendance-detail-heading h2 {
+      color: #f8fafc;
+      font-size: 20px;
+      margin: 0;
+    }
+
+    .student-attendance-detail-description {
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.55;
+      margin: 8px 0 0;
+      text-wrap: balance;
+      word-break: keep-all;
+    }
+
+    .student-attendance-detail-close {
+      align-items: center;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      color: #e2e8f0;
+      cursor: pointer;
+      display: inline-flex;
+      flex: 0 0 auto;
+      font-size: 18px;
+      height: 44px;
+      justify-content: center;
+      width: 44px;
+    }
+
+    .student-attendance-detail-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(96, 165, 250, 0.45);
+    }
+
+    .student-attendance-detail-close:focus-visible {
+      outline: 3px solid rgba(96, 165, 250, 0.75);
+      outline-offset: 2px;
+    }
+
+    .student-attendance-detail-fields {
+      display: grid;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .student-attendance-detail-field {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+
+    .student-attendance-detail-field dt {
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .student-attendance-detail-field dd {
+      color: #f8fafc;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    #studentAttendanceDetailReason {
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
     }
     
     .ranking-table {
@@ -817,10 +1053,6 @@
       font-weight: 600;
       position: sticky;
       top: 0;
-    }
-    
-    .ranking-table tr:hover {
-      background: rgba(255, 255, 255, 0.05);
     }
     
     .rank-medal {
@@ -906,17 +1138,6 @@
       to { opacity: 1; }
     }
     
-    @keyframes fadeInUp {
-      from { 
-        opacity: 0; 
-        transform: translateY(30px);
-      }
-      to { 
-        opacity: 1; 
-        transform: translateY(0);
-      }
-    }
-    
     @keyframes slideDown {
       from { 
         opacity: 0; 
@@ -988,6 +1209,271 @@
       justify-content: center;
       min-height: 40px;
     }
+
+    @media (min-width: 769px) {
+      .container {
+        max-width: 1200px;
+        padding: 16px 20px 20px;
+      }
+
+      .header {
+        padding: 16px 0 12px;
+      }
+
+      .main-title {
+        font-size: 2.5rem;
+        margin-bottom: 4px;
+      }
+
+      .subtitle {
+        margin-bottom: 4px;
+      }
+
+      .season-info {
+        margin: 8px auto;
+        padding: 6px 14px;
+      }
+
+      .divider {
+        margin: 12px auto;
+      }
+
+      .tab-nav {
+        margin-bottom: 16px;
+        padding: 6px;
+      }
+
+      .tab-button {
+        min-height: 44px;
+      }
+
+      .card {
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+
+      .card-header {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+      }
+
+      #completion .compact-query-card {
+        padding: 8px 16px;
+      }
+
+      #completion .compact-query-card .card-header {
+        margin-bottom: 6px;
+        padding-bottom: 6px;
+      }
+
+      #completion .completion-study-note {
+        margin-bottom: 12px;
+        padding: 10px 14px;
+      }
+
+      .completion-assessment-card {
+        padding: 16px;
+      }
+
+      .completion-assessment-layout {
+        margin-top: 10px;
+      }
+
+      .completion-overview .completion-summary {
+        line-height: 1.45;
+        padding: 12px 14px;
+      }
+
+      .completion-metric-grid {
+        margin-top: 8px;
+      }
+
+      .completion-metric-grid .metric-card {
+        padding: 10px 8px;
+      }
+
+      .completion-criteria {
+        padding: 12px;
+      }
+
+      .completion-criteria .criteria-list {
+        gap: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 8px;
+      }
+
+      .completion-criteria .criteria-item {
+        padding: 9px 10px;
+      }
+
+      .metric-grid.status-comparison-grid,
+      .metric-grid.status-count-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+
+      .status-dashboard-layout {
+        align-items: start;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+      }
+
+      .status-dashboard-group {
+        min-width: 0;
+      }
+
+      #statusResult > .status-dashboard-card {
+        padding: 16px;
+      }
+
+      .status-dashboard-card .identity-heading {
+        font-size: 18px;
+        margin-bottom: 12px;
+      }
+
+      .status-dashboard-layout .metric-grid {
+        gap: 8px;
+        margin: 0;
+      }
+
+      .status-dashboard-layout .metric-card {
+        padding: 10px 8px;
+      }
+
+      .status-dashboard-layout .metric-value {
+        font-size: 1.25rem;
+      }
+
+      .status-dashboard-layout .comparison-summary {
+        line-height: 1.4;
+        margin-top: 8px;
+        padding: 10px 12px;
+      }
+
+      .status-dashboard-layout .status-details {
+        margin-top: 8px;
+      }
+
+      .status-dashboard-layout .status-details > summary {
+        font-size: 14px;
+        padding: 0 2px;
+      }
+
+      .status-details .attendance-item {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .countdown-card {
+        margin-bottom: 16px;
+        padding: 20px;
+      }
+
+      .attendance-primary-grid {
+        align-items: stretch;
+        gap: 16px;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      .attendance-primary-grid > .countdown-card,
+      .attendance-primary-grid > .attendance-action-card {
+        margin-bottom: 16px;
+        min-width: 0;
+      }
+
+      .attendance-primary-grid > .countdown-card {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .attendance-action-card form {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        justify-content: center;
+      }
+
+      .attendance-action-card .form-group {
+        margin: 16px auto;
+      }
+
+      .attendance-action-card .btn {
+        min-height: 44px;
+      }
+
+      .compact-query-card {
+        margin-bottom: 16px;
+        padding: 16px 20px;
+      }
+
+      .compact-query-card .card-header {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+      }
+
+      .compact-query-form {
+        align-items: center;
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        margin: 0 auto;
+        max-width: 760px;
+        text-align: left !important;
+      }
+
+      .compact-query-field {
+        margin: 0;
+        max-width: none;
+        text-align: left;
+      }
+
+      .compact-query-field .form-label {
+        font-size: 15px;
+        margin-bottom: 8px;
+      }
+
+      .compact-query-field .form-input {
+        font-size: 16px;
+        min-height: 44px;
+        padding: 10px 16px;
+      }
+
+      .compact-query-field .info-text {
+        font-size: 13px;
+        margin: 6px 0 0;
+      }
+
+      .compact-query-form .btn {
+        min-height: 44px;
+        white-space: nowrap;
+      }
+
+      #statusResult.compact-result-region,
+      #completionResult.compact-result-region {
+        margin: 0 0 16px;
+        max-width: none;
+        padding: 0;
+        text-align: initial;
+      }
+
+      .attendance-details {
+        max-height: 320px;
+        overscroll-behavior: contain;
+      }
+
+      .ranking-table-scroll {
+        max-height: 320px;
+        overflow: auto;
+      }
+
+      .legal-links {
+        margin-top: 16px;
+      }
+    }
     
     @media (max-width: 768px) {
       body.menu-open {
@@ -996,6 +1482,11 @@
 
       .container {
         padding: 8px 12px 16px;
+      }
+
+      .attendance-primary-grid {
+        gap: 0;
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .header {
@@ -1220,6 +1711,35 @@
         min-height: 48px;
       }
 
+      .compact-query-card {
+        padding: 14px 12px;
+      }
+
+      .compact-query-card .card-header {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+      }
+
+      .compact-query-form {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .compact-query-field {
+        margin: 8px auto;
+      }
+
+      .compact-query-form .form-input {
+        min-height: 44px;
+      }
+
+      .compact-query-form .btn {
+        justify-content: center;
+        min-height: 44px;
+        width: 100%;
+      }
+
       .form-input {
         width: 100%;
       }
@@ -1240,8 +1760,33 @@
         gap: 8px;
       }
 
+      .status-dashboard-layout {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: minmax(0, 1fr);
+      }
+
       .metric-card {
         padding: 13px 11px;
+      }
+
+      .completion-study-note {
+        margin-bottom: 12px;
+        padding: 12px 14px;
+      }
+
+      .completion-assessment-layout {
+        gap: 12px;
+        grid-template-columns: minmax(0, 1fr);
+        margin-top: 12px;
+      }
+
+      .completion-metric-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .completion-criteria {
+        padding: 12px;
       }
 
       .ranking-table {
@@ -1256,9 +1801,19 @@
       .legal-links {
         margin-top: 12px;
       }
+
+      .student-attendance-detail-panel {
+        border-radius: 18px;
+        padding: 16px;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
+      .student-attendance-detail-dialog,
+      .student-attendance-detail-panel {
+        transition: none !important;
+      }
+
       *,
       *::before,
       *::after {
@@ -1286,16 +1841,16 @@
   </section>
   
   <div class="container">
+    <button type="button"
+            id="studentMenuButton"
+            class="mobile-menu-button"
+            aria-label="메뉴 열기"
+            aria-controls="studentMobileMenu"
+            aria-expanded="false">
+      <i class="fas fa-bars menu-icon-open" aria-hidden="true"></i>
+      <i class="fas fa-xmark menu-icon-close" aria-hidden="true"></i>
+    </button>
     <header class="header">
-      <button type="button"
-              id="studentMenuButton"
-              class="mobile-menu-button"
-              aria-label="메뉴 열기"
-              aria-controls="studentMobileMenu"
-              aria-expanded="false">
-        <i class="fas fa-bars menu-icon-open" aria-hidden="true"></i>
-        <i class="fas fa-xmark menu-icon-close" aria-hidden="true"></i>
-      </button>
       <h1 class="main-title">
         <span class="gradient-text">Cloud Club</span>
       </h1>
@@ -1339,50 +1894,52 @@
     </nav>
 
     <!-- 출석하기 탭 -->
-    <div id="attend" class="tab-content active" role="tabpanel" aria-labelledby="studentTabAttend" aria-hidden="false">
-      <div class="countdown-card">
-        <h2 id="countdown-title" class="card-title">출석 가능 시간 확인 중...</h2>
-        <div id="countdown"><span class="loader"></span></div>
-        <div id="sessionVenueSummary" class="attendance-location-summary"></div>
-      </div>
-      
-      <div class="card">
-        <form onsubmit="doAttendance(event)" style="text-align: center;">
-          <div class="form-group">
-            <label for="phoneInput" class="form-label">전화번호 입력</label>
-            <input type="tel" 
-                   id="phoneInput" 
-                   class="form-input" 
-                   placeholder="01012345678"
-                   pattern="010[0-9]{8}"
-                   maxlength="11"
-                   inputmode="numeric"
-                   autocomplete="tel"
-                   oninput="this.value = this.value.replace(/[^0-9]/g, '')"
-                   required>
-            <p class="info-text">010으로 시작하는 11자리 숫자를 입력해 주세요</p>
-          </div>
-          <button type="submit" id="attendBtn" class="btn" aria-describedby="sessionVenueSummary attendanceLocationStatus" disabled>
-            <i class="fas fa-hand-point-up"></i>
-            <span>지금 출석하기</span>
-          </button>
-          <p id="attendancePhaseNotice" class="attendance-phase-notice" style="display: none;"></p>
-          <div id="attendanceLocationStatus" class="attendance-location-status" role="status" aria-live="polite" aria-atomic="true"></div>
-        </form>
+    <div id="attend" class="tab-content tab-panel active" role="tabpanel" aria-labelledby="studentTabAttend" aria-hidden="false">
+      <div class="attendance-primary-grid">
+        <div class="countdown-card">
+          <h2 id="countdown-title" class="card-title">출석 가능 시간 확인 중...</h2>
+          <div id="countdown"><span class="loader"></span></div>
+          <div id="sessionVenueSummary" class="attendance-location-summary"></div>
+        </div>
+
+        <div class="card attendance-action-card">
+          <form onsubmit="doAttendance(event)" style="text-align: center;">
+            <div class="form-group">
+              <label for="phoneInput" class="form-label">전화번호 입력</label>
+              <input type="tel"
+                     id="phoneInput"
+                     class="form-input"
+                     placeholder="01012345678"
+                     pattern="010[0-9]{8}"
+                     maxlength="11"
+                     inputmode="numeric"
+                     autocomplete="tel"
+                     oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                     required>
+              <p class="info-text">010으로 시작하는 11자리 숫자를 입력해 주세요</p>
+            </div>
+            <button type="submit" id="attendBtn" class="btn" aria-describedby="sessionVenueSummary attendanceLocationStatus" disabled>
+              <i class="fas fa-hand-point-up"></i>
+              <span>지금 출석하기</span>
+            </button>
+            <p id="attendancePhaseNotice" class="attendance-phase-notice" style="display: none;"></p>
+            <div id="attendanceLocationStatus" class="attendance-location-status" role="status" aria-live="polite" aria-atomic="true"></div>
+          </form>
+        </div>
       </div>
       
       <div id="result" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
     
     <!-- 출석현황 탭 -->
-    <div id="status" class="tab-content" role="tabpanel" aria-labelledby="studentTabStatus" aria-hidden="true">
-      <div class="card">
+    <div id="status" class="tab-content tab-panel" role="tabpanel" aria-labelledby="studentTabStatus" aria-hidden="true">
+      <div class="card compact-query-card">
         <div class="card-header">
           <i class="fas fa-chart-line card-icon"></i>
           <h2 class="card-title">출석 현황 조회</h2>
         </div>
-        <form onsubmit="checkAttendanceStatus(event)" style="text-align: center;">
-          <div class="form-group">
+        <form class="compact-query-form" onsubmit="checkAttendanceStatus(event)" style="text-align: center;">
+          <div class="form-group compact-query-field">
             <label for="statusPhoneInput" class="form-label">전화번호 입력</label>
             <input type="tel" 
                    id="statusPhoneInput" 
@@ -1403,7 +1960,7 @@
         </form>
       </div>
       
-      <div id="statusResult" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="statusResult" class="compact-result-region" role="status" aria-live="polite" aria-atomic="true"></div>
       
       <!-- 출석률 순위 대시보드 -->
       <div class="card">
@@ -1417,14 +1974,14 @@
       </div>
     </div>
 
-    <div id="completion" class="tab-content" role="tabpanel" aria-labelledby="studentTabCompletion" aria-hidden="true">
-      <div class="card">
+    <div id="completion" class="tab-content tab-panel" role="tabpanel" aria-labelledby="studentTabCompletion" aria-hidden="true">
+      <div class="card compact-query-card">
         <div class="card-header">
           <i class="fas fa-graduation-cap card-icon"></i>
           <h2 class="card-title">수료 조건 확인</h2>
         </div>
-        <form onsubmit="checkCompletionStatus(event)" style="text-align: center;">
-          <div class="form-group">
+        <form class="compact-query-form" onsubmit="checkCompletionStatus(event)" style="text-align: center;">
+          <div class="form-group compact-query-field">
             <label for="completionPhoneInput" class="form-label">전화번호 입력</label>
             <input type="tel"
                    id="completionPhoneInput"
@@ -1445,13 +2002,57 @@
         </form>
       </div>
 
-      <div id="completionResult" role="status" aria-live="polite" aria-atomic="true">
+      <aside class="completion-study-note" role="note">
+        <i class="fas fa-circle-info" aria-hidden="true"></i>
+        <p>이 화면에는 스터디 출석이 반영되지 않습니다. 최종 수료 여부는 스터디 출석률에 따라 <span class="completion-study-note-tail">달라질 수 있습니다.</span></p>
+      </aside>
+
+      <div id="completionResult" class="compact-result-region" role="status" aria-live="polite" aria-atomic="true">
         <div class="upgrade-notice">
           <strong>내 수료 가능 여부를 바로 확인하세요</strong>
           전화번호를 입력하면 현재 출석·지각·결석과 남은 참여 조건을 보여 드립니다.
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="studentAttendanceDetailDialog"
+       class="student-attendance-detail-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="studentAttendanceDetailTitle"
+       aria-describedby="studentAttendanceDetailDescription"
+       aria-hidden="true"
+       inert>
+    <section class="student-attendance-detail-panel">
+      <div class="student-attendance-detail-heading">
+        <div>
+          <h2 id="studentAttendanceDetailTitle">출석 상세 사유</h2>
+          <p id="studentAttendanceDetailDescription" class="student-attendance-detail-description">선택한 회차에 공개된 출석 상태와 사유입니다.</p>
+        </div>
+        <button id="studentAttendanceDetailClose" type="button" class="student-attendance-detail-close" aria-label="출석 상세 닫기">
+          <i class="fas fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+      <dl class="student-attendance-detail-fields">
+        <div class="student-attendance-detail-field">
+          <dt>출석 상태</dt>
+          <dd id="studentAttendanceDetailStatus">-</dd>
+        </div>
+        <div class="student-attendance-detail-field">
+          <dt>날짜</dt>
+          <dd id="studentAttendanceDetailDate">-</dd>
+        </div>
+        <div class="student-attendance-detail-field">
+          <dt>시간</dt>
+          <dd id="studentAttendanceDetailTime">-</dd>
+        </div>
+        <div class="student-attendance-detail-field">
+          <dt>공개 사유</dt>
+          <dd id="studentAttendanceDetailReason">-</dd>
+        </div>
+      </dl>
+    </section>
   </div>
 
   <footer class="legal-links" aria-label="서비스 정책">
@@ -1463,6 +2064,6 @@
   <script src="../../shared/config.js"></script>
   <script src="../../shared/api-jsonp.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="../student.js?v=20260714-ui5"></script>
+  <script src="../student.js?v=20260714-ui6"></script>
 </body>
 </html>

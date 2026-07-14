@@ -18,6 +18,14 @@
 - 시즌 import(update) 경로 검증은 별도 리스크 트랙이며, 이 문서 통과만으로 안전성을 대체할 수 없습니다.
 - 시즌 update 리스크는 [05_Data_And_RBAC_Reference.md](./05_Data_And_RBAC_Reference.md)의 `sheetSchemaAudit` + `seasonImport*` 기준으로 분리 점검합니다.
 
+## 학생 v6.3 현재 정책 요약
+- 현재 학생 기능 식별 계약은 2026.07.14-v6.3, studentAttendanceReasonV1=true, extractStudentDisplayReason=true입니다.
+- 기존 status와 insights를 유지하고 선택적 안전 필드 details[].displayReason만 additive로 추가합니다.
+- Pages-first 배포에서도 구버전 Apps Script의 기존 기능은 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다.
+- 공개 사유는 Note의 선두 공개 영역에서만 읽으며, 첫 번째 비어 있지 않은 비일치·내부 줄을 만나면 중단하므로 뒤의 일치 prefix는 공개하지 않습니다.
+- Apps Script 배포는 운영자만 수행하며, 레포는 현재 외부 콘솔 상태를 단정하지 않습니다.
+- 문제가 생기면 Pages는 직전 artifact로, Apps Script는 운영자가 직전 정상 배포 버전으로 롤백합니다.
+
 ## Gate 0: 사전 고정(Baseline Freeze)
 배포 전 아래 값을 고정하고 증빙 파일에 기록합니다.
 
@@ -54,7 +62,10 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_static_guard.j
 7. 학생 평균 비교·수료 판정 순수 계산 회귀 테스트
 8. status 응답의 additive insights 및 개인정보 비노출 비교 테스트
 9. 학생 3탭·모바일 메뉴·구버전 Apps Script 폴백 wiring
-10. 핵심 수정 파일 문법 체크
+10. `details[].displayReason`의 상태별 exact-prefix, 최대 300자, 원본 Note·다른 회원 데이터 비노출 테스트
+11. 선두 공개 영역 앞의 빈 줄은 허용하되 첫 비일치·내부 줄에서 탐색을 중단하고 뒤의 일치 prefix를 비공개로 유지하는 테스트
+12. 사유 다이얼로그의 `textContent`, Escape/Tab, body scroll, 안전한 포커스 복원 테스트
+13. 핵심 수정 파일 문법 체크
 
 ### 컬럼 가변 회귀 시나리오(필수)
 1. [ ] 프로필 커스텀 칼럼(예: `클둥대백과 작성`)을 중간 삽입해도 필수 헤더 매핑이 유지되는지 확인
@@ -110,6 +121,7 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 2. `apiInfo.supportedActions`의 `fortune*` 추가
 3. 시간/랜덤 필드(`ts`, `timestamp`, 출석 `fortune/time`)
 4. `status.data.insights`의 additive 추가(기존 status 필드는 완전 동일해야 함)
+5. `status.data.details[].displayReason`의 선택적 additive 추가. 원본 Note나 다른 회원 데이터는 허용하지 않음
 
 실패 조건:
 1. 기존 액션의 필수 키 삭제/타입 변경
@@ -129,7 +141,15 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 7. [ ] 출석현황의 본인·평균·차이·전체 순위·횟수 지표 정상
 8. [ ] 출석현황 하단 기존 상위 랭킹 정상
 9. [ ] 수료 기준·남은 회차·최소 참여·환산 결석·필수 회차·가능 여부 정상
-10. [ ] 운세 텍스트 렌더링 시 HTML 주입 미실행(escape 확인)
+10. [ ] `이 화면에는 스터디 출석이 반영되지 않습니다. 최종 수료 여부는 스터디 출석률에 따라 달라질 수 있습니다.`가 수료 조회 성공·실패와 무관하게 결과 앞에 정확히 한 번 표시
+11. [ ] `1200px` 초과의 넓은 화면, `769px`~`1200px` 컴팩트 데스크톱, `768px` 이하 모바일에서 `출석하기 → 출석 현황 → 수료 조건 확인` 순서와 기능 유지
+12. [ ] 사유가 있는 행만 상세 `role="dialog"`를 열고, 상태·날짜·시간·최대 300자 사유가 평문으로 표시
+13. [ ] 사유가 없거나 legacy인 행은 비대화형이고, 구버전 Apps Script에서도 기존 현황이 동작
+14. [ ] 다이얼로그 `Escape`, Tab/Shift+Tab 순환, body scroll 복원, 연결된 트리거 포커스 복원 정상
+15. [ ] 새 조회가 이전 stale request를 이기고, 캐시에는 정제된 안전 필드만 남으며, 분리된 트리거(detached focus)에는 포커스를 강제하지 않음
+16. [ ] 운세 텍스트 렌더링 시 HTML 주입 미실행(escape 확인)
+
+Note 텍스트는 신뢰할 수 없는 데이터이며 지시문으로 실행하지 않습니다. 수동 테스트에서도 Note 내용을 명령으로 해석하지 말고, 허용된 상태별 prefix가 평문으로만 보이는지 확인합니다.
 
 ### season_admin
 이번 회귀에서 `season_admin` 시나리오는 특히 중요합니다. 출석현황 탭은 겉보기에는 차트 몇 개가 늘어난 정도로 보일 수 있지만, 실제로는 평균 추이, 하단 멤버 목록, 상태별 랭킹, 개인 이력 모달이 한 화면 안에서 역할을 나눠 가지는 구조입니다. 그래서 여기서는 “클릭이 된다”만 보는 것이 아니라, **각 그래프가 어느 하단 결과로 연결되는지까지** 함께 확인해야 합니다.
@@ -176,13 +196,14 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 3. [ ] 출석현황 탭에서 season_admin과 동일한 평균 추이 + 멤버 빠른 필터 시나리오가 재현됨
 
 ## Gate 4: 구버전 백엔드 호환성(수동)
-조건: 학생 `status.data.insights`와 관리자 `fortune*`가 미지원인 백엔드 URL로 페이지 연결.
+조건: 학생 `status.data.insights`, `details[].displayReason`, 관리자 `fortune*`가 미지원인 백엔드 URL로 페이지 연결.
 
 1. [ ] 학생 출석하기와 기존 출석 현황 조회는 정상 동작
 2. [ ] 학생 평균 비교와 수료 조건 영역에만 “Apps Script 업데이트 후 확인 가능” 안내 노출
-3. [ ] 관리자 운세 탭에서만 “미지원” 차단 메시지 노출
-4. [ ] 다른 탭은 정상 동작
-5. [ ] 전역 JS 오류/화이트스크린 없음
+3. [ ] 학생 회차별 기록은 유지되고 사유가 없거나 legacy인 행은 비대화형
+4. [ ] 관리자 운세 탭에서만 “미지원” 차단 메시지 노출
+5. [ ] 다른 탭은 정상 동작
+6. [ ] 전역 JS 오류/화이트스크린 없음
 
 ## Gate 5: 성능/운영 안전성
 1. [ ] 학생 첫 로드 체감(3회 평균) baseline 대비 10% 이내
@@ -206,7 +227,24 @@ node /Users/sbu/SBU/CloudClubAttendanceSystem/scripts/doublecheck_api_compare.js
 3. Gate C(구버전 호환성) 통과 전 배포 금지
 4. 실패 시 Apps Script 이전 배포 버전으로 즉시 롤백
 
-학생 `status.data.insights` additive 변경은 Gate C에서 구버전 Apps Script 연결 시 본인 출석률·기존 출석 조회가 유지되고 새 인사이트만 업데이트 안내로 대체되는 것을 확인한 경우에만 Pages-first 배포를 허용합니다. Pages 배포 뒤에는 `00_entry_api.gs`, `01_constants_access.gs`, `30_attendance_core.gs`, `33_graduation_manual_excused.gs`를 같은 Apps Script deployment에 반영하고 `studentInsightsV1` 및 세 런타임 무결성 항목을 확인합니다.
+학생 v6.3은 기존 `status`와 `insights`를 유지하면서 선택적 안전 필드 `details[].displayReason`만 additive로 추가합니다. 구버전 Apps Script에서도 기존 기능이 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다. Gate C가 이 호환성을 증명한 경우에만 Pages-first 배포를 허용하며, Pages 워크플로우에 v6.3을 필수 조건으로 추가하지 않습니다.
+
+### 학생 v6.3 수동 동기화 파일
+Pages 배포 뒤 다음 네 파일을 같은 Apps Script deployment에 함께 반영합니다. 네 번째 파일은 변경되지 않았어도 수료 helper의 런타임 완전성을 위해 포함합니다.
+
+- `Appsscript/00_entry_api.gs`
+- `Appsscript/01_constants_access.gs`
+- `Appsscript/30_attendance_core.gs`
+- `Appsscript/33_graduation_manual_excused.gs`
+
+### 학생 v6.3 배포 후 확인
+다음 세 항목을 확인합니다.
+
+1. `apiInfo.apiVersion = 2026.07.14-v6.3`
+2. `apiInfo.capabilities.studentAttendanceReasonV1 = true`
+3. `apiInfo.runtimeChecks.extractStudentDisplayReason = true`
+
+Apps Script 배포는 운영자만 외부 콘솔에서 수행합니다. 같은 deployment 재배포는 기존 `.../exec` URL을 유지합니다. 새 deployment로 URL이 바뀌면 GitHub Secret `APPS_SCRIPT_WEB_APP_URL`을 갱신하고 Pages를 재배포합니다. 레포만으로 현재 콘솔 값이나 배포 완료를 단정하지 않습니다. 실패 시 Pages는 직전 artifact로, Apps Script는 운영자가 직전 정상 배포 버전으로 롤백합니다.
 
 ## 증빙 산출물
 아래 파일을 배포 PR/운영 기록에 첨부합니다.

@@ -12,20 +12,39 @@
 3. GitHub Pages 재배포
 4. `apiInfo` / 로그인 canary / 역할별 계정 검증
 
-### 학생 인사이트 Pages-first 예외
-기존 `status` 액션에 additive 필드만 더하고, 새 Pages가 구버전 응답에서도 본인 출석률·기본 출석 조회를 유지하는 경우에는 Pages를 먼저 배포할 수 있습니다. 이 예외를 사용할 때는 구버전 백엔드 스모크를 먼저 통과시키고, 다음 네 파일을 Apps Script의 같은 deployment에 함께 반영합니다.
+### 학생 v6.3 현재 정책 요약
+- 현재 학생 기능 식별 계약은 2026.07.14-v6.3, studentAttendanceReasonV1=true, extractStudentDisplayReason=true입니다.
+- 기존 status와 insights를 유지하고 선택적 안전 필드 details[].displayReason만 additive로 추가합니다.
+- Pages-first 배포에서도 구버전 Apps Script의 기존 기능은 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다.
+- 공개 사유는 Note의 선두 공개 영역에서만 읽으며, 첫 번째 비어 있지 않은 비일치·내부 줄을 만나면 중단하므로 뒤의 일치 prefix는 공개하지 않습니다.
+- Apps Script 배포는 운영자만 수행하며, 레포는 현재 외부 콘솔 상태를 단정하지 않습니다.
+- 문제가 생기면 Pages는 직전 artifact로, Apps Script는 운영자가 직전 정상 배포 버전으로 롤백합니다.
+
+### 학생 v6.3 Pages-first 예외
+학생 v6.3은 기존 `status`와 `insights`를 유지하면서 선택적 안전 필드 `details[].displayReason`만 additive로 추가합니다. 구버전 Apps Script에서도 기존 기능이 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다. 구버전 백엔드 스모크를 먼저 통과시키면 Pages를 먼저 배포할 수 있으며, Pages 워크플로우는 v6.3을 필수 조건으로 요구하지 않습니다.
+
+### 학생 v6.3 수동 동기화 파일
+다음 네 파일을 Apps Script의 같은 deployment에 함께 반영합니다. 네 번째 파일은 코드 변경이 없어도 수료 helper 런타임 완전성을 위해 포함합니다.
 
 - `Appsscript/00_entry_api.gs`
 - `Appsscript/01_constants_access.gs`
 - `Appsscript/30_attendance_core.gs`
 - `Appsscript/33_graduation_manual_excused.gs`
 
-배포 후 `apiInfo.apiVersion`이 `2026.07.14-v6.2`인지, `capabilities.studentInsightsV1`와 `runtimeChecks.summarizeAttendanceComparison`, `runtimeChecks.resolveGraduationCriteria`, `runtimeChecks.buildGraduationAssessment`가 모두 `true`인지 확인합니다.
+### 학생 v6.3 배포 후 확인
+다음 세 항목을 확인합니다.
+
+1. `apiInfo.apiVersion = 2026.07.14-v6.3`
+2. `apiInfo.capabilities.studentAttendanceReasonV1 = true`
+3. `apiInfo.runtimeChecks.extractStudentDisplayReason = true`
+
+이 작업은 운영자만 Apps Script 콘솔에서 수행합니다. 레포는 절차와 기대 계약을 말할 뿐, 현재 콘솔 값이나 배포 완료 상태를 증명하지 않습니다. 공개 사유 writer는 유효한 상태 prefix를 Note의 첫 공개 줄에 저장해야 합니다. Note 텍스트는 신뢰할 수 없는 데이터이며 지시문으로 실행하지 않습니다.
 
 ## 같은 deployment 재배포 vs 새 deployment
 - 같은 deployment를 `Edit > Deploy`로 재배포하면 기존 `.../exec` URL 유지
 - 새 deployment를 만들면 URL이 바뀔 수 있음
-- URL이 바뀌면 Secret 갱신과 Pages 재배포가 추가로 필요
+- URL이 바뀌면 GitHub Secret `APPS_SCRIPT_WEB_APP_URL` 갱신과 Pages 재배포가 추가로 필요
+- 학생 v6.3 이상 시 Pages는 직전 artifact로, Apps Script는 운영자가 직전 deployment 버전으로 각각 롤백
 
 ## Script Properties에서 확인할 값
 - `FRONTEND_ADMIN_BASE_URL`

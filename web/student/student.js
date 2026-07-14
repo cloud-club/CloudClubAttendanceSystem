@@ -25,6 +25,13 @@ let studentStatusCache = {
   response: null
 };
 let studentStatusCacheGeneration = 0;
+let studentStatusRequestSequence = 0;
+let studentStatusViewGeneration = 0;
+let studentStatusDetails = [];
+let studentAttendanceDetailTrigger = null;
+let studentAttendanceDetailPreviousBodyOverflow = null;
+let studentAttendanceDetailInitialized = false;
+let studentAttendanceDetailFocusGeneration = 0;
 let studentMenuReturnFocus = null;
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
 const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
@@ -550,6 +557,9 @@ function saveLastUsedStudentPhone(value) {
 
 function invalidateStudentStatusCache() {
   studentStatusCacheGeneration++;
+  studentStatusRequestSequence++;
+  studentStatusViewGeneration++;
+  clearStudentAttendanceDetailState();
   studentStatusCache = {
     key: '',
     loadedAt: 0,
@@ -583,16 +593,19 @@ async function fetchStudentStatus(phoneNumber) {
   }
 
   const requestGeneration = studentStatusCacheGeneration;
+  const requestSequence = ++studentStatusRequestSequence;
   const response = await callStudentApi('status', buildSeasonParams({ phone: phone }));
   if (requestGeneration !== studentStatusCacheGeneration) {
     return fetchStudentStatus(phone);
   }
-  if (response && response.success) {
+  if (response && response.success && requestSequence === studentStatusRequestSequence) {
+    const cachedResponse = sanitizeStudentStatusResponseForCache(response);
     studentStatusCache = {
       key: cacheKey,
       loadedAt: Date.now(),
-      response: response
+      response: cachedResponse
     };
+    return cachedResponse;
   }
   return response;
 }
@@ -1089,6 +1102,7 @@ function openTab(tabName) {
   });
 
   setStudentMenuOpen(false);
+  if (tabName !== 'status') resetStudentStatusResult();
   if (tabName === 'status' && currentSeason) loadRankings();
 }
 
@@ -1366,6 +1380,8 @@ function handleAttendanceError(error) {
 
 async function checkAttendanceStatus(event) {
   event.preventDefault();
+  resetStudentStatusResult();
+  const viewGeneration = studentStatusViewGeneration;
 
   const phoneNumber = normalizeStudentPhone(document.getElementById('statusPhoneInput').value);
 
@@ -1387,8 +1403,10 @@ async function checkAttendanceStatus(event) {
 
   try {
     const response = await fetchStudentStatus(phoneNumber);
+    if (viewGeneration !== studentStatusViewGeneration) return;
     handleStatusResponse(response);
   } catch (error) {
+    if (viewGeneration !== studentStatusViewGeneration) return;
     if (handleHistoricalAccessError(error)) return;
     handleStatusError(error);
   }
@@ -1451,7 +1469,7 @@ function renderStatusComparison(comparison, fallbackRate) {
   if (!comparison || typeof comparison !== 'object') {
     return `
       <div class="metric-grid single-metric">
-        <div class="metric-card">
+        <div class="metric-card" data-status-metric="personal-rate">
           <span class="metric-label">내 출석률</span>
           <span class="metric-value highlight">${formatOneDecimal(fallbackRate)}%</span>
           <span class="metric-note">현재까지 반영</span>
@@ -1461,117 +1479,382 @@ function renderStatusComparison(comparison, fallbackRate) {
     `;
   }
 
-  const personalRate = toSafeNumber(comparison.personalAttendanceRate, fallbackRate);
-  const cohortRate = toSafeNumber(comparison.cohortAverageAttendanceRate, 0);
-  const difference = toSafeNumber(comparison.differencePercentagePoints, personalRate - cohortRate);
-  const rank = Number.isFinite(Number(comparison.rank)) ? Math.max(1, toSafeInteger(comparison.rank, 1)) : null;
-  const cohortSize = Math.max(0, toSafeInteger(comparison.cohortSize, 0));
-  const topPercentile = Number.isFinite(Number(comparison.topPercentile))
-    ? Math.max(0, toSafeNumber(comparison.topPercentile, 0))
-    : null;
-  const differenceDirection = Math.abs(difference) < 0.05
-    ? '평균과 같아요'
-    : `평균보다 ${formatOneDecimal(Math.abs(difference))}%p ${difference > 0 ? '높아요' : '낮아요'}`;
-  const rankText = rank && cohortSize ? `${rank}위` : '-';
-  const percentileText = topPercentile === null ? '전체 순위 기준' : `상위 ${formatOneDecimal(topPercentile)}%`;
+  const finiteOrNull = value => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const fallbackPersonalRate = finiteOrNull(fallbackRate) ?? 0;
+  const personalMetric = finiteOrNull(comparison.personalAttendanceRate);
+  const cohortRate = finiteOrNull(comparison.cohortAverageAttendanceRate);
+  const suppliedDifference = finiteOrNull(comparison.differencePercentagePoints);
+  const personalRate = personalMetric ?? fallbackPersonalRate;
+  const difference = suppliedDifference ?? (cohortRate === null ? null : personalRate - cohortRate);
+  const rankMetric = finiteOrNull(comparison.rank);
+  const cohortMetric = finiteOrNull(comparison.cohortSize);
+  const percentileMetric = finiteOrNull(comparison.topPercentile);
+  const rank = rankMetric !== null && rankMetric > 0 ? Math.max(1, Math.floor(rankMetric)) : null;
+  const cohortSize = cohortMetric !== null ? Math.max(0, Math.floor(cohortMetric)) : 0;
+  const topPercentile = percentileMetric === null ? null : Math.min(100, Math.max(0, percentileMetric));
+  const differenceValue = difference === null
+    ? '-'
+    : `${difference > 0 ? '+' : ''}${formatOneDecimal(difference)}%p`;
+  const differenceNote = difference === null
+    ? '비교 데이터 없음'
+    : (Math.abs(difference) < 0.05 ? '평균과 동일' : `평균보다 ${difference > 0 ? '높음' : '낮음'}`);
+  const summaryText = difference === null
+    ? '전체 평균 비교 데이터가 아직 없습니다.'
+    : (Math.abs(difference) < 0.05
+      ? '전체 평균과 동일합니다.'
+      : `전체 평균보다 ${formatOneDecimal(Math.abs(difference))}%p ${difference > 0 ? '높습니다.' : '낮습니다.'}`);
+  const summaryIcon = difference === null
+    ? 'fa-circle-info'
+    : (Math.abs(difference) < 0.05 ? 'fa-equals' : (difference > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'));
+  const rankText = `${rank === null ? '-' : rank} / ${cohortSize}`;
+  const percentileText = topPercentile === null ? '-' : `${formatOneDecimal(topPercentile)}%`;
+  const percentileNote = topPercentile === null
+    ? (cohortSize > 0 ? '순위 집계 중' : '비교 대상 없음')
+    : '전체 순위 기준';
 
   return `
-    <div class="metric-grid">
-      <div class="metric-card">
+    <div class="metric-grid status-comparison-grid" role="list" aria-label="출석률 비교 지표">
+      <div class="metric-card" role="listitem" data-status-metric="personal-rate">
         <span class="metric-label">내 출석률</span>
         <span class="metric-value highlight">${formatOneDecimal(personalRate)}%</span>
         <span class="metric-note">현재까지 반영</span>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" role="listitem" data-status-metric="cohort-average">
         <span class="metric-label">전체 평균</span>
-        <span class="metric-value">${formatOneDecimal(cohortRate)}%</span>
-        <span class="metric-note">전체 사용자 기준</span>
+        <span class="metric-value">${cohortRate === null ? '-' : `${formatOneDecimal(cohortRate)}%`}</span>
+        <span class="metric-note">비교 대상 기준</span>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" role="listitem" data-status-metric="difference">
+        <span class="metric-label">평균 대비</span>
+        <span class="metric-value">${differenceValue}</span>
+        <span class="metric-note">${differenceNote}</span>
+      </div>
+      <div class="metric-card" role="listitem" data-status-metric="rank">
         <span class="metric-label">전체 순위</span>
         <span class="metric-value">${rankText}</span>
-        <span class="metric-note">${escapeHtml(percentileText)} · ${cohortSize}명</span>
+        <span class="metric-note">순위 / 전체 인원</span>
+      </div>
+      <div class="metric-card" role="listitem" data-status-metric="percentile">
+        <span class="metric-label">상위 백분율</span>
+        <span class="metric-value">${percentileText}</span>
+        <span class="metric-note">${percentileNote}</span>
       </div>
     </div>
     <div class="comparison-summary">
-      <i class="fas fa-arrow-trend-up" aria-hidden="true"></i>
-      <span><strong>${escapeHtml(differenceDirection)}</strong><br>차이는 퍼센트포인트(%p) 기준입니다.</span>
+      <i class="fas ${summaryIcon}" aria-hidden="true"></i>
+      <span><strong>${summaryText}</strong><br>차이는 퍼센트포인트(%p) 기준입니다.</span>
     </div>
   `;
 }
 
-function renderAttendanceDetails(details) {
+function getStudentAttendanceStatusMeta(type) {
+  const statusByType = {
+    future: { css: 'future', icon: 'fa-clock', text: '예정' },
+    on_time: { css: 'present', icon: 'fa-check-circle', text: '출석' },
+    late: { css: 'late', icon: 'fa-hourglass-half', text: '지각' },
+    excused: { css: 'excused', icon: 'fa-notes-medical', text: '유고' },
+    absent: { css: 'absent', icon: 'fa-times-circle', text: '결석' }
+  };
+  return statusByType[type] || statusByType.absent;
+}
+
+function sanitizeStudentAttendanceDetails(details) {
+  const allowedTypes = ['future', 'on_time', 'late', 'excused', 'absent'];
   const list = Array.isArray(details) ? details : [];
-  if (!list.length) return '<p class="info-text">표시할 회차별 출석 내역이 없습니다.</p>';
 
   return list.map(detail => {
-    const type = String((detail && detail.attendanceType) || 'absent');
-    const statusByType = {
-      future: { css: 'future', icon: 'fa-clock', text: '예정' },
-      on_time: { css: 'present', icon: 'fa-check-circle', text: '출석' },
-      late: { css: 'late', icon: 'fa-hourglass-half', text: '지각' },
-      excused: { css: 'excused', icon: 'fa-notes-medical', text: '유고' },
-      absent: { css: 'absent', icon: 'fa-times-circle', text: '결석' }
-    };
-    const status = statusByType[type] || statusByType.absent;
-    const itemClass = type === 'future' ? 'future' : '';
-    const date = escapeHtml(String((detail && (detail.date || detail.sessionKey)) || '-'));
+    const source = detail && typeof detail === 'object' ? detail : {};
+    const rawType = String(source.attendanceType || '').trim();
+    const attendanceType = allowedTypes.includes(rawType) ? rawType : 'absent';
+    const rawDate = typeof source.date === 'string'
+      ? source.date.trim()
+      : (typeof source.sessionKey === 'string' ? source.sessionKey.trim() : '');
+    const rawTime = typeof source.time === 'string' ? source.time.trim() : '';
+    const dateTimeMatch = rawDate.match(/^(.+?)[T\s]+(\d{1,2}:\d{2})(?::\d{2})?$/);
+    const date = dateTimeMatch ? dateTimeMatch[1].trim() : (rawDate || '-');
+    const time = rawTime || (dateTimeMatch ? dateTimeMatch[2] : '-');
+    const trimmedReason = typeof source.displayReason === 'string' ? source.displayReason.trim() : '';
+    const displayReason = trimmedReason && Array.from(trimmedReason).length <= 300 ? trimmedReason : '';
 
+    return { attendanceType, date, time, displayReason };
+  });
+}
+
+function sanitizeStudentStatusResponseForCache(response) {
+  if (!response || typeof response !== 'object') return response;
+
+  const cachedResponse = Object.assign({}, response);
+  if (!response.data || typeof response.data !== 'object') return cachedResponse;
+
+  const cachedData = Object.assign({}, response.data);
+  if (Object.prototype.hasOwnProperty.call(response.data, 'details')) {
+    cachedData.details = sanitizeStudentAttendanceDetails(response.data.details).map(detail => {
+      const cachedDetail = {
+        attendanceType: detail.attendanceType,
+        date: detail.date,
+        time: detail.time
+      };
+      if (detail.displayReason) cachedDetail.displayReason = detail.displayReason;
+      return cachedDetail;
+    });
+  }
+  cachedResponse.data = cachedData;
+  return cachedResponse;
+}
+
+function closeStudentAttendanceDetailDialog(options) {
+  const opts = options || {};
+  const dialog = document.getElementById('studentAttendanceDetailDialog');
+  const trigger = studentAttendanceDetailTrigger;
+  const wasOpen = !!(dialog && dialog.getAttribute('aria-hidden') === 'false');
+  studentAttendanceDetailFocusGeneration++;
+
+  if (dialog) {
+    dialog.classList.remove('is-open');
+    dialog.setAttribute('aria-hidden', 'true');
+    dialog.setAttribute('inert', '');
+  }
+  if (studentAttendanceDetailPreviousBodyOverflow !== null) {
+    document.body.style.overflow = studentAttendanceDetailPreviousBodyOverflow;
+    studentAttendanceDetailPreviousBodyOverflow = null;
+  }
+  studentAttendanceDetailTrigger = null;
+
+  const fallbackFocus = document.getElementById('statusPhoneInput');
+  const canFocusFallback = !!(
+    fallbackFocus
+    && fallbackFocus.isConnected
+    && !fallbackFocus.disabled
+    && !fallbackFocus.hidden
+    && typeof fallbackFocus.focus === 'function'
+  );
+  const canRestoreTrigger = !!(
+    trigger
+    && trigger.isConnected
+    && !trigger.disabled
+    && !trigger.hidden
+    && typeof trigger.focus === 'function'
+  );
+
+  if (opts.restoreFocus !== false && wasOpen && canRestoreTrigger) {
+    trigger.focus();
+  } else if (opts.restoreFocus !== false && wasOpen && canFocusFallback) {
+    fallbackFocus.focus();
+  } else if (
+    opts.restoreFocus === false
+    && wasOpen
+    && dialog
+    && dialog.contains(document.activeElement)
+    && canFocusFallback
+  ) {
+    fallbackFocus.focus();
+  }
+}
+
+function clearStudentAttendanceDetailState() {
+  studentStatusDetails = [];
+  closeStudentAttendanceDetailDialog({ restoreFocus: false });
+}
+
+function resetStudentStatusResult() {
+  studentStatusViewGeneration++;
+  clearStudentAttendanceDetailState();
+  const statusResult = document.getElementById('statusResult');
+  if (!statusResult) return;
+  statusResult.innerHTML = '';
+  statusResult.style.display = 'none';
+}
+
+function openStudentAttendanceDetailDialog(index, trigger) {
+  const normalizedIndex = String(index);
+  if (!/^(0|[1-9][0-9]*)$/.test(normalizedIndex)) return false;
+  const detailIndex = Number(normalizedIndex);
+  if (!Number.isInteger(detailIndex) || detailIndex < 0 || detailIndex >= studentStatusDetails.length) return false;
+
+  const detail = studentStatusDetails[detailIndex];
+  if (!detail || !detail.displayReason) return false;
+
+  const dialog = document.getElementById('studentAttendanceDetailDialog');
+  const closeButton = document.getElementById('studentAttendanceDetailClose');
+  if (!dialog || !closeButton) return false;
+  const focusGeneration = ++studentAttendanceDetailFocusGeneration;
+
+  const status = getStudentAttendanceStatusMeta(detail.attendanceType);
+  document.getElementById('studentAttendanceDetailStatus').textContent = status.text;
+  document.getElementById('studentAttendanceDetailDate').textContent = detail.date;
+  document.getElementById('studentAttendanceDetailTime').textContent = detail.time;
+  document.getElementById('studentAttendanceDetailReason').textContent = detail.displayReason;
+
+  studentAttendanceDetailTrigger = trigger && typeof trigger.focus === 'function' ? trigger : null;
+  if (dialog.getAttribute('aria-hidden') !== 'false') {
+    studentAttendanceDetailPreviousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  dialog.removeAttribute('inert');
+  dialog.setAttribute('aria-hidden', 'false');
+  dialog.classList.add('is-open');
+  closeButton.focus();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (focusGeneration !== studentAttendanceDetailFocusGeneration
+          || dialog.getAttribute('aria-hidden') !== 'false'
+          || dialog.hasAttribute('inert')
+          || !closeButton.isConnected) return;
+      closeButton.focus();
+    });
+  });
+  return true;
+}
+
+function handleStudentAttendanceDetailDialogKeydown(event) {
+  const dialog = document.getElementById('studentAttendanceDetailDialog');
+  if (!dialog || dialog.getAttribute('aria-hidden') !== 'false') return;
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeStudentAttendanceDetailDialog();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+
+  const focusable = Array.from(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]'))
+    .filter(element => !element.disabled && !element.hidden && element.getAttribute('tabindex') !== '-1');
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+
+  if (event.shiftKey && (active === first || !dialog.contains(active))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function initializeStudentAttendanceDetailDialog() {
+  if (studentAttendanceDetailInitialized) return;
+  const statusResult = document.getElementById('statusResult');
+  const dialog = document.getElementById('studentAttendanceDetailDialog');
+  const closeButton = document.getElementById('studentAttendanceDetailClose');
+  if (!statusResult || !dialog || !closeButton) return;
+
+  studentAttendanceDetailInitialized = true;
+  statusResult.addEventListener('click', event => {
+    const trigger = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('[data-attendance-detail-index]')
+      : null;
+    if (!trigger || !statusResult.contains(trigger)) return;
+    openStudentAttendanceDetailDialog(trigger.getAttribute('data-attendance-detail-index'), trigger);
+  });
+  closeButton.addEventListener('click', () => closeStudentAttendanceDetailDialog());
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) closeStudentAttendanceDetailDialog();
+  });
+  document.addEventListener('keydown', handleStudentAttendanceDetailDialogKeydown);
+}
+
+function renderAttendanceDetails(details) {
+  const list = sanitizeStudentAttendanceDetails(details);
+  if (!list.length) return '<p class="info-text">표시할 회차별 출석 내역이 없습니다.</p>';
+
+  return list.map((detail, index) => {
+    const status = getStudentAttendanceStatusMeta(detail.attendanceType);
+    const itemClass = detail.attendanceType === 'future' ? 'future' : '';
+    const dateTime = detail.time === '-' ? detail.date : `${detail.date} ${detail.time}`;
+    const content = `
+        <span class="attendance-date">${escapeHtml(dateTime)}</span>
+        <span class="attendance-status-group">
+          <span class="attendance-status ${status.css}">
+            <i class="fas ${status.icon}" aria-hidden="true"></i>
+            <span>${status.text}</span>
+          </span>
+          ${detail.displayReason ? '<span class="attendance-detail-affordance" aria-hidden="true">사유 보기 <i class="fas fa-chevron-right"></i></span>' : ''}
+        </span>`;
+
+    if (!detail.displayReason) {
+      return `<div class="attendance-item ${itemClass}">${content}</div>`;
+    }
     return `
-      <div class="attendance-item ${itemClass}">
-        <div class="attendance-date">${date}</div>
-        <div class="attendance-status ${status.css}">
-          <i class="fas ${status.icon}" aria-hidden="true"></i>
-          <span>${status.text}</span>
-        </div>
-      </div>
+      <button type="button"
+              class="attendance-item attendance-detail-trigger ${itemClass}"
+              data-attendance-detail-index="${index}"
+              aria-haspopup="dialog"
+              aria-controls="studentAttendanceDetailDialog">${content}
+      </button>
     `;
   }).join('');
 }
 
 function handleStatusResponse(response) {
   const statusResult = document.getElementById('statusResult');
+  clearStudentAttendanceDetailState();
 
   if (response.success) {
     const data = response.data || {};
-    const details = Array.isArray(data.details) ? data.details : [];
+    const details = sanitizeStudentAttendanceDetails(data.details);
+    studentStatusDetails = details;
     const liveProgress = buildStatusProgressFromDetails(details);
     const insights = data.insights && typeof data.insights === 'object' ? data.insights : {};
     const comparison = insights.comparison;
     const completion = insights.completion;
     const counts = getStatusCounts(data, completion);
-    const displayRate = comparison && Number.isFinite(Number(comparison.personalAttendanceRate))
-      ? toSafeNumber(comparison.personalAttendanceRate, liveProgress.rate)
-      : toSafeNumber(data.rate, liveProgress.rate);
+    const comparisonRateValue = comparison && comparison.personalAttendanceRate;
+    const hasComparisonRate = comparisonRateValue !== null
+      && comparisonRateValue !== undefined
+      && comparisonRateValue !== ''
+      && Number.isFinite(Number(comparisonRateValue));
+    const hasLegacyRate = data.rate !== null
+      && data.rate !== undefined
+      && data.rate !== ''
+      && Number.isFinite(Number(data.rate));
+    const displayRate = hasComparisonRate
+      ? Number(comparisonRateValue)
+      : (hasLegacyRate ? Number(data.rate) : liveProgress.rate);
     const safeSeasonLabel = escapeHtml(String(data.seasonLabel || data.grade || '-'));
     const safeName = escapeHtml(String(data.name || '회원'));
 
     statusResult.innerHTML = `
-      <div class="card">
+      <div class="card status-dashboard-card">
         <h3 class="identity-heading"><span class="grade-badge">${safeSeasonLabel}</span>${safeName}님 출석 현황</h3>
-        ${renderStatusComparison(comparison, displayRate)}
-        <div class="metric-grid count-grid">
-          <div class="metric-card">
-            <span class="metric-label">출석</span>
-            <span class="metric-value">${counts.attended}회</span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">지각</span>
-            <span class="metric-value">${counts.late}회</span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">결석</span>
-            <span class="metric-value">${counts.absent}회</span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">유고</span>
-            <span class="metric-value">${counts.excused}회</span>
-          </div>
+        <div class="status-dashboard-layout">
+          <section class="status-dashboard-group status-comparison-group" aria-label="출석률 비교">
+            ${renderStatusComparison(comparison, displayRate)}
+          </section>
+          <section class="status-dashboard-group status-count-group" aria-label="출석 횟수와 상세">
+            <div class="metric-grid count-grid status-count-grid" role="list" aria-label="출석 횟수 지표">
+              <div class="metric-card" role="listitem" data-status-count="attended">
+                <span class="metric-label">출석</span>
+                <span class="metric-value">${counts.attended}회</span>
+              </div>
+              <div class="metric-card" role="listitem" data-status-count="late">
+                <span class="metric-label">지각</span>
+                <span class="metric-value">${counts.late}회</span>
+              </div>
+              <div class="metric-card" role="listitem" data-status-count="absent">
+                <span class="metric-label">결석</span>
+                <span class="metric-value">${counts.absent}회</span>
+              </div>
+              <div class="metric-card" role="listitem" data-status-count="excused">
+                <span class="metric-label">유고</span>
+                <span class="metric-value">${counts.excused}회</span>
+              </div>
+              <div class="metric-card" role="listitem" data-status-count="future">
+                <span class="metric-label">남은 수업</span>
+                <span class="metric-value">${counts.future}회</span>
+              </div>
+            </div>
+            <details class="status-details">
+              <summary>회차별 출석 상세</summary>
+              <div class="attendance-details">${renderAttendanceDetails(details)}</div>
+            </details>
+          </section>
         </div>
-        <details class="status-details">
-          <summary>회차별 출석 상세</summary>
-          <div class="attendance-details">${renderAttendanceDetails(details)}</div>
-        </details>
       </div>
     `;
   } else {
@@ -1582,6 +1865,7 @@ function handleStatusResponse(response) {
 }
 
 function handleStatusError(error) {
+  clearStudentAttendanceDetailState();
   const statusResult = document.getElementById('statusResult');
   statusResult.innerHTML = `<div class="error">❌ 오류가 발생했습니다: ${escapeHtml(getDisplayErrorMessage(error, '알 수 없는 오류'))}</div>`;
   statusResult.style.display = 'block';
@@ -1667,70 +1951,77 @@ function renderCompletionAssessment(data, completion) {
       : '아래 미충족 조건과 남은 참여 가능 횟수를 확인해 주세요.');
 
   return `
-    <div class="card">
+    <div class="card completion-assessment-card">
       <h3 class="identity-heading"><span class="grade-badge">${safeSeasonLabel}</span>${safeName}님 수료 조건</h3>
-      <div class="completion-summary ${isEligible ? 'is-positive' : 'is-negative'}">
-        <i class="fas ${isEligible ? 'fa-circle-check' : 'fa-circle-exclamation'}" aria-hidden="true"></i>
-        <span><strong>${summaryTitle}</strong><br>${summaryDetail}</span>
-      </div>
-      <div class="metric-grid count-grid">
-        <div class="metric-card">
-          <span class="metric-label">수료 필요 출석</span>
-          <span class="metric-value">${requiredAttendanceCount}회</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">현재 출석</span>
-          <span class="metric-value highlight">${attendedCount}회</span>
-          <span class="metric-note">유고 ${excusedCount}회</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">남은 수업</span>
-          <span class="metric-value">${remainingSessions}회</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">최소 참여 필요</span>
-          <span class="metric-value">${minimumFutureParticipation}회</span>
-        </div>
-      </div>
-      <div class="metric-grid count-grid">
-        <div class="metric-card">
-          <span class="metric-label">현재 지각</span>
-          <span class="metric-value">${lateCount}회</span>
-          <span class="metric-note">지각 ${lateRatio}회 = 결석 1회</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">환산 결석</span>
-          <span class="metric-value">${formatOneDecimal(absenceEquivalent)}회</span>
-          <span class="metric-note">결석 ${absentCount}회 포함</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">현재 환산 결석률</span>
-          <span class="metric-value">${formatOneDecimal(absenceEquivalentRate)}%</span>
-          <span class="metric-note">지각을 결석으로 환산</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">남은 결석 여유</span>
-          <span class="metric-value">${formatOneDecimal(remainingAllowance)}회</span>
-          <span class="metric-note">최대 ${formatOneDecimal(maxAbsenceEquivalent)}회</span>
-        </div>
-      </div>
-      <ul class="criteria-list">
-        <li class="criteria-item ${completion.meetsAttendanceCount ? 'is-satisfied' : (completion.attendancePossible ? '' : 'is-blocked')}">
-          <i class="fas ${completion.meetsAttendanceCount ? 'fa-circle-check' : 'fa-user-check'}" aria-hidden="true"></i>
-          <div>
-            <strong>출석 횟수 기준</strong>
-            <span>${attendedCount}/${requiredAttendanceCount}회 · ${completion.meetsAttendanceCount ? '충족' : (completion.attendancePossible ? '남은 회차로 충족 가능' : '충족 불가')}</span>
+      <div class="completion-assessment-layout">
+        <section class="completion-overview" aria-label="수료 가능 여부와 출석 지표">
+          <div class="completion-summary ${isEligible ? 'is-positive' : 'is-negative'}">
+            <i class="fas ${isEligible ? 'fa-circle-check' : 'fa-circle-exclamation'}" aria-hidden="true"></i>
+            <span><strong>${summaryTitle}</strong><br>${summaryDetail}</span>
           </div>
-        </li>
-        <li class="criteria-item ${completion.meetsAbsenceThreshold ? 'is-satisfied' : 'is-blocked'}">
-          <i class="fas ${completion.meetsAbsenceThreshold ? 'fa-circle-check' : 'fa-circle-xmark'}" aria-hidden="true"></i>
-          <div>
-            <strong>환산 결석 기준</strong>
-            <span>${formatOneDecimal(absenceEquivalent)}/${formatOneDecimal(maxAbsenceEquivalent)}회 · ${completion.meetsAbsenceThreshold ? '충족' : '초과'}</span>
+          <div class="metric-grid count-grid completion-metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">수료 필요 출석</span>
+              <span class="metric-value">${requiredAttendanceCount}회</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">현재 출석</span>
+              <span class="metric-value highlight">${attendedCount}회</span>
+              <span class="metric-note">유고 ${excusedCount}회</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">남은 수업</span>
+              <span class="metric-value">${remainingSessions}회</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">최소 참여 필요</span>
+              <span class="metric-value">${minimumFutureParticipation}회</span>
+            </div>
           </div>
-        </li>
-        ${renderRequiredSessionCriteria(completion)}
-      </ul>
+          <div class="metric-grid count-grid completion-metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">현재 지각</span>
+              <span class="metric-value">${lateCount}회</span>
+              <span class="metric-note">지각 ${lateRatio}회 = 결석 1회</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">환산 결석</span>
+              <span class="metric-value">${formatOneDecimal(absenceEquivalent)}회</span>
+              <span class="metric-note">결석 ${absentCount}회 포함</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">현재 환산 결석률</span>
+              <span class="metric-value">${formatOneDecimal(absenceEquivalentRate)}%</span>
+              <span class="metric-note">지각을 결석으로 환산</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">남은 결석 여유</span>
+              <span class="metric-value">${formatOneDecimal(remainingAllowance)}회</span>
+              <span class="metric-note">최대 ${formatOneDecimal(maxAbsenceEquivalent)}회</span>
+            </div>
+          </div>
+        </section>
+        <section class="completion-criteria" aria-label="수료 기준">
+          <h4 class="completion-section-title">수료 기준</h4>
+          <ul class="criteria-list">
+            <li class="criteria-item ${completion.meetsAttendanceCount ? 'is-satisfied' : (completion.attendancePossible ? '' : 'is-blocked')}">
+              <i class="fas ${completion.meetsAttendanceCount ? 'fa-circle-check' : 'fa-user-check'}" aria-hidden="true"></i>
+              <div>
+                <strong>출석 횟수 기준</strong>
+                <span>${attendedCount}/${requiredAttendanceCount}회 · ${completion.meetsAttendanceCount ? '충족' : (completion.attendancePossible ? '남은 회차로 충족 가능' : '충족 불가')}</span>
+              </div>
+            </li>
+            <li class="criteria-item ${completion.meetsAbsenceThreshold ? 'is-satisfied' : 'is-blocked'}">
+              <i class="fas ${completion.meetsAbsenceThreshold ? 'fa-circle-check' : 'fa-circle-xmark'}" aria-hidden="true"></i>
+              <div>
+                <strong>환산 결석 기준</strong>
+                <span>${formatOneDecimal(absenceEquivalent)}/${formatOneDecimal(maxAbsenceEquivalent)}회 · ${completion.meetsAbsenceThreshold ? '충족' : '초과'}</span>
+              </div>
+            </li>
+            ${renderRequiredSessionCriteria(completion)}
+          </ul>
+        </section>
+      </div>
     </div>
   `;
 }
@@ -1786,6 +2077,7 @@ function showSeasonWarning(message) {
 function applyBlockedStudentState(message) {
   clearInterval(countdownInterval);
   isAttendanceActive = false;
+  resetStudentStatusResult();
 
   const countdownTitle = document.getElementById('countdown-title');
   const countdownDiv = document.getElementById('countdown');
@@ -1836,6 +2128,7 @@ async function initializeStudentPage() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initializeStudentAttendanceDetailDialog();
   initializeStudentNavigation();
   const seasonResult = await ensureInitialSeasonAlias();
   updateSeasonInfoBadge();

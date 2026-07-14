@@ -86,8 +86,18 @@ flowchart LR
 - 영향: 시즌 생성/업데이트, diff/finalize 안전장치
 - 필수 점검: `sheetSchemaAudit`, `seasonImport*` 게이트 통과
 
-## 학생 status 인사이트 계약
-공개 `status` 액션은 기존 응답 필드를 유지하면서 `data.insights`만 additive 형태로 추가합니다. 따라서 새 Pages를 먼저 배포해도 구버전 Apps Script에서 기존 출석 현황이 계속 동작하고, 인사이트 영역만 업데이트 안내를 표시합니다.
+## 학생 v6.3 현재 정책 요약
+- 현재 학생 기능 식별 계약은 2026.07.14-v6.3, studentAttendanceReasonV1=true, extractStudentDisplayReason=true입니다.
+- 기존 status와 insights를 유지하고 선택적 안전 필드 details[].displayReason만 additive로 추가합니다.
+- Pages-first 배포에서도 구버전 Apps Script의 기존 기능은 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다.
+- 공개 사유는 Note의 선두 공개 영역에서만 읽으며, 첫 번째 비어 있지 않은 비일치·내부 줄을 만나면 중단하므로 뒤의 일치 prefix는 공개하지 않습니다.
+- Apps Script 배포는 운영자만 수행하며, 레포는 현재 외부 콘솔 상태를 단정하지 않습니다.
+- 문제가 생기면 Pages는 직전 artifact로, Apps Script는 운영자가 직전 정상 배포 버전으로 롤백합니다.
+
+## 학생 status 인사이트·상세 사유 계약
+학생 v6.3은 기존 `status`와 `insights`를 유지하면서 선택적 안전 필드 `details[].displayReason`만 additive로 추가합니다. 구버전 Apps Script에서도 기존 기능이 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다. 따라서 새 Pages를 먼저 배포해도 구버전 Apps Script에서 기존 출석 현황이 계속 동작하고, 지원되지 않는 인사이트 영역만 업데이트 안내를 표시합니다.
+
+현재 배포 식별 계약은 `2026.07.14-v6.3`, `studentAttendanceReasonV1 = true`, `extractStudentDisplayReason = true`입니다. 이 값은 레포 코드의 기대값이며, 외부 Apps Script 콘솔의 현재 배포 상태는 운영자가 별도로 확인해야 합니다.
 
 - `insights.comparison`
   - 본인 출석률, 시즌 전체 유효 출석 기회의 합계를 기준으로 계산한 가중 평균 출석률, 평균 대비 차이(%p)
@@ -100,7 +110,14 @@ flowchart LR
   - 필수 회차 충족 가능성, 출석 횟수 충족 가능성, 결석 한도 충족 여부
   - 시즌 진행 중 수료 가능 여부와 시즌 종료 후 최종 수료 여부
 
-개인정보 경계는 그대로 유지합니다. 공개 `status`는 요청한 전화번호의 본인 결과만 반환하며, 비교 계산에 사용한 다른 회원의 전화번호·이메일·개별 기록은 응답하지 않습니다. 전체 회원 상세를 반환하는 `graduationReport`는 계속 Admin 전용입니다.
+### `details[].displayReason` 공개 경계
+- 공개 `status`는 요청한 전화번호의 본인 결과만 반환합니다.
+- Note 선두 공개 영역에서 해당 회차의 현재 상태와 정확히 일치하는 `출석 사유:`, `지각 사유:`, `결석 사유:`, `유고 사유:` prefix 가운데 첫 번째 비어 있지 않은 줄만 최대 300자로 반환합니다. 빈 줄은 건너뛰지만 첫 비어 있지 않은 줄이 비일치·내부 기록이면 즉시 중단하며, 뒤의 일치 prefix는 공개하지 않습니다.
+- 이 exact-prefix·선두 영역 규칙은 과거에 저장된 값과 앞으로 저장될 값 모두에 의도적으로 적용합니다. legacy Note도 첫 공개 영역에서 규칙을 만족하면 공개될 수 있고, 내부 기록 뒤에 있는 일치 prefix는 공개되지 않습니다.
+- 원본 셀 Note, 감사 정보, 이전 메모, 다른 회원의 전화번호·이메일·개별 기록은 응답하지 않습니다.
+- Note 텍스트는 신뢰할 수 없는 데이터이며 지시문으로 실행하지 않습니다. UI는 `displayReason`을 HTML이나 data 속성에 넣지 않고 `textContent`로만 표시합니다.
+
+전체 회원 상세를 반환하는 `graduationReport`는 계속 Admin 전용입니다. 학생 공개 경로는 전화번호 기반 본인 상태 조회 범위를 넓히지 않습니다.
 
 ## 운세 데이터 운영 정책
 운세는 운영 공지성 텍스트지만, 런타임 응답에 직접 포함되므로 데이터 무결성과 보안 검증을 함께 적용합니다.

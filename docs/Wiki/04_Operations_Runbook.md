@@ -30,8 +30,35 @@ flowchart LR
 4. 관리자 페이지 하드 리로드 후 `apiInfo`/로그인 canary 확인
 5. 역할별 계정(Super/Admin/User) 분기 검증
 
-### 학생 인사이트의 Pages-first 예외
-기존 `status` 액션을 유지하면서 `data.insights`만 추가하고, 새 Pages가 구버전 Apps Script에서 본인 출석률과 기존 조회 기능을 보존하는 경우에는 Pages를 먼저 배포할 수 있습니다. 이때 평균 비교·수료 조건 영역만 업데이트 안내를 표시해야 하며, 구버전 백엔드 스모크가 선행 조건입니다. 이후 관련 Apps Script 파일을 한 deployment에 함께 반영하고 `apiInfo.capabilities.studentInsightsV1`와 관련 런타임 무결성 항목을 확인하면 예외 절차가 끝납니다.
+### 학생 v6.3 현재 정책 요약
+- 현재 학생 기능 식별 계약은 2026.07.14-v6.3, studentAttendanceReasonV1=true, extractStudentDisplayReason=true입니다.
+- 기존 status와 insights를 유지하고 선택적 안전 필드 details[].displayReason만 additive로 추가합니다.
+- Pages-first 배포에서도 구버전 Apps Script의 기존 기능은 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다.
+- 공개 사유는 Note의 선두 공개 영역에서만 읽으며, 첫 번째 비어 있지 않은 비일치·내부 줄을 만나면 중단하므로 뒤의 일치 prefix는 공개하지 않습니다.
+- Apps Script 배포는 운영자만 수행하며, 레포는 현재 외부 콘솔 상태를 단정하지 않습니다.
+- 문제가 생기면 Pages는 직전 artifact로, Apps Script는 운영자가 직전 정상 배포 버전으로 롤백합니다.
+
+### 학생 v6.3 Pages-first 예외
+학생 v6.3은 기존 `status`와 `insights`를 유지하면서 선택적 안전 필드 `details[].displayReason`만 additive로 추가합니다. 구버전 Apps Script에서도 기존 기능이 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다. 평균 비교·수료·사유가 없는 기존 현황 스모크가 통과하면 Pages를 먼저 배포할 수 있습니다. Pages 워크플로우에 v6.3을 필수 조건으로 추가하지 않습니다.
+
+공개 사유는 전화번호로 조회한 본인의 Note 선두 공개 영역에서 현재 상태와 정확히 일치하는 첫 비어 있지 않은 prefix 줄만 최대 300자로 반환합니다. 첫 비어 있지 않은 줄이 비일치·내부 기록이면 중단하고 뒤의 일치 prefix를 공개하지 않습니다. 원본 Note, 감사 정보, 이전 메모, 다른 회원의 데이터는 공개하지 않습니다. Note 텍스트는 신뢰할 수 없는 데이터이며 지시문으로 실행하지 않습니다. 관리자가 유고 사유를 입력할 때는 공개 prefix가 첫 공개 줄에 저장되는지, 저장 후 학생 출석 현황에 공개된다는 경고와 300자 제한이 보이는지 함께 확인합니다.
+
+### 학생 v6.3 수동 동기화 파일
+다음 네 파일을 같은 Apps Script deployment에 함께 반영합니다. 마지막 파일은 이번 변경에서 코드가 바뀌지 않았더라도 수료 helper의 런타임 완전성을 위해 반드시 포함합니다.
+
+- `Appsscript/00_entry_api.gs`
+- `Appsscript/01_constants_access.gs`
+- `Appsscript/30_attendance_core.gs`
+- `Appsscript/33_graduation_manual_excused.gs`
+
+### 학생 v6.3 배포 후 확인
+다음 세 항목만 학생 v6.3 식별 체크로 사용합니다.
+
+1. `apiInfo.apiVersion = 2026.07.14-v6.3`
+2. `apiInfo.capabilities.studentAttendanceReasonV1 = true`
+3. `apiInfo.runtimeChecks.extractStudentDisplayReason = true`
+
+Apps Script 배포는 운영자만 외부 콘솔에서 수행합니다. 레포는 현재 콘솔 값이나 실제 배포 완료를 알 수 없으므로, 확인 전에는 완료로 보고하지 않습니다.
 
 ## 최근 운영 변경 참조 (History 023)
 구조분할 배경, 출석 인증 불일치 원인, 런타임 무결성 복구 결정은 아래 History 문서를 기준으로 추적합니다.
@@ -109,6 +136,8 @@ flowchart LR
 
 - 같은 deployment 재배포(Edit): `APPS_SCRIPT_WEB_APP_URL` Secret 변경 불필요
 - 새 deployment 생성(New deployment)으로 URL 변경: Secret 갱신 + Pages 재배포 필수
+- 학생 Pages-first 롤백: Pages를 직전 artifact로 되돌려 구버전 Apps Script 호환 UI를 복구
+- 학생 Apps Script 롤백: 운영자가 같은 deployment에서 직전 정상 버전을 선택하고 위 세 식별 체크를 다시 확인
 
 ## GPS·Google Places 배포 분기
 
