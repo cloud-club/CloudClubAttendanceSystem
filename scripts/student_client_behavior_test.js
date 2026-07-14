@@ -645,6 +645,7 @@ function createReasonDialogContext() {
     let studentAttendanceDetailFocusGeneration = 0;
     let studentAttendanceDetailFocusTimer = null;
     let studentStatusViewGeneration = 0;
+    let studentAttendanceDetailFocusFailuresRemaining = 0;
     const focusLog = [];
     const animationFrames = [];
     const listeners = { statusResult: {}, dialog: {}, close: {}, document: {} };
@@ -685,7 +686,14 @@ function createReasonDialogContext() {
         hasAttribute(name) { return Object.prototype.hasOwnProperty.call(attributes, name); },
         removeAttribute(name) { delete attributes[name]; },
         setAttribute(name, value) { attributes[name] = String(value); },
-        focus() { document.activeElement = this; focusLog.push(id); }
+        focus() {
+          focusLog.push(id);
+          if (id === 'studentAttendanceDetailClose' && studentAttendanceDetailFocusFailuresRemaining > 0) {
+            studentAttendanceDetailFocusFailuresRemaining--;
+            return;
+          }
+          document.activeElement = this;
+        }
       };
     }
     const statusResult = createNode('statusResult', 'statusResult');
@@ -855,6 +863,28 @@ function testReasonDialogPointerFocusSettlementAndStaleGuards() {
   assert.strictEqual(vm.runInContext(`nodes.studentAttendanceDetailReason.textContent`, context), '두 번째 사유');
   assert.strictEqual(vm.runInContext(`studentAttendanceDetailTrigger === secondTrigger`, context), true);
   assert.strictEqual(vm.runInContext(`document.activeElement === closeButton`, context), true);
+}
+
+async function testReasonDialogFreshHiddenOpenRetriesUntilCloseFocusIsAcquired() {
+  const context = createReasonDialogContext();
+  vm.runInContext(`
+    studentStatusDetails = sanitizeStudentAttendanceDetails([
+      { attendanceType: 'absent', date: '2026-07-21', displayReason: '새 다이얼로그 사유' }
+    ]);
+    initializeStudentAttendanceDetailDialog();
+    studentAttendanceDetailFocusFailuresRemaining = 3;
+    listeners.statusResult.click({ target: { closest() { return trigger; } } });
+    flushAnimationFrames();
+    flushAnimationFrames();
+  `, context);
+
+  await new Promise(resolve => setTimeout(resolve, 80));
+
+  assert.strictEqual(
+    vm.runInContext(`document.activeElement === closeButton`, context),
+    true,
+    'fresh hidden dialog must retry until the close button actually acquires focus'
+  );
 }
 
 function testReasonDialogRepeatedPointerAndPendingResetFocus() {
@@ -1633,6 +1663,8 @@ function testCompletionInvalidationWiringContract() {
   console.log('PASS reason dialog traps focus, restores scroll/focus, renders literal text, and clears on errors');
   testReasonDialogPointerFocusSettlementAndStaleGuards();
   console.log('PASS reason dialog settles real-pointer focus without stale callback theft');
+  await testReasonDialogFreshHiddenOpenRetriesUntilCloseFocusIsAcquired();
+  console.log('PASS fresh hidden reason dialog retries until close focus is acquired');
   testReasonDialogRepeatedPointerAndPendingResetFocus();
   console.log('PASS reason dialog survives ten pointer cycles and pending resets without focus loss or theft');
   await testStatusCacheRetainsOnlyRenderSafeDetailFields();

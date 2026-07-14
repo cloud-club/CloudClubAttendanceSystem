@@ -1725,22 +1725,31 @@ function openStudentAttendanceDetailDialog(index, trigger) {
   dialog.removeAttribute('inert');
   dialog.setAttribute('aria-hidden', 'false');
   dialog.classList.add('is-open');
-  closeButton.focus();
-  studentAttendanceDetailFocusTimer = setTimeout(() => {
-    studentAttendanceDetailFocusTimer = null;
+  let focusAttemptsRemaining = 16;
+  const tryCloseButtonFocus = () => {
     if (focusGeneration !== studentAttendanceDetailFocusGeneration
         || dialog.getAttribute('aria-hidden') !== 'false'
         || dialog.hasAttribute('inert')
-        || !closeButton.isConnected) return;
+        || !closeButton.isConnected) return true;
+    const activeElement = document.activeElement;
+    if (activeElement === closeButton) return true;
+    if (activeElement && activeElement !== document.body && activeElement !== studentAttendanceDetailTrigger) {
+      return true;
+    }
     closeButton.focus();
-  }, 0);
+    return document.activeElement === closeButton;
+  };
+  const confirmCloseButtonFocus = () => {
+    studentAttendanceDetailFocusTimer = null;
+    if (tryCloseButtonFocus() || focusAttemptsRemaining <= 0) return;
+    focusAttemptsRemaining--;
+    studentAttendanceDetailFocusTimer = setTimeout(confirmCloseButtonFocus, 16);
+  };
+  tryCloseButtonFocus();
+  studentAttendanceDetailFocusTimer = setTimeout(confirmCloseButtonFocus, 0);
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      if (focusGeneration !== studentAttendanceDetailFocusGeneration
-          || dialog.getAttribute('aria-hidden') !== 'false'
-          || dialog.hasAttribute('inert')
-          || !closeButton.isConnected) return;
-      closeButton.focus();
+      tryCloseButtonFocus();
     });
   });
   return true;
