@@ -61,6 +61,7 @@ flowchart LR
 - 025는 평균 출석시간 추이 전환 + 그래프 클릭형 빠른 멤버 필터 기준
 - 026은 진행 중 회차의 회색 `pending(미확정)` 표시, 행사별 출석률/평균 추이의 실시간 반영, 상태 비율의 `회` 기준 해석 조정, 30초 자동 갱신 기준을 기록한 문서입니다.
 - 033은 관리자 대형 히어로를 공통 상단바로 축소하고, 데스크톱 다열·모바일 드로어로 10개 탭을 컴팩트하게 재배치한 기준과 검증·배포 경계를 기록합니다.
+- 034는 운영 연락처를 `cloudclub2022@cloudclub.kr`로 통일하고, 공식 푸터 구조·하단 고정·출석 보조 영역의 가로 컴팩트 배치·일정 관리 Sheets 안내와 좌우 높이 균형을 기록합니다. 이 변경은 `web/*`만 대상으로 하므로 Apps Script 재업로드가 필요하지 않습니다.
 - 학생 페이지 v6.3 기록은 컴팩트 대시보드, 출석 상세 공개 경계, Pages-first와 수동 Apps Script 반영 결정의 배경을 설명합니다. 현재 정책은 이 Wiki와 `Appsscript/*`, `web/*` 코드를 우선합니다.
 
 - [docs/History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md](../History/023_관리자백엔드_구조분할_및_출석인증불일치_긴급복구_운영기록_2026-02-20.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/023_%EA%B4%80%EB%A6%AC%EC%9E%90%EB%B0%B1%EC%97%94%EB%93%9C_%EA%B5%AC%EC%A1%B0%EB%B6%84%ED%95%A0_%EB%B0%8F_%EC%B6%9C%EC%84%9D%EC%9D%B8%EC%A6%9D%EB%B6%88%EC%9D%BC%EC%B9%98_%EA%B8%B4%EA%B8%89%EB%B3%B5%EA%B5%AC_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-02-20.md)

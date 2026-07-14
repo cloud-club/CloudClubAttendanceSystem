@@ -40,6 +40,8 @@ const html = readSource('web/admin/index.html');
 const domRefsSource = readSource('web/admin/scripts/03_dom_refs.js');
 const attendanceSource = readSource('web/admin/scripts/20_attendance.js');
 const shellSource = readSource('web/admin/scripts/07_admin_shell.js', true);
+const privacyHtml = readSource('web/privacy.html');
+const termsHtml = readSource('web/terms.html');
 
 const expectedTabNames = [
   'attend',
@@ -200,4 +202,48 @@ test('admin shell 스크립트가 인증 스크립트보다 먼저 로드된다'
 
   // Then: 인증 함수가 shell 함수를 안전하게 호출할 수 있도록 선행 로드되어야 한다.
   assert.equal(loadsBeforeAuth, true);
+});
+
+test('연락처 이메일과 로그인 푸터가 운영 연락처 계약을 따른다', () => {
+  const allContactSources = `${html}\n${privacyHtml}\n${termsHtml}`;
+  const oldEmailCount = (allContactSources.match(/cloudclub@cloudclub\.kr/gi) || []).length;
+  const newEmailCount = (allContactSources.match(/cloudclub2022@cloudclub\.kr/gi) || []).length;
+  assert.equal(oldEmailCount, 0);
+  assert.equal(newEmailCount, 6);
+  assert.match(html, /site-footer-description[^>]*>[\s\S]*Cloud Club은 클라우드의, 클라우드에 의한/);
+  assert.match(html, /site-footer-links[\s\S]*aria-label=["']GitHub["'][\s\S]*aria-label=["']Instagram["'][\s\S]*aria-label=["']LinkedIn["'][\s\S]*aria-label=["']YouTube["']/);
+  assert.match(html, /site-footer-bottom[^>]*>© 2026 Cloud Club\. All rights reserved\./);
+});
+
+test('짧은 로그인 화면에서 푸터가 문서 하단에 붙는 flex 계약을 유지한다', () => {
+  const bodyRule = /body\s*\{[^}]*display\s*:\s*flex[^}]*flex-direction\s*:\s*column/s.test(html);
+  const containerRule = /\.container\s*\{[^}]*flex\s*:\s*1 0 auto/s.test(html);
+  const footerRule = /\.site-footer\s*\{[^}]*margin-top\s*:\s*auto[^}]*flex\s*:\s*0 0 auto/s.test(html);
+  assert.equal(bodyRule, true);
+  assert.equal(containerRule, true);
+  assert.equal(footerRule, true);
+});
+
+test('출석 보조 조회와 일정 관리 안내가 컴팩트 UI 계약을 유지한다', () => {
+  const shellSourceWithInfo = readSource('web/admin/scripts/07_admin_shell.js');
+  const scheduleSource = readSource('web/admin/scripts/22_schedule.js');
+  const statusRow = /class=["']status-secondary-row["']/i.test(html);
+  const sheetsLink = /class=["'][^"']*btn-sheets-link[^"']*["'][^>]*>[\s\S]*Google Sheets 바로가기/i.test(html);
+  const sheetsInfo = /id=["']sheetAccessInfoButton["'][\s\S]*sheetAccessInfoPopover/i.test(html);
+  const cautionText = /구글 클라우드 클럽 공식 구글 계정으로만 접근 가능합니다[\s\S]*구글 시트를 직접 수정하지 말아 주세요/.test(html);
+  const scheduleCards = getOpeningTags(html, 'div').filter((tag) => {
+    return getAttribute(tag, 'class').split(/\s+/).includes('schedule-management-card');
+  }).length;
+
+  assert.equal(statusRow, true);
+  assert.equal(sheetsLink, true);
+  assert.equal(sheetsInfo, true);
+  assert.equal(cautionText, true);
+  assert.equal(scheduleCards, 2);
+  assert.match(html, /\.status-secondary-row\s*\{[^}]*grid-template-columns\s*:/s);
+  assert.match(html, /\.schedule-management-card\s*\{[^}]*display\s*:\s*flex/s);
+  assert.match(shellSourceWithInfo, /function\s+toggleSheetAccessInfo\s*\(/);
+  assert.match(scheduleSource, /function\s+formatScheduleListDateTime\s*\(/);
+  assert.match(scheduleSource, /GPS 500m/);
+  assert.match(scheduleSource, /직접 종료/);
 });

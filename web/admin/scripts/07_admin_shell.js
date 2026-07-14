@@ -85,6 +85,16 @@ function toggleAdminMenu() {
   openAdminMenu();
 }
 
+function toggleSheetAccessInfo() {
+  const button = document.getElementById('sheetAccessInfoButton');
+  const panel = document.getElementById('sheetAccessInfoPopover');
+  if (!button || !panel) return;
+
+  const expanded = button.getAttribute('aria-expanded') === 'true';
+  button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+  panel.hidden = expanded;
+}
+
 function setAdminShellAuthenticated(isAuthenticated) {
   const controls = document.getElementById('adminTopbarControls');
   const menuButton = document.getElementById('adminMenuButton');

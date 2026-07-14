@@ -73,19 +73,20 @@ function renderScheduleTable(items) {
   }
 
   const rows = items.map(item => {
+    const compactStartLabel = formatScheduleListDateTime(item.startLabel);
     const activeBadge = item.isActive
       ? '<span class="status-chip possible">진행중</span>'
       : (item.isPast ? '<span class="status-chip fail">종료</span>' : '<span class="status-chip pass">예정</span>');
     const locationBadge = item.locationPolicyValid === false
-      ? '<span class="status-chip fail">GPS 정책 오류</span>'
+      ? '<span class="status-chip fail">GPS 오류</span>'
       : (item.locationRequired
-        ? '<span class="status-chip possible">GPS 필수 · 500m</span>'
-        : '<span class="status-chip neutral">장소 제한 없음</span>');
+        ? '<span class="status-chip possible">GPS 500m</span>'
+        : '<span class="status-chip neutral">제한 없음</span>');
 
     return `
       <tr>
         <td>${escapeHtml(item.sessionKey)}</td>
-        <td>${escapeHtml(item.startLabel)}</td>
+        <td>${escapeHtml(compactStartLabel)}</td>
         <td>${escapeHtml(item.openLabel)}</td>
         <td>${escapeHtml(item.endLabel)}</td>
         <td>${item.explicitEndAt ? escapeHtml(item.explicitEndAt) : '-'}</td>
@@ -109,8 +110,8 @@ function renderScheduleTable(items) {
           <th>시작</th>
           <th>오픈</th>
           <th>마감</th>
-          <th>종료 직접입력</th>
-          <th>장소 정책</th>
+          <th>직접 종료</th>
+          <th>장소</th>
           <th>상태</th>
           <th>동작</th>
         </tr>
@@ -120,6 +121,12 @@ function renderScheduleTable(items) {
       </tbody>
     </table>
   `;
+}
+
+function formatScheduleListDateTime(value) {
+  const normalized = String(value || '').trim().replace(/\s+/g, ' ');
+  const match = normalized.match(/^\d{4}-(\d{2})-(\d{2})\s+(\d{2}:\d{2})$/);
+  return match ? `${match[1]}-${match[2]} ${match[3]}` : normalized;
 }
 
 function selectScheduleForEdit(encodedSessionKey) {

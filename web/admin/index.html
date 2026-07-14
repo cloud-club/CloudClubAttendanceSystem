@@ -22,6 +22,8 @@
       line-height: 1.6;
       overflow-x: hidden;
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     body.schedule-calendar-modal-open {
@@ -47,6 +49,8 @@
     /* Container */
     .container {
       max-width: 1440px;
+      width: 100%;
+      flex: 1 0 auto;
       margin: 0 auto;
       padding: 20px;
       position: relative;
@@ -3068,7 +3072,8 @@
     }
 
     .site-footer {
-      margin-top: 100px;
+      margin-top: auto;
+      flex: 0 0 auto;
       background: linear-gradient(120deg, #1e3a8a, #1e40af 45%, #1d4ed8);
       color: #dbeafe;
       border-top: 1px solid rgba(255, 255, 255, 0.15);
@@ -3077,16 +3082,29 @@
     }
 
     .site-footer-inner {
-      max-width: 1200px;
+      max-width: 1280px;
       margin: 0 auto;
-      padding: 42px 24px 28px;
+      padding: 48px 24px 64px;
     }
 
     .site-footer-grid {
       display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 30px;
+      grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+      gap: 40px;
       align-items: start;
+    }
+
+    .site-footer-brand {
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .site-footer-logo {
+      display: block;
+      width: 69px;
+      height: 64px;
+      object-fit: contain;
     }
 
     .site-footer h3 {
@@ -3102,20 +3120,59 @@
       line-height: 1.6;
     }
 
+    .site-footer-description {
+      max-width: 28rem;
+      margin-bottom: 24px;
+    }
+
     .site-footer-links {
       display: flex;
-      gap: 10px;
-      margin-top: 12px;
+      gap: 16px;
+      margin-top: 0;
       flex-wrap: wrap;
     }
 
     .site-footer-links a {
       color: #dbeafe;
       text-decoration: none;
-      border: 1px solid rgba(219, 234, 254, 0.35);
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: rgba(255, 255, 255, 0.1);
       border-radius: 999px;
-      padding: 6px 10px;
+      padding: 0;
+      font-size: 20px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .site-footer-links a:hover,
+    .site-footer-links a:focus-visible {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .site-footer-links a:focus-visible,
+    .site-footer-legal a:focus-visible,
+    .site-footer-contact a:focus-visible {
+      outline: 2px solid #bfdbfe;
+      outline-offset: 3px;
+    }
+
+    .site-footer-legal {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 16px;
+      margin-top: 16px;
       font-size: 12px;
+    }
+
+    .site-footer-legal a {
+      color: #dbeafe;
+      text-decoration: underline;
+      text-underline-offset: 3px;
     }
 
     .site-footer-contact {
@@ -3124,7 +3181,19 @@
       margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 12px;
+    }
+
+    .site-footer-contact li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .site-footer-contact-icon {
+      flex: 0 0 auto;
+      color: #bfdbfe;
+      font-size: 18px;
     }
 
     .site-footer-contact a {
@@ -3133,11 +3202,10 @@
     }
 
     .site-footer-bottom {
-      margin-top: 20px;
-      border-top: 1px solid rgba(255, 255, 255, 0.12);
-      padding-top: 14px;
+      margin-top: 48px;
+      padding-top: 32px;
       text-align: center;
-      font-size: 13px;
+      font-size: 14px;
       color: #bfdbfe;
     }
     
@@ -3539,6 +3607,13 @@
       --admin-text-muted: #94a3b8;
       --admin-accent: #60a5fa;
       --admin-focus-ring: rgba(96, 165, 250, 0.32);
+      --admin-sheets-success: #22c55e;
+      --admin-sheets-success-deep: #15803d;
+      --admin-sheets-success-hover: #16a34a;
+      --admin-sheets-success-dark: #166534;
+      --admin-sheets-success-text: #f0fdf4;
+      --admin-sheets-success-soft: #bbf7d0;
+      --admin-sheets-success-border: #86efac;
     }
 
     html {
@@ -3751,6 +3826,146 @@
       font-size: 13px;
     }
 
+    .sheet-link-group {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .sheet-link-group .btn-sheets-link {
+      flex: 1 1 auto;
+      border-color: rgba(134, 239, 172, 0.6);
+      background: linear-gradient(135deg, var(--admin-sheets-success), var(--admin-sheets-success-deep));
+      color: var(--admin-sheets-success-text);
+      box-shadow: 0 6px 14px rgba(21, 128, 61, 0.28);
+    }
+
+    .sheet-link-group .btn-sheets-link:hover,
+    .sheet-link-group .btn-sheets-link:focus-visible {
+      border-color: rgba(187, 247, 208, 0.95);
+      background: linear-gradient(135deg, var(--admin-sheets-success-hover), var(--admin-sheets-success-dark));
+    }
+
+    .sheet-access-info-btn {
+      flex: 0 0 var(--admin-control-height);
+      width: var(--admin-control-height);
+      height: var(--admin-control-height);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(134, 239, 172, 0.55);
+      border-radius: 12px;
+      background: rgba(20, 83, 45, 0.42);
+      color: var(--admin-sheets-success-soft);
+      cursor: pointer;
+    }
+
+    .sheet-access-info-btn:hover,
+    .sheet-access-info-btn:focus-visible {
+      border-color: var(--admin-sheets-success-soft);
+      background: rgba(22, 101, 52, 0.7);
+      outline: 2px solid var(--admin-sheets-success-border);
+      outline-offset: 2px;
+    }
+
+    .sheet-access-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      z-index: 30;
+      width: min(340px, calc(100vw - 40px));
+      padding: 12px 14px;
+      border: 1px solid rgba(134, 239, 172, 0.55);
+      border-radius: 12px;
+      background: rgba(20, 83, 45, 0.96);
+      color: var(--admin-sheets-success-text);
+      font-size: 12px;
+      line-height: 1.5;
+      box-shadow: 0 14px 28px rgba(2, 6, 23, 0.4);
+    }
+
+    .sheet-access-popover strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--admin-sheets-success-soft);
+    }
+
+    .status-secondary-row {
+      display: grid;
+      grid-template-columns: minmax(240px, 0.55fr) minmax(0, 1.45fr);
+      gap: var(--admin-card-gap);
+      align-items: stretch;
+      grid-column: 1 / -1;
+    }
+
+    .status-secondary-row > .card {
+      min-width: 0;
+      height: 100%;
+      margin: 0;
+    }
+
+    .status-lookup-card form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 8px;
+      text-align: left;
+    }
+
+    .status-lookup-card .form-group {
+      min-width: 0;
+      margin: 0;
+    }
+
+    .status-lookup-card .info-text {
+      margin: 4px 0 0;
+      font-size: 11px;
+    }
+
+    .status-lookup-card form > .btn {
+      min-width: 72px;
+    }
+
+    .status-ranking-card {
+      overflow: hidden;
+    }
+
+    .status-ranking-card .ranking-table {
+      margin-top: 8px;
+    }
+
+    .status-ranking-card .ranking-table th,
+    .status-ranking-card .ranking-table td {
+      padding: 7px 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .status-ranking-card #rankingBoard {
+      overflow-x: auto;
+    }
+
+    .schedule-management-card {
+      min-width: 0;
+    }
+
+    .schedule-management-card .table-wrap,
+    .schedule-management-card #scheduleCalendarGrid {
+      min-width: 0;
+    }
+
+    .schedule-list-card .management-table td,
+    .schedule-list-card .management-table th {
+      white-space: nowrap;
+    }
+
+    .schedule-list-card .management-table td {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .season-toolbar-info {
       margin-top: 4px;
       font-size: 12px;
@@ -3881,16 +4096,16 @@
     }
 
     .site-footer {
-      margin-top: 32px;
+      margin-top: auto;
     }
 
     .site-footer-inner {
-      max-width: var(--admin-container-max);
-      padding: 24px 20px 20px;
+      max-width: 1280px;
+      padding: 48px 24px 64px;
     }
 
     .site-footer-grid {
-      gap: 20px;
+      gap: 40px;
     }
 
     body.lite-mode .admin-topbar,
@@ -3950,8 +4165,54 @@
 
     @media (min-width: 1600px) {
       #schedule.active {
-        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-        align-items: start;
+        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+        align-items: stretch;
+      }
+
+      #schedule.active > .schedule-management-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      #schedule.active > .schedule-management-card .table-wrap,
+      #schedule.active > .schedule-management-card #scheduleCalendarGrid {
+        flex: 1 1 auto;
+      }
+
+      #schedule.active > .schedule-list-card .table-wrap {
+        overflow-x: hidden;
+      }
+
+      #schedule.active > .schedule-list-card .management-table {
+        min-width: 0;
+        table-layout: fixed;
+      }
+
+      #schedule.active > .schedule-list-card .management-table th,
+      #schedule.active > .schedule-list-card .management-table td {
+        padding: 7px 6px;
+        font-size: 11px;
+      }
+
+      #schedule.active > .schedule-list-card .management-table th:nth-child(1) { width: 17%; }
+      #schedule.active > .schedule-list-card .management-table th:nth-child(2),
+      #schedule.active > .schedule-list-card .management-table th:nth-child(3),
+      #schedule.active > .schedule-list-card .management-table th:nth-child(4),
+      #schedule.active > .schedule-list-card .management-table th:nth-child(5) { width: 12%; }
+      #schedule.active > .schedule-list-card .management-table th:nth-child(6) { width: 13%; }
+      #schedule.active > .schedule-list-card .management-table th:nth-child(7) { width: 9%; }
+      #schedule.active > .schedule-list-card .management-table th:nth-child(8) { width: 13%; }
+
+      #schedule.active > .schedule-list-card .status-chip {
+        padding: 2px 5px;
+        font-size: 10px;
+      }
+
+      #schedule.active > .schedule-list-card .management-table .btn {
+        min-height: 36px;
+        padding: 6px 8px;
+        font-size: 12px;
       }
     }
 
@@ -3967,6 +4228,10 @@
       .tab-button {
         padding-inline: 8px;
         font-size: 12px;
+      }
+
+      .status-secondary-row {
+        grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
       }
     }
 
@@ -4206,6 +4471,18 @@
       .site-footer-grid {
         grid-template-columns: minmax(0, 1fr);
       }
+
+      .status-secondary-row {
+        grid-template-columns: 1fr;
+      }
+
+      .status-lookup-card form {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .sheet-link-group {
+        width: 100%;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -4367,11 +4644,29 @@
             </select>
           </div>
           <div class="season-action-group">
-            <button type="button" class="btn btn-secondary" onclick="openCurrentSheet()">
-              <i class="fas fa-external-link-alt"></i>
-              <span class="btn-label-full">Google Sheets 바로가기</span>
-              <span class="btn-label-short">시트 열기</span>
-            </button>
+            <div class="sheet-link-group">
+              <button type="button" class="btn btn-sheets-link" onclick="openCurrentSheet()">
+                <i class="fas fa-external-link-alt"></i>
+                <span class="btn-label-full">Google Sheets 바로가기</span>
+                <span class="btn-label-short">시트 열기</span>
+              </button>
+              <button
+                type="button"
+                id="sheetAccessInfoButton"
+                class="sheet-access-info-btn"
+                aria-label="Google Sheets 접근 안내"
+                aria-expanded="false"
+                aria-controls="sheetAccessInfoPopover"
+                onclick="toggleSheetAccessInfo()"
+              >
+                <i class="fas fa-info" aria-hidden="true"></i>
+              </button>
+              <div id="sheetAccessInfoPopover" class="sheet-access-popover" role="note" hidden>
+                <strong>Google Sheets 접근 안내</strong>
+                구글 클라우드 클럽 공식 구글 계정으로만 접근 가능합니다.<br>
+                가능한 한 구글 시트를 직접 수정하지 말아 주세요. 데이터 구조가 깨질 수 있습니다.
+              </div>
+            </div>
             <button type="button" class="btn btn-secondary" onclick="refreshSeasonData()">
               <i class="fas fa-sync-alt"></i>
               <span class="btn-label-full">데이터 새로고침</span>
@@ -4751,49 +5046,51 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <i class="fas fa-chart-line card-icon"></i>
-          <h2 class="card-title">출석 현황 조회</h2>
-        </div>
-        <form onsubmit="checkAttendanceStatus(event)" style="text-align: center;">
-          <div class="form-group">
-            <label for="statusPhoneInput" class="form-label">전화번호 입력</label>
-            <input type="tel" 
-                   id="statusPhoneInput" 
-                   class="form-input" 
-                   placeholder="-을 제외한 번호를 입력하세요" 
-                   pattern="[0-9]{10,11}"
-                   maxlength="11"
-                   oninput="this.value = this.value.replace(/[^0-9]/g, '')"
-                   required>
-            <p class="info-text">하이픈(-) 없이 숫자만 입력해주세요</p>
+      <div class="status-secondary-row">
+        <div class="card status-lookup-card">
+          <div class="card-header">
+            <i class="fas fa-chart-line card-icon"></i>
+            <h2 class="card-title">출석 현황 조회</h2>
           </div>
-          <button type="submit" class="btn">
-            <i class="fas fa-search"></i>
-            <span>조회하기</span>
-          </button>
-        </form>
+          <form onsubmit="checkAttendanceStatus(event)">
+            <div class="form-group">
+              <label for="statusPhoneInput" class="form-label">전화번호</label>
+              <input type="tel"
+                     id="statusPhoneInput"
+                     class="form-input"
+                     placeholder="숫자만 입력"
+                     pattern="[0-9]{10,11}"
+                     maxlength="11"
+                     oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                     required>
+              <p class="info-text">하이픈 없이 10~11자리</p>
+            </div>
+            <button type="submit" class="btn">
+              <i class="fas fa-search"></i>
+              <span>조회</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- 출석률 순위 대시보드 -->
+        <div class="card status-ranking-card">
+          <div class="card-header">
+            <i class="fas fa-trophy card-icon"></i>
+            <h2 class="card-title">출석률 순위</h2>
+          </div>
+          <p class="info-text">출석횟수·평균 출석 오프셋 기준</p>
+          <div id="rankingBoard">
+            <div class="loader" style="margin: 32px auto;"></div>
+          </div>
+        </div>
       </div>
-      
+
       <div id="statusResult"></div>
-      
-      <!-- 출석률 순위 대시보드 -->
-      <div class="card">
-        <div class="card-header">
-          <i class="fas fa-trophy card-icon"></i>
-          <h2 class="card-title">출석률 순위</h2>
-        </div>
-        <p class="info-text">기준: 출석횟수 &gt; 평균 출석 오프셋</p>
-        <div id="rankingBoard">
-          <div class="loader" style="margin: 32px auto;"></div>
-        </div>
-      </div>
     </div>
 
     <!-- 일정 관리 탭 -->
     <div id="schedule" class="tab-content" role="tabpanel" aria-labelledby="adminTabSchedule" aria-hidden="true" tabindex="0">
-      <div class="card">
+      <div class="card schedule-management-card schedule-list-card">
         <div class="card-header schedule-management-header">
           <div class="schedule-management-title">
             <i class="fas fa-list card-icon"></i>
@@ -4804,19 +5101,19 @@
             <span>새 일정</span>
           </button>
         </div>
-        <p class="info-text">목록에서 회차를 확인하고, `새 일정` 또는 `수정`으로 같은 일정 모달에서 추가/수정/삭제를 처리합니다.</p>
+        <p class="info-text">회차를 확인하고 `새 일정` 또는 `수정`으로 관리합니다.</p>
         <div class="table-wrap" id="scheduleTableWrap">
           <div class="loader" style="margin: 24px auto;"></div>
         </div>
         <div id="scheduleActionResult" style="display:none;"></div>
       </div>
 
-      <div class="card">
+      <div class="card schedule-management-card schedule-calendar-card">
         <div class="card-header">
           <i class="fas fa-calendar-day card-icon"></i>
           <h2 class="card-title">캘린더 보기</h2>
         </div>
-        <p class="info-text">날짜별 + 버튼으로 일정 추가/수정/삭제를 빠르게 처리할 수 있습니다. (일~토, 한 날짜 1회차 정책)</p>
+        <p class="info-text">날짜의 + 버튼으로 추가·수정·삭제합니다. (일~토, 1일 1회차)</p>
         <div class="schedule-calendar-toolbar">
           <div class="schedule-calendar-nav">
             <button type="button" class="btn btn-secondary" onclick="moveCalendarMonth(-1)">
@@ -5266,15 +5563,25 @@
     <div class="site-footer-inner">
       <div class="site-footer-grid">
         <div>
-          <a href="https://www.cloudclub.kr/" target="_blank" rel="noopener noreferrer">
-            <img src="https://www.cloudclub.kr/images/logo.png" alt="CLOUD CLUB Logo" style="height:48px;">
+          <a class="site-footer-brand" href="https://www.cloudclub.kr/" target="_blank" rel="noopener noreferrer">
+            <img class="site-footer-logo" src="https://www.cloudclub.kr/images/logo.png" width="69" height="64" alt="CLOUD CLUB Logo">
           </a>
-          <p style="margin-top:10px;">Cloud Club은 클라우드 기술에 대한 열정을 가진 학생들이 모여 실습과 협업으로 성장하는 커뮤니티입니다.</p>
+          <p class="site-footer-description">Cloud Club은 클라우드의, 클라우드에 의한, 클라우드를 위한 IT 연합 동아리로 클라우드에 관심 있는 사람들이 모여 특정 벤더에 종속되지 않고 폭 넓은 클라우드 인프라를 경험할 수 있는 커뮤니티입니다.</p>
           <div class="site-footer-links">
-            <a href="https://github.com/cloud-club" target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer">Instagram</a>
-            <a href="https://www.linkedin.com/company/cloudclub-kr" target="_blank" rel="noopener noreferrer">LinkedIn</a>
-            <a href="https://www.youtube.com/@cloudclub-kr" target="_blank" rel="noopener noreferrer">YouTube</a>
+            <a href="https://github.com/cloud-club" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+              <i class="ri-github-fill" aria-hidden="true"></i>
+            </a>
+            <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+              <i class="ri-instagram-line" aria-hidden="true"></i>
+            </a>
+            <a href="https://www.linkedin.com/company/cloudclub-kr" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
+              <i class="ri-linkedin-fill" aria-hidden="true"></i>
+            </a>
+            <a href="https://www.youtube.com/@cloudclub-kr" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+              <i class="ri-youtube-fill" aria-hidden="true"></i>
+            </a>
+          </div>
+          <div class="site-footer-legal" aria-label="서비스 정책">
             <a href="../privacy.html">개인정보 처리 안내</a>
             <a href="../terms.html">이용약관</a>
           </div>
@@ -5282,9 +5589,14 @@
         <div>
           <h3>Contact</h3>
           <ul class="site-footer-contact">
-            <li><a href="mailto:cloudclub@cloudclub.kr">cloudclub@cloudclub.kr</a></li>
-            <li><a href="https://www.cloudclub.kr/" target="_blank" rel="noopener noreferrer">www.cloudclub.kr</a></li>
-            <li><a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer">@cloudclub.kr</a></li>
+            <li>
+              <i class="ri-mail-line site-footer-contact-icon" aria-hidden="true"></i>
+              <a href="mailto:cloudclub2022@cloudclub.kr">cloudclub2022@cloudclub.kr</a>
+            </li>
+            <li>
+              <i class="ri-instagram-line site-footer-contact-icon" aria-hidden="true"></i>
+              <a href="https://www.instagram.com/cloudclub.kr/" target="_blank" rel="noopener noreferrer">@cloudclub.kr</a>
+            </li>
           </ul>
         </div>
       </div>
