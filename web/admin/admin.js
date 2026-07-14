@@ -8543,9 +8543,10 @@ function openExcuseModal(state) {
 
   const modal = document.getElementById('excuseModal');
   const target = document.getElementById('excuseModalTargetText');
+  const disclosure = document.getElementById('excuseModalDisclosureText');
   const input = document.getElementById('excuseCommentInput');
 
-  if (!modal || !target || !input) return;
+  if (!modal || !target || !disclosure || !input) return;
 
   target.textContent = `${state.memberName} / ${state.sessionKey} 에 유고 사유를 저장합니다.`;
   input.value = state.note || '';

@@ -494,6 +494,7 @@ function getRuntimeIntegrityChecks() {
     getSeasonAttendanceSession: typeof getSeasonAttendanceSession === 'function',
     getSeasonAttendanceRanking: typeof getSeasonAttendanceRanking === 'function',
     summarizeAttendanceComparison: typeof summarizeAttendanceComparison === 'function',
+    extractStudentDisplayReason: typeof extractStudentDisplayReason === 'function',
     resolveGraduationCriteria: typeof resolveGraduationCriteria === 'function',
     buildGraduationAssessment: typeof buildGraduationAssessment === 'function'
   };
@@ -531,6 +532,7 @@ function getApiInfo() {
       locationAttendanceV1: true,
       locationHeaderPolicyV1: true,
       studentInsightsV1: true,
+      studentAttendanceReasonV1: true,
       googlePlacesServerConfigured: isGooglePlacesServerConfigured()
     },
     scriptTimeZone: Session.getScriptTimeZone(),

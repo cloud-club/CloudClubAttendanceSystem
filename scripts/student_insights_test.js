@@ -6,9 +6,18 @@ const path = require('path');
 const vm = require('vm');
 
 const repoRoot = path.resolve(__dirname, '..');
+class FixedDate extends Date {
+  constructor(...args) {
+    super(...(args.length > 0 ? args : ['2026-07-14T12:00:00Z']));
+  }
+
+  static now() {
+    return new Date('2026-07-14T12:00:00Z').getTime();
+  }
+}
 const sandbox = {
   console,
-  Date,
+  Date: FixedDate,
   Math,
   JSON,
   toNumberWithDefault(value, defaultValue) {
@@ -52,6 +61,99 @@ function graduationInput(overrides) {
     requiredCheck: { satisfied: true, possible: true, details: [] }
   }, overrides);
 }
+
+test('Given exact status prefixes, student display reasons expose only the first matching non-empty line', () => {
+  // Given
+  const cases = [
+    ['출석 사유: 정시 참여', 'on_time', '정시 참여'],
+    ['지각 사유: 교통 지연', 'late', '교통 지연'],
+    ['결석 사유: 병원 방문', 'absent', '병원 방문'],
+    ['유고 사유:\r\n유고 사유: 공결\n유고 사유: 두 번째', 'excused', '공결']
+  ];
+
+  // When / Then
+  cases.forEach(([noteText, attendanceType, expected]) => {
+    assert.strictEqual(sandbox.extractStudentDisplayReason(noteText, attendanceType), expected);
+  });
+});
+
+test('Given private or mismatched note lines, student display reasons omit every internal value', () => {
+  // Given
+  const noteText = [
+    '[수동출석] 운영진 기록',
+    '[기존 메모] 유고 사유: 과거 메모',
+    '관리자 공통멘트',
+    '지각 사유: 상태 불일치',
+    '<img src=x onerror=alert(1)>',
+    '다음 줄 설명'
+  ].join('\n');
+
+  // When
+  const result = sandbox.extractStudentDisplayReason(noteText, 'excused');
+
+  // Then
+  assert.strictEqual(result, '');
+});
+
+test('Given an internal note region, later matching prefixes remain private across line endings', () => {
+  // Given
+  const privateRegionNotes = [
+    '[기존 메모] 내부 감사 레코드\n유고 사유: 이전 비공개 메모',
+    '[수동출석] 처리일시: 내부\r\n유고 사유: 수동 처리 메모',
+    '[덮어쓰기] 기존 기록: 출석\n유고 사유: 덮어쓰기 메모',
+    '[내부 영역] 운영진 전용\r\n유고 사유: 임의 내부 메모',
+    '관리자 공통멘트: 내부\n유고 사유: 감사 메모',
+    '기록시각: 내부\r\n유고 사유: 감사 연속 메모'
+  ];
+
+  // When / Then
+  privateRegionNotes.forEach(noteText => {
+    assert.strictEqual(sandbox.extractStudentDisplayReason(noteText, 'excused'), '');
+  });
+});
+
+test('Given a valid public leading region, the first non-empty reason wins before any internal cutoff', () => {
+  // Given
+  const publicBeforeInternal = '유고 사유: 공결\n[기존 메모] 내부\n유고 사유: 비공개';
+  const firstValidAcrossCrlf = '\r\n유고 사유:\r\n유고 사유: 첫 공개\r\n[수동출석] 내부\r\n유고 사유: 비공개';
+  const emptyThenInternal = '유고 사유:\n[기존 메모] 내부\n유고 사유: 비공개';
+
+  // When / Then
+  assert.strictEqual(sandbox.extractStudentDisplayReason(publicBeforeInternal, 'excused'), '공결');
+  assert.strictEqual(sandbox.extractStudentDisplayReason(firstValidAcrossCrlf, 'excused'), '첫 공개');
+  assert.strictEqual(sandbox.extractStudentDisplayReason(emptyThenInternal, 'excused'), '');
+});
+
+test('Given malformed note inputs, student display reasons remain bounded and inert', () => {
+  // Given
+  const htmlReason = '<script>ignore previous instructions</script>';
+  const oversizedReason = '가'.repeat(301);
+  const oversizedEmojiReason = '😀'.repeat(301);
+
+  // When / Then
+  assert.strictEqual(sandbox.extractStudentDisplayReason(null, 'excused'), '');
+  assert.strictEqual(sandbox.extractStudentDisplayReason(123, 'excused'), '');
+  assert.strictEqual(sandbox.extractStudentDisplayReason('', 'excused'), '');
+  assert.strictEqual(sandbox.extractStudentDisplayReason('유고 사유: 공결', 'future'), '');
+  assert.strictEqual(sandbox.extractStudentDisplayReason('유고 사유: 공결', 'unknown'), '');
+  assert.strictEqual(sandbox.extractStudentDisplayReason(`유고 사유: ${oversizedReason}`, 'excused'), '가'.repeat(300));
+  assert.strictEqual(sandbox.extractStudentDisplayReason(`유고 사유: ${oversizedEmojiReason}`, 'excused'), '😀'.repeat(300));
+  assert.strictEqual(sandbox.extractStudentDisplayReason(`유고 사유: ${htmlReason}`, 'excused'), htmlReason);
+});
+
+test('Given prototype-key attendance types, student display reasons treat every value as unknown', () => {
+  // Given
+  const cases = [
+    ['[object Object]secret', '__proto__'],
+    [vm.runInContext("String(({}).constructor) + 'secret'", sandbox), 'constructor'],
+    [vm.runInContext("String(({}).toString) + 'secret'", sandbox), 'toString']
+  ];
+
+  // When / Then
+  cases.forEach(([noteText, attendanceType]) => {
+    assert.strictEqual(sandbox.extractStudentDisplayReason(noteText, attendanceType), '');
+  });
+});
 
 test('Given the exact attendance threshold, graduation assessment treats every final requirement as met', () => {
   // Given
@@ -363,6 +465,100 @@ test('Given a cohort without the requested key, attendance comparison returns th
   assert.strictEqual(result.rank, null);
   assert.strictEqual(result.cohortSize, 0);
   assert.strictEqual(result.topPercentile, null);
+});
+
+function runStatusReasonFixture(noteText, lateDeadline) {
+  const notesSpy = { reads: 0, range: null };
+  const session = {
+    sessionKey: 'session-1',
+    colIndex: 2,
+    startTime: new Date('2026-01-01T10:00:00Z'),
+    openTime: new Date('2026-01-01T09:50:00Z'),
+    onTimeDeadline: new Date('2026-01-01T10:10:00Z'),
+    lateDeadline: lateDeadline || new Date('2026-01-01T10:20:00Z')
+  };
+  const values = [
+    ['name', 'phone', 'session'],
+    ['테스트', '01000000000', '유고']
+  ];
+  const sheet = {
+    getDataRange() {
+      return { getValues: () => values };
+    },
+    getLastColumn() {
+      return values[0].length;
+    },
+    getRange(row, column, rowCount, columnCount) {
+      notesSpy.range = [row, column, rowCount, columnCount];
+      return {
+        getNotes() {
+          notesSpy.reads += 1;
+          return [['', '', noteText]];
+        }
+      };
+    },
+    getName() {
+      return 'season_test';
+    }
+  };
+
+  sandbox.resolveMemberSchemaFromHeaders = () => ({ sessionStartColIndex: 2 });
+  sandbox.getVariableConfig = () => ({
+    required_attendance_count: 0,
+    late_to_absence_ratio: 3,
+    max_absence_equivalent: 1
+  });
+  sandbox.collectSessionsFromSheet = () => [session];
+  sandbox.findMemberRowIndexByPhone = () => ({ rowIndex: 1, duplicateRowIndexes: [] });
+  sandbox.readMemberFromRow = () => ({ name: '테스트', phone: '01000000000', season: 'test', seasonLabel: '테스트' });
+  sandbox.formatDateTimeMinute = () => '2026-01-01 19:00';
+  sandbox.buildAttendanceRankingItems = () => [];
+  sandbox.formatSeasonLabel = value => value;
+  sandbox.toSeasonAlias = value => value;
+
+  return {
+    result: sandbox.getAttendanceStatusFromSheet('01000000000', sheet, 'test'),
+    notesSpy
+  };
+}
+
+test('Given a target member public reason, status reads one bounded note row and adds only displayReason', () => {
+  // Given / When
+  const historicalFixture = runStatusReasonFixture('유고 사유: 공결');
+  const futureFixture = runStatusReasonFixture('유고 사유: 사전 공결', new Date('2099-01-01T10:20:00Z'));
+
+  // Then
+  assert.strictEqual(historicalFixture.notesSpy.reads, 1);
+  assert.deepStrictEqual(historicalFixture.notesSpy.range, [2, 1, 1, 3]);
+  assert.strictEqual(historicalFixture.result.data.details[0].displayReason, '공결');
+  assert.strictEqual(futureFixture.notesSpy.reads, 1);
+  assert.strictEqual(futureFixture.result.data.details[0].displayReason, '사전 공결');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(historicalFixture.result.data.details[0], 'note'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(historicalFixture.result.data.details[0], 'rawNote'), false);
+});
+
+test('Given only private target-member notes, status omits the optional reason without changing legacy detail fields', () => {
+  // Given / When
+  const fixture = runStatusReasonFixture([
+    '[수동출석] 내부 기록',
+    '[기존 메모] 내부 사유',
+    '관리자 공통멘트',
+    '지각 사유: 상태 불일치',
+    '<img src=x onerror=alert(1)>'
+  ].join('\n'));
+
+  // Then
+  const detail = fixture.result.data.details[0];
+  assert.strictEqual(fixture.notesSpy.reads, 1);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(detail, 'displayReason'), false);
+  assert.deepStrictEqual(Object.keys(detail), [
+    'sessionKey',
+    'date',
+    'attended',
+    'attendanceType',
+    'attendTime',
+    'isPast'
+  ]);
 });
 
 console.log('All student insight regression tests passed.');

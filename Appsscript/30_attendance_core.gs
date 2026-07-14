@@ -34,6 +34,40 @@ function getAttendanceDetailType(cellValue, session, now) {
   return 'future';
 }
 
+function extractStudentDisplayReason(noteText, attendanceType) {
+  if (typeof noteText !== 'string') return '';
+
+  let prefix = '';
+  switch (attendanceType) {
+    case 'on_time':
+      prefix = '출석 사유:';
+      break;
+    case 'late':
+      prefix = '지각 사유:';
+      break;
+    case 'absent':
+      prefix = '결석 사유:';
+      break;
+    case 'excused':
+      prefix = '유고 사유:';
+      break;
+    default:
+      return '';
+  }
+
+  const lines = noteText.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = String(lines[i] || '').trim();
+    if (!line) continue;
+    if (!line.startsWith(prefix)) break;
+
+    const value = line.slice(prefix.length).trim();
+    if (value) return Array.from(value).slice(0, 300).join('');
+  }
+
+  return '';
+}
+
 /**
  * 현재 진행 중인 출석 세션 정보를 반환합니다. (관리자용)
  */
@@ -744,6 +778,11 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
     return { success: false, message: '등록되지 않은 전화번호입니다.' };
   }
 
+  const targetMemberNoteColumnCount = sheet.getLastColumn();
+  const targetMemberNotes = targetMemberNoteColumnCount > 0
+    ? (sheet.getRange(targetRowIndex + 1, 1, 1, targetMemberNoteColumnCount).getNotes()[0] || [])
+    : [];
+
   const now = new Date();
   const remainingSessionCount = sessions.filter(session => now <= session.lateDeadline).length;
   const member = readMemberFromRow(values[targetRowIndex], memberSchema);
@@ -803,14 +842,19 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
 
     const attended = status === 'on_time' || status === 'late';
 
-    attendanceDetails.push({
+    const detail = {
       sessionKey: session.sessionKey,
       date: formatDateTimeMinute(session.startTime),
       attended: attended,
       attendanceType: status,
       attendTime: attended ? (cellValue ? String(cellValue) : null) : null,
       isPast: isPast
-    });
+    };
+    const displayReason = extractStudentDisplayReason(targetMemberNotes[session.colIndex], status);
+    if (displayReason) {
+      detail.displayReason = displayReason;
+    }
+    attendanceDetails.push(detail);
   });
 
   const attendanceRate = effectivePastCount > 0

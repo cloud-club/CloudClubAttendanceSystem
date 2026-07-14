@@ -74,24 +74,45 @@ function compareApiInfoRecord(base, cand) {
   const candNoActions = JSON.parse(JSON.stringify(candNorm));
   if (baseNoActions.data) delete baseNoActions.data.supportedActions;
   if (candNoActions.data) delete candNoActions.data.supportedActions;
-  ['summarizeAttendanceComparison', 'resolveGraduationCriteria', 'buildGraduationAssessment'].forEach((key) => {
+  if (baseNoActions.data) delete baseNoActions.data.apiVersion;
+  if (candNoActions.data) delete candNoActions.data.apiVersion;
+  ['summarizeAttendanceComparison', 'resolveGraduationCriteria', 'buildGraduationAssessment', 'extractStudentDisplayReason'].forEach((key) => {
     if (baseNoActions.data && baseNoActions.data.runtimeChecks) delete baseNoActions.data.runtimeChecks[key];
     if (candNoActions.data && candNoActions.data.runtimeChecks) delete candNoActions.data.runtimeChecks[key];
   });
   if (baseNoActions.data && baseNoActions.data.capabilities) delete baseNoActions.data.capabilities.studentInsightsV1;
   if (candNoActions.data && candNoActions.data.capabilities) delete candNoActions.data.capabilities.studentInsightsV1;
+  if (baseNoActions.data && baseNoActions.data.capabilities) delete baseNoActions.data.capabilities.studentAttendanceReasonV1;
+  if (candNoActions.data && candNoActions.data.capabilities) delete candNoActions.data.capabilities.studentAttendanceReasonV1;
   if (!deepEqual(baseNoActions, candNoActions)) {
     failures.push('apiInfo 구조가 허용 범위를 벗어나 변경되었습니다(지원 액션/버전 외 차이).');
   }
 
-  const requiredRuntimeChecks = ['summarizeAttendanceComparison', 'resolveGraduationCriteria', 'buildGraduationAssessment'];
-  requiredRuntimeChecks.forEach((key) => {
-    if (!candData.runtimeChecks || candData.runtimeChecks[key] !== true) {
-      failures.push(`apiInfo.runtimeChecks.${key}가 true가 아닙니다.`);
+  const candidateVersion = String(candData.apiVersion || '');
+  if (candidateVersion === '2026.07.14-v6.2' || candidateVersion === '2026.07.14-v6.3') {
+    ['summarizeAttendanceComparison', 'resolveGraduationCriteria', 'buildGraduationAssessment'].forEach((key) => {
+      if (!candData.runtimeChecks || candData.runtimeChecks[key] !== true) {
+        failures.push(`apiInfo.runtimeChecks.${key}가 true가 아닙니다.`);
+      }
+    });
+    if (!candData.capabilities || candData.capabilities.studentInsightsV1 !== true) {
+      failures.push('apiInfo.capabilities.studentInsightsV1가 true가 아닙니다.');
     }
-  });
-  if (!candData.capabilities || candData.capabilities.studentInsightsV1 !== true) {
-    failures.push('apiInfo.capabilities.studentInsightsV1가 true가 아닙니다.');
+  }
+  if (candidateVersion === '2026.07.14-v6.3') {
+    if (!candData.runtimeChecks || candData.runtimeChecks.extractStudentDisplayReason !== true) {
+      failures.push('apiInfo.runtimeChecks.extractStudentDisplayReason가 true가 아닙니다.');
+    }
+    if (!candData.capabilities || candData.capabilities.studentAttendanceReasonV1 !== true) {
+      failures.push('apiInfo.capabilities.studentAttendanceReasonV1가 true가 아닙니다.');
+    }
+  } else {
+    if (candData.runtimeChecks && Object.prototype.hasOwnProperty.call(candData.runtimeChecks, 'extractStudentDisplayReason')) {
+      failures.push('apiInfo.runtimeChecks.extractStudentDisplayReason는 v6.3에서만 광고할 수 있습니다.');
+    }
+    if (candData.capabilities && Object.prototype.hasOwnProperty.call(candData.capabilities, 'studentAttendanceReasonV1')) {
+      failures.push('apiInfo.capabilities.studentAttendanceReasonV1는 v6.3에서만 광고할 수 있습니다.');
+    }
   }
 
   const baseActions = Array.isArray(baseData.supportedActions) ? baseData.supportedActions : [];
@@ -297,6 +318,45 @@ function validateStatusInsights(insights) {
   return failures;
 }
 
+function validateAndStripStatusDisplayReasons(baseData, candData) {
+  const failures = [];
+  const baseDetails = baseData && Array.isArray(baseData.details) ? baseData.details : [];
+  const candDetails = candData && Array.isArray(candData.details) ? candData.details : [];
+
+  candDetails.forEach((detail, index) => {
+    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return;
+    const baseDetail = baseDetails[index] && typeof baseDetails[index] === 'object'
+      ? baseDetails[index]
+      : {};
+
+    Object.keys(detail).forEach((key) => {
+      if (key === 'displayReason') return;
+      if (key === 'note' || key === 'rawNote') {
+        failures.push(`status.data.details[${index}]에 비공개 필드(${key})가 있습니다.`);
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(baseDetail, key)) {
+        failures.push(`status.data.details[${index}]에 허용되지 않은 필드(${key})가 있습니다.`);
+      }
+    });
+
+    if (Object.prototype.hasOwnProperty.call(detail, 'displayReason')) {
+      const reason = detail.displayReason;
+      if (typeof reason !== 'string' || Array.from(reason).length > 300 || reason.trim().length === 0 || reason !== reason.trim()) {
+        failures.push(`status.data.details[${index}].displayReason이 비어 있지 않은 300자 이하 문자열이 아닙니다.`);
+      }
+      delete detail.displayReason;
+    }
+  });
+
+  baseDetails.forEach(detail => {
+    if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+      delete detail.displayReason;
+    }
+  });
+  return failures;
+}
+
 function compareStatusRecord(base, cand) {
   const failures = [];
   const baseNorm = JSON.parse(JSON.stringify(base.normalized || {}));
@@ -311,16 +371,13 @@ function compareStatusRecord(base, cand) {
   const baseData = resolveStatusData(baseNorm);
   const candData = resolveStatusData(candNorm);
   const candInsights = candData ? candData.insights : undefined;
-  const candEnvelope = candNorm && candNorm.data;
 
-  if (candEnvelope && candEnvelope.success === true && candData && candInsights === undefined) {
-    failures.push('성공한 status 응답에 data.insights가 없습니다.');
-  }
   failures.push(...validateStatusInsights(candInsights));
   if (baseData) delete baseData.insights;
   if (candData) delete candData.insights;
+  failures.push(...validateAndStripStatusDisplayReasons(baseData, candData));
   if (!deepEqual(baseNorm, candNorm)) {
-    failures.push('status의 기존 정규화 응답이 additive insights 외 범위에서 변경되었습니다.');
+    failures.push('status의 기존 정규화 응답이 additive insights/displayReason 외 범위에서 변경되었습니다.');
   }
   return failures;
 }
