@@ -95,6 +95,10 @@ mkdir -p "$OUT_DIR"
 echo "== Gate 0: Static Invariance Guard =="
 node "$ROOT_DIR/scripts/doublecheck_static_guard.js"
 
+echo
+echo "== Gate 0-B: Admin Compact Layout Contract =="
+node --test "$ROOT_DIR/scripts/admin_compact_layout_test.js"
+
 if [[ -z "$BASELINE_URL" || -z "$CANDIDATE_URL" ]]; then
   echo
   echo "INFO: baseline/candidate URL이 없어 API 계약 비교는 건너뜁니다."

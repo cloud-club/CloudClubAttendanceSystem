@@ -21,7 +21,8 @@ CloudClub 출석 시스템은 `GitHub Pages UI + Google Apps Script API/RBAC + G
 ## 핵심 파일
 - API 엔트리: [`Appsscript/00_entry_api.gs`](../../Appsscript/00_entry_api.gs)
 - 권한 정본: [`Appsscript/01_constants_access.gs`](../../Appsscript/01_constants_access.gs)
-- 관리자 UI 엔트리: [`web/admin/admin.js`](../../web/admin/admin.js)
+- 관리자 UI 엔트리: [`web/admin/index.html`](../../web/admin/index.html)
+- 관리자 분할 스크립트 정본/로딩 순서: [`web/admin/scripts/README.md`](../../web/admin/scripts/README.md)
 - 학생 UI 엔트리: [`web/student/student.js`](../../web/student/student.js)
 - Secret 주입 / canary: [`/.github/workflows/deploy-gh-pages.yml`](../../.github/workflows/deploy-gh-pages.yml)
 - 런타임 API URL 반영: [`web/shared/env.js`](../../web/shared/env.js)

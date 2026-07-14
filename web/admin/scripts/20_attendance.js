@@ -493,6 +493,11 @@ function openTab(tabName, evt) {
     }
   }
 
+  syncAdminTabAccessibility(tabName);
+  if (isAdminMobileMenuViewport()) {
+    closeAdminMenu({ restoreFocus: true });
+  }
+
   if (typeof syncAttendanceDashboardAutoRefresh === 'function') {
     syncAttendanceDashboardAutoRefresh({ immediate: false });
   }

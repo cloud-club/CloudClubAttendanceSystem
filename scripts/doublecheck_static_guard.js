@@ -514,7 +514,7 @@ function checkFortuneTabWiring() {
   );
   assertRegex(
     indexHtml,
-    /<div id="fortune" class="tab-content">/,
+    /<div\b(?=[^>]*\bid="fortune")(?=[^>]*\bclass="[^"]*\btab-content\b[^"]*")[^>]*>/,
     'fortune 탭 본문이 누락되었습니다.'
   );
   assertRegex(

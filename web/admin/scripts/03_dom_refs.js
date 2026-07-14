@@ -17,7 +17,8 @@ function getSelectedSeasonAlias() {
 
 function getTabButtonByName(tabName) {
   return Array.from(document.querySelectorAll('.tab-button'))
-    .find(btn => btn.getAttribute('onclick') && btn.getAttribute('onclick').indexOf(`openTab('${tabName}'`) >= 0);
+    .find(btn => btn.dataset.tab === tabName
+      || (btn.getAttribute('onclick') && btn.getAttribute('onclick').indexOf(`openTab('${tabName}'`) >= 0));
 }
 
 function setAuthGateMessage(message, isError) {
@@ -50,6 +51,7 @@ function showAuthGate() {
   const app = document.getElementById('adminApp');
   if (gate) gate.classList.remove('is-hidden');
   if (app) app.classList.add('is-hidden');
+  setAdminShellAuthenticated(false);
 }
 
 function showAdminApp() {
@@ -57,4 +59,5 @@ function showAdminApp() {
   const app = document.getElementById('adminApp');
   if (gate) gate.classList.add('is-hidden');
   if (app) app.classList.remove('is-hidden');
+  setAdminShellAuthenticated(true);
 }

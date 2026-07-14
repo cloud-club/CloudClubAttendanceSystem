@@ -80,6 +80,10 @@ function updateRoleBasedUi() {
   if (seasonSelect) {
     seasonSelect.disabled = !isSuper;
   }
+
+  if (typeof syncAdminTabAccessibility === 'function') {
+    syncAdminTabAccessibility(getActiveTabName());
+  }
 }
 
 function redirectToFirstAllowedTab() {

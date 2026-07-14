@@ -20,37 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   initializeAdminPerfMonitors();
 
-  const cloudNodes = Array.from(document.querySelectorAll('.cloud-animation'));
-  let cloudScrollResumeTimer = null;
-  const pauseCloudAnimations = () => {
-    cloudNodes.forEach((node) => {
-      node.style.animationPlayState = 'paused';
-    });
-  };
-  const resumeCloudAnimations = () => {
-    cloudNodes.forEach((node) => {
-      node.style.animationPlayState = 'running';
-    });
-  };
-
-  setTimeout(() => {
-    pauseCloudAnimations();
-  }, 25000);
-
-  if (isAdminPerfUiEnabled() && cloudNodes.length > 0 && !prefersReducedMotion) {
-    window.addEventListener('scroll', () => {
-      pauseCloudAnimations();
-      if (cloudScrollResumeTimer) {
-        clearTimeout(cloudScrollResumeTimer);
-      }
-      cloudScrollResumeTimer = setTimeout(() => {
-        if (!document.hidden) {
-          resumeCloudAnimations();
-        }
-      }, 180);
-    }, { passive: true });
-  }
-
   document.addEventListener('click', (event) => {
     const popover = document.getElementById('authInfoPopover');
     const button = document.getElementById('authInfoButton');
@@ -74,14 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (typeof clearAttendanceDashboardAutoRefresh === 'function') {
         clearAttendanceDashboardAutoRefresh();
       }
-      if (isAdminPerfUiEnabled()) {
-        pauseCloudAnimations();
-      }
       return;
-    }
-
-    if (isAdminPerfUiEnabled() && !prefersReducedMotion) {
-      resumeCloudAnimations();
     }
 
     if (typeof checkAttendanceSession === 'function' && adminToken && seasonSourceReady) {

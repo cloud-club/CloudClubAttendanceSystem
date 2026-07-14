@@ -60,68 +60,6 @@
       position: relative;
     }
     
-    .sparkle-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      background: linear-gradient(to right, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.2));
-      border-radius: 9999px;
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      margin-bottom: 32px;
-      animation: fadeInDown 0.6s ease-out;
-    }
-    
-    .sparkle-badge svg {
-      width: 16px;
-      height: 16px;
-      color: #60a5fa;
-    }
-    
-    .sparkle-badge span {
-      color: #93bbfc;
-      font-size: 14px;
-      font-weight: 500;
-    }
-    
-    .main-title {
-      font-size: clamp(3rem, 8vw, 6rem);
-      font-weight: 900;
-      margin-bottom: 16px;
-      animation: fadeInUp 0.8s ease-out;
-      line-height: 1.1;
-    }
-    
-    .gradient-text {
-      background: linear-gradient(to right, #60a5fa, #93bbfc, #3b82f6);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      display: inline-block;
-      transition: transform 0.3s ease;
-    }
-    
-    .gradient-text:hover {
-      transform: scale(1.05);
-    }
-    
-    .subtitle {
-      font-size: 1.25rem;
-      color: #94a3b8;
-      font-weight: 400;
-      margin-bottom: 16px;
-      animation: fadeInUp 1s ease-out;
-    }
-    
-    .divider {
-      width: 128px;
-      height: 4px;
-      background: linear-gradient(to right, #3b82f6, #60a5fa);
-      margin: 32px auto;
-      border-radius: 2px;
-      animation: fadeIn 1.2s ease-out;
-    }
-
     .auth-gate {
       max-width: 520px;
       margin: 0 auto 40px;
@@ -3091,6 +3029,7 @@
     
     /* Confetti Canvas */
     #confetti-canvas {
+      display: none;
       position: fixed;
       top: 0;
       left: 0;
@@ -3335,10 +3274,6 @@
         display: inline;
       }
       
-      .main-title {
-        font-size: 3rem;
-      }
-      
       .tab-nav {
         flex-direction: column;
         gap: 8px;
@@ -3536,50 +3471,6 @@
 
     }
     
-    /* Cloud Animation */
-    .cloud-animation {
-      position: absolute;
-      top: 20%;
-      opacity: 0.05;
-      animation: float 20s ease-in-out infinite;
-      pointer-events: none;
-    }
-    
-    .cloud-1 {
-      left: -100px;
-      animation-delay: 0s;
-    }
-    
-    .cloud-2 {
-      right: -100px;
-      animation-delay: 5s;
-    }
-    
-    .cloud-3 {
-      left: 50%;
-      animation-delay: 10s;
-    }
-    
-    @keyframes float {
-      0%, 100% {
-        transform: translateX(0) translateY(0);
-      }
-      25% {
-        transform: translateX(100px) translateY(-20px);
-      }
-      50% {
-        transform: translateX(-100px) translateY(20px);
-      }
-      75% {
-        transform: translateX(50px) translateY(-10px);
-      }
-    }
-
-    body.lite-mode .cloud-animation {
-      animation: none !important;
-      opacity: 0.02;
-    }
-
     body.lite-mode .auth-card,
     body.lite-mode .season-toolbar-panel,
     body.lite-mode .tab-nav,
@@ -3634,8 +3525,687 @@
       left: auto !important;
     }
 
-    body.perf-toggle-no-cloud .cloud-animation {
-      display: none !important;
+    /* Admin compact application shell */
+    :root {
+      --admin-container-max: 1760px;
+      --admin-card-padding: 20px;
+      --admin-card-gap: 16px;
+      --admin-shell-gap: 8px;
+      --admin-control-height: 44px;
+      --admin-topbar-height: 60px;
+      --admin-surface-strong: rgba(15, 23, 42, 0.94);
+      --admin-surface-soft: rgba(255, 255, 255, 0.05);
+      --admin-border: rgba(255, 255, 255, 0.12);
+      --admin-text-muted: #94a3b8;
+      --admin-accent: #60a5fa;
+      --admin-focus-ring: rgba(96, 165, 250, 0.32);
+    }
+
+    html {
+      scroll-padding-top: calc(var(--admin-topbar-height) + 24px);
+    }
+
+    body.admin-menu-open {
+      overflow: hidden;
+    }
+
+    .container {
+      max-width: var(--admin-container-max);
+      padding: 12px 20px 24px;
+    }
+
+    .header.admin-topbar {
+      position: sticky;
+      top: var(--admin-shell-gap);
+      z-index: 1300;
+      min-height: var(--admin-topbar-height);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+      border: 1px solid var(--admin-border);
+      border-radius: 18px;
+      background: var(--admin-surface-strong);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .admin-brand {
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      gap: 8px;
+      min-width: 0;
+      color: #e2e8f0;
+      text-decoration: none;
+    }
+
+    .admin-brand-logo {
+      display: block;
+      width: 112px;
+      height: 32px;
+      object-fit: contain;
+    }
+
+    .admin-brand-copy {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .admin-brand-copy strong {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .admin-brand-copy small {
+      color: var(--admin-accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .admin-topbar-controls {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .auth-gate,
+    #adminApp,
+    .site-footer {
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    .admin-mobile-nav-head,
+    .admin-menu-button {
+      display: none;
+    }
+
+    .admin-menu-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1250;
+      border: 0;
+      background: rgba(2, 6, 23, 0.72);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .tab-nav {
+      justify-content: flex-end;
+      flex-wrap: nowrap;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      overflow-x: auto;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      animation: none;
+      scrollbar-width: none;
+    }
+
+    .tab-nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-button {
+      min-height: var(--admin-control-height);
+      flex: 0 0 auto;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .tab-button:active,
+    .btn:active:enabled {
+      transform: translateY(1px);
+    }
+
+    .tab-button:focus-visible,
+    .btn:focus-visible,
+    .admin-brand:focus-visible,
+    .admin-menu-button:focus-visible,
+    .admin-menu-close:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px var(--admin-focus-ring);
+    }
+
+    .admin-utility-row {
+      display: grid;
+      grid-template-columns: minmax(360px, 0.8fr) minmax(620px, 1.7fr);
+      gap: var(--admin-shell-gap);
+      align-items: stretch;
+      margin: 8px 0 var(--admin-card-gap);
+    }
+
+    .admin-session-bar,
+    .season-toolbar {
+      margin: 0;
+    }
+
+    .admin-session-bar {
+      min-width: 0;
+      padding: 8px 12px;
+      border-radius: 14px;
+    }
+
+    .season-toolbar {
+      position: static;
+      animation: none;
+    }
+
+    .season-toolbar-panel {
+      height: 100%;
+      padding: 8px 12px;
+      border-radius: 14px;
+    }
+
+    .header.admin-topbar,
+    .tab-nav,
+    .season-toolbar-panel,
+    .card,
+    .countdown-card {
+      backdrop-filter: none;
+    }
+
+    .season-toolbar-row {
+      align-items: center;
+      gap: 8px;
+    }
+
+    .season-select-group {
+      min-width: 0;
+      gap: 8px;
+    }
+
+    .season-select-group .form-label {
+      min-width: 72px;
+      font-size: 13px;
+    }
+
+    .season-select-group .sheet-select {
+      max-width: none;
+      min-height: var(--admin-control-height);
+      padding: 8px 36px 8px 12px;
+      font-size: 14px;
+    }
+
+    .season-action-group {
+      gap: 8px;
+    }
+
+    .season-action-group .btn {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+
+    .season-toolbar-info {
+      margin-top: 4px;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .tab-content {
+      scroll-margin-top: calc(var(--admin-topbar-height) + 24px);
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .tab-content.active {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--admin-card-gap);
+    }
+
+    .tab-content.active > .card,
+    .tab-content.active > .countdown-card {
+      min-width: 0;
+      margin: 0;
+    }
+
+    .tab-content.active > :not(.card):not(.countdown-card) {
+      grid-column: 1 / -1;
+    }
+
+    .card {
+      padding: var(--admin-card-padding);
+      margin-bottom: var(--admin-card-gap);
+      border-radius: 18px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card::before {
+      display: none;
+    }
+
+    .card:hover {
+      transform: none;
+      border-color: rgba(255, 255, 255, 0.16);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    }
+
+    .card-header {
+      justify-content: flex-start;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+    }
+
+    .card-icon {
+      margin-right: 0;
+      font-size: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      line-height: 1.4;
+      text-wrap: balance;
+    }
+
+    .schedule-management-header {
+      justify-content: space-between;
+    }
+
+    .schedule-management-title {
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .form-group {
+      margin: 16px auto;
+    }
+
+    .form-label {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-input,
+    .sheet-select {
+      min-height: var(--admin-control-height);
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .sheet-select {
+      padding-right: 36px;
+    }
+
+    .form-input::placeholder {
+      letter-spacing: 0;
+    }
+
+    .btn {
+      min-height: var(--admin-control-height);
+      padding: 8px 12px;
+      border-radius: 12px;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .countdown-card {
+      padding: 16px;
+      margin-bottom: var(--admin-card-gap);
+      border-radius: 18px;
+      align-content: center;
+    }
+
+    .countdown-card h3 {
+      font-size: 18px;
+      text-wrap: balance;
+    }
+
+    #countdown {
+      margin-top: 8px;
+      font-size: 32px;
+    }
+
+    .info-text {
+      margin: 8px 0;
+      font-size: 14px;
+      line-height: 1.5;
+      text-wrap: pretty;
+    }
+
+    .site-footer {
+      margin-top: 32px;
+    }
+
+    .site-footer-inner {
+      max-width: var(--admin-container-max);
+      padding: 24px 20px 20px;
+    }
+
+    .site-footer-grid {
+      gap: 20px;
+    }
+
+    body.lite-mode .admin-topbar,
+    body.perf-ui .admin-topbar {
+      backdrop-filter: none;
+    }
+
+    body.perf-toggle-no-sticky .admin-topbar {
+      position: static !important;
+      top: auto !important;
+    }
+
+    @media (min-width: 1000px) {
+      #generate.active {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 1200px) {
+      #status.active {
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+      }
+
+      #status.active > .card:first-child,
+      #fortune.active > .card:nth-child(3) {
+        grid-column: 1 / -1;
+      }
+
+      #fortune.active {
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+      }
+    }
+
+    @media (min-width: 1440px) {
+      #attend.active {
+        grid-template-columns: minmax(260px, 0.55fr) minmax(0, 2.45fr);
+        align-items: start;
+      }
+
+      #graduation.active {
+        grid-template-columns: minmax(320px, 0.75fr) minmax(0, 1.25fr);
+      }
+
+      #adminUsers.active {
+        grid-template-columns: minmax(420px, 0.85fr) minmax(0, 1.15fr);
+      }
+
+      #seasonImport.active {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      #seasonImport.active > #importBaseCard,
+      #seasonImport.active > #importPreviewCard {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (min-width: 1600px) {
+      #schedule.active {
+        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+        align-items: start;
+      }
+    }
+
+    @media (max-width: 1199px) {
+      .admin-utility-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .tab-nav {
+        justify-content: flex-start;
+      }
+
+      .tab-button {
+        padding-inline: 8px;
+        font-size: 12px;
+      }
+    }
+
+    @media (min-width: 769px) and (max-width: 1399px) {
+      .header.admin-topbar {
+        gap: 6px;
+        padding-inline: 10px;
+      }
+
+      .admin-brand {
+        gap: 6px;
+      }
+
+      .admin-brand-logo {
+        width: 40px;
+      }
+
+      .admin-brand-copy small {
+        display: none;
+      }
+
+      .tab-nav {
+        gap: 2px;
+      }
+
+      .tab-button {
+        gap: 4px;
+        padding-inline: 5px;
+        font-size: 11px;
+      }
+
+      .tab-button i {
+        font-size: 12px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      :root {
+        --admin-card-padding: 16px;
+        --admin-card-gap: 12px;
+        --admin-topbar-height: 56px;
+      }
+
+      html {
+        scroll-padding-top: calc(var(--admin-topbar-height) + 16px);
+      }
+
+      .container {
+        width: 100%;
+        padding: 8px 12px 20px;
+      }
+
+      .header.admin-topbar {
+        top: 4px;
+        min-height: var(--admin-topbar-height);
+        padding: 8px 12px;
+        border-radius: 14px;
+      }
+
+      .admin-brand-logo {
+        width: 96px;
+        height: 28px;
+      }
+
+      .admin-brand-copy strong {
+        font-size: 13px;
+      }
+
+      .admin-brand-copy small {
+        display: none;
+      }
+
+      .admin-menu-button {
+        width: var(--admin-control-height);
+        height: var(--admin-control-height);
+        margin-left: auto;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--admin-border);
+        border-radius: 10px;
+        background: rgba(59, 130, 246, 0.18);
+        color: #dbeafe;
+        font-size: 18px;
+        cursor: pointer;
+      }
+
+      .admin-menu-button:not(.is-hidden) {
+        display: inline-flex;
+      }
+
+      .admin-menu-backdrop {
+        display: block;
+      }
+
+      .admin-topbar-controls {
+        position: fixed;
+        inset: 0 0 0 auto;
+        z-index: 1350;
+        width: min(88vw, 320px);
+        padding: 12px;
+        overflow: hidden;
+        background: #0f172a;
+        border-left: 1px solid var(--admin-border);
+        box-shadow: -12px 0 28px rgba(0, 0, 0, 0.28);
+        opacity: 0;
+        visibility: hidden;
+        transform: scaleX(0.96);
+        transform-origin: right center;
+        transition: transform 0.2s ease, opacity 0.2s ease, visibility 0.2s linear;
+      }
+
+      body.admin-menu-open .admin-topbar-controls {
+        opacity: 1;
+        visibility: visible;
+        transform: scaleX(1);
+      }
+
+      body.admin-menu-open .admin-menu-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .admin-mobile-nav-head {
+        min-height: var(--admin-control-height);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 0 4px 8px;
+        color: #e2e8f0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .admin-menu-close {
+        width: var(--admin-control-height);
+        height: var(--admin-control-height);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--admin-border);
+        border-radius: 10px;
+        background: var(--admin-surface-soft);
+        color: #e2e8f0;
+        cursor: pointer;
+      }
+
+      .tab-nav {
+        height: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 4px;
+        overflow-x: hidden;
+        overflow-y: auto;
+      }
+
+      .tab-button {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 8px 12px;
+        font-size: 14px;
+      }
+
+      button:not(.admin-menu-backdrop),
+      .form-input,
+      .sheet-select,
+      .dashboard-input-group .form-input,
+      .dashboard-input-group .sheet-select,
+      .dashboard-picker-open-btn,
+      .schedule-calendar-nav .btn,
+      .copy-btn {
+        min-width: var(--admin-control-height);
+        min-height: var(--admin-control-height);
+      }
+
+      .admin-brand,
+      .manual-filter-checkbox,
+      .import-confirm-box,
+      .excused-filter-checkbox,
+      .checkbox-inline,
+      .site-footer a {
+        min-height: var(--admin-control-height);
+      }
+
+      .site-footer a {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .admin-utility-row {
+        margin-top: 8px;
+      }
+
+      .admin-session-bar {
+        align-items: flex-start;
+        padding: 8px;
+      }
+
+      .admin-session-user {
+        gap: 4px 8px;
+      }
+
+      .season-toolbar-panel {
+        padding: 8px;
+      }
+
+      .season-toolbar-row {
+        align-items: stretch;
+      }
+
+      .season-select-group {
+        min-width: 0;
+      }
+
+      .season-select-group .form-label {
+        min-width: 64px;
+      }
+
+      .season-action-group .btn {
+        justify-content: center;
+      }
+
+      .tab-content {
+        scroll-margin-top: calc(var(--admin-topbar-height) + 16px);
+      }
+
+      .card-header {
+        align-items: flex-start;
+      }
+
+      .card-title {
+        font-size: 17px;
+      }
+
+      .site-footer-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -3645,9 +4215,6 @@
         scroll-behavior: auto !important;
       }
 
-      .cloud-animation {
-        display: none !important;
-      }
     }
   </style>
 </head>
@@ -3657,32 +4224,95 @@
   <!-- Confetti Canvas -->
   <canvas id="confetti-canvas"></canvas>
   
-  <!-- Cloud Animations -->
-  <svg class="cloud-animation cloud-1" width="100" height="60" viewBox="0 0 100 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M80 40C80 51.0457 71.0457 60 60 60H20C8.95431 60 0 51.0457 0 40C0 28.9543 8.95431 20 20 20C20 8.95431 28.9543 0 40 0C51.0457 0 60 8.95431 60 20C71.0457 20 80 28.9543 80 40Z" fill="rgba(96, 165, 250, 0.1)"/>
-  </svg>
-  <svg class="cloud-animation cloud-2" width="80" height="50" viewBox="0 0 80 50" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M65 35C65 43.2843 58.2843 50 50 50H15C6.71573 50 0 43.2843 0 35C0 26.7157 6.71573 20 15 20C15 8.95431 23.9543 0 35 0C46.0457 0 55 8.95431 55 20C63.2843 20 70 26.7157 70 35Z" fill="rgba(59, 130, 246, 0.1)"/>
-  </svg>
-  <svg class="cloud-animation cloud-3" width="60" height="40" viewBox="0 0 60 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M50 25C50 33.2843 43.2843 40 35 40H10C4.47715 40 0 35.5228 0 30C0 24.4772 4.47715 20 10 20C10 8.95431 18.9543 0 30 0C41.0457 0 50 8.95431 50 20Z" fill="rgba(147, 187, 252, 0.1)"/>
-  </svg>
-  
-  <div class="container">
-    <header class="header">
-      <div class="sparkle-badge">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-        </svg>
-        <span>ADMIN DASHBOARD</span>
+  <main class="container">
+    <header class="header admin-topbar">
+      <a class="admin-brand" href="../">
+        <img
+          class="admin-brand-logo"
+          src="https://www.cloudclub.kr/images/logo.png"
+          width="112"
+          height="32"
+          alt="Cloud Club"
+        >
+        <span class="admin-brand-copy">
+          <strong>출석 관리</strong>
+          <small>ADMIN</small>
+        </span>
+      </a>
+
+      <div id="adminTopbarControls" class="admin-topbar-controls is-hidden" aria-hidden="true">
+        <nav id="adminTabNav" class="tab-nav" role="tablist" aria-label="관리자 시스템 이동 메뉴">
+          <div class="admin-mobile-nav-head">
+            <span>관리 메뉴</span>
+            <button type="button" class="admin-menu-close" aria-label="관리 메뉴 닫기" onclick="closeAdminMenu()">
+              <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+          </div>
+          <button id="adminTabAttend" class="tab-button active" type="button" role="tab" data-tab="attend" aria-controls="attend" aria-selected="true" tabindex="0" onclick="openTab('attend', event)">
+            <i class="fas fa-check-circle" aria-hidden="true"></i>
+            <span>출석하기</span>
+          </button>
+          <button id="adminTabStatus" class="tab-button" type="button" role="tab" data-tab="status" aria-controls="status" aria-selected="false" tabindex="-1" onclick="openTab('status', event)">
+            <i class="fas fa-chart-line" aria-hidden="true"></i>
+            <span>출석현황</span>
+          </button>
+          <button id="adminTabSchedule" class="tab-button" type="button" role="tab" data-tab="schedule" aria-controls="schedule" aria-selected="false" tabindex="-1" onclick="openTab('schedule', event)">
+            <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+            <span>일정 관리</span>
+          </button>
+          <button id="adminTabFortune" class="tab-button" type="button" role="tab" data-tab="fortune" aria-controls="fortune" aria-selected="false" tabindex="-1" onclick="openTab('fortune', event)">
+            <i class="fas fa-clover" aria-hidden="true"></i>
+            <span>운세 관리</span>
+          </button>
+          <button id="adminTabExcused" class="tab-button" type="button" role="tab" data-tab="excused" aria-controls="excused" aria-selected="false" tabindex="-1" onclick="openTab('excused', event)">
+            <i class="fas fa-notes-medical" aria-hidden="true"></i>
+            <span>유고 처리</span>
+          </button>
+          <button id="adminTabGenerate" class="tab-button" type="button" role="tab" data-tab="generate" aria-controls="generate" aria-selected="false" tabindex="-1" onclick="openTab('generate', event)">
+            <i class="fas fa-qrcode" aria-hidden="true"></i>
+            <span>QR코드 관리</span>
+          </button>
+          <button id="adminTabVariables" class="tab-button" type="button" role="tab" data-tab="variables" aria-controls="variables" aria-selected="false" tabindex="-1" onclick="openTab('variables', event)">
+            <i class="fas fa-sliders-h" aria-hidden="true"></i>
+            <span>변수명 관리</span>
+          </button>
+          <button id="adminTabGraduation" class="tab-button" type="button" role="tab" data-tab="graduation" aria-controls="graduation" aria-selected="false" tabindex="-1" onclick="openTab('graduation', event)">
+            <i class="fas fa-user-check" aria-hidden="true"></i>
+            <span>수료 판정</span>
+          </button>
+          <button id="adminTabSeasonImport" class="tab-button tab-super-only" type="button" role="tab" data-tab="seasonImport" data-super-only="true" aria-controls="seasonImport" aria-selected="false" tabindex="-1" onclick="openTab('seasonImport', event)">
+            <i class="fas fa-file-import" aria-hidden="true"></i>
+            <span>시즌 생성/업로드</span>
+          </button>
+          <button id="adminTabAdminUsers" class="tab-button tab-super-only" type="button" role="tab" data-tab="adminUsers" data-super-only="true" aria-controls="adminUsers" aria-selected="false" tabindex="-1" onclick="openTab('adminUsers', event)">
+            <i class="fas fa-user-cog" aria-hidden="true"></i>
+            <span>관리자 관리</span>
+          </button>
+        </nav>
       </div>
-      
-      <h1 class="main-title">
-        <span class="gradient-text">CLOUD</span> <span class="gradient-text">CLUB</span>
-      </h1>
-      <p class="subtitle">출석체크 관리자 시스템</p>
-      <div class="divider"></div>
+
+      <button
+        type="button"
+        id="adminMenuButton"
+        class="admin-menu-button is-hidden"
+        aria-label="관리 메뉴 열기"
+        aria-controls="adminTabNav"
+        aria-expanded="false"
+        onclick="toggleAdminMenu()"
+      >
+        <i class="fas fa-bars" aria-hidden="true"></i>
+      </button>
     </header>
+
+    <button
+      type="button"
+      id="adminMenuBackdrop"
+      class="admin-menu-backdrop"
+      aria-label="관리 메뉴 닫기"
+      aria-hidden="true"
+      tabindex="-1"
+      onclick="closeAdminMenu()"
+    ></button>
 
     <section id="authGate" class="auth-gate">
       <div class="auth-card">
@@ -3713,6 +4343,7 @@
     </section>
 
     <div id="adminApp" class="is-hidden">
+      <div class="admin-utility-row">
       <div id="adminSessionBar" class="admin-session-bar">
         <div class="admin-session-user">
           <span id="adminSessionName" class="admin-session-name">관리자</span>
@@ -3751,52 +4382,10 @@
         <p class="season-toolbar-info" id="sheetLinkInfo">현재 선택된 시즌 탭으로 이동합니다.</p>
       </div>
     </div>
-    
-    <nav class="tab-nav">
-      <button class="tab-button active" onclick="openTab('attend', event)">
-        <i class="fas fa-check-circle"></i>
-        <span>출석하기</span>
-      </button>
-      <button class="tab-button" onclick="openTab('status', event)">
-        <i class="fas fa-chart-line"></i>
-        <span>출석현황</span>
-      </button>
-      <button class="tab-button" onclick="openTab('schedule', event)">
-        <i class="fas fa-calendar-alt"></i>
-        <span>일정 관리</span>
-      </button>
-      <button class="tab-button" onclick="openTab('fortune', event)">
-        <i class="fas fa-clover"></i>
-        <span>운세 관리</span>
-      </button>
-      <button class="tab-button" onclick="openTab('excused', event)">
-        <i class="fas fa-notes-medical"></i>
-        <span>유고 처리</span>
-      </button>
-      <button class="tab-button" onclick="openTab('generate', event)">
-        <i class="fas fa-qrcode"></i>
-        <span>QR코드 관리</span>
-      </button>
-      <button class="tab-button" onclick="openTab('variables', event)">
-        <i class="fas fa-sliders-h"></i>
-        <span>변수명 관리</span>
-      </button>
-      <button class="tab-button" onclick="openTab('graduation', event)">
-        <i class="fas fa-user-check"></i>
-        <span>수료 판정</span>
-      </button>
-      <button class="tab-button tab-super-only" data-super-only="true" onclick="openTab('seasonImport', event)">
-        <i class="fas fa-file-import"></i>
-        <span>시즌 생성/업로드</span>
-      </button>
-      <button class="tab-button tab-super-only" data-super-only="true" onclick="openTab('adminUsers', event)">
-        <i class="fas fa-user-cog"></i>
-        <span>관리자 관리</span>
-      </button>
-    </nav>
+      </div>
 
     <!-- QR코드 관리 탭 -->
-    <div id="generate" class="tab-content">
+    <div id="generate" class="tab-content" role="tabpanel" aria-labelledby="adminTabGenerate" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-qrcode card-icon"></i>
@@ -3847,7 +4436,7 @@
     </div>
     
     <!-- 출석하기 탭 -->
-    <div id="attend" class="tab-content active">
+    <div id="attend" class="tab-content active" role="tabpanel" aria-labelledby="adminTabAttend" aria-hidden="false" tabindex="0">
       <div class="countdown-card">
         <h2 id="countdown-title" class="card-title">출석 가능 시간 확인 중...</h2>
         <div id="countdown"><span class="loader"></span></div>
@@ -3935,7 +4524,7 @@
     </div>
     
     <!-- 출석현황 탭 -->
-    <div id="status" class="tab-content">
+    <div id="status" class="tab-content" role="tabpanel" aria-labelledby="adminTabStatus" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-chart-pie card-icon"></i>
@@ -4203,7 +4792,7 @@
     </div>
 
     <!-- 일정 관리 탭 -->
-    <div id="schedule" class="tab-content">
+    <div id="schedule" class="tab-content" role="tabpanel" aria-labelledby="adminTabSchedule" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header schedule-management-header">
           <div class="schedule-management-title">
@@ -4253,7 +4842,7 @@
     </div>
 
     <!-- 운세 관리 탭 -->
-    <div id="fortune" class="tab-content">
+    <div id="fortune" class="tab-content" role="tabpanel" aria-labelledby="adminTabFortune" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-clover card-icon"></i>
@@ -4357,7 +4946,7 @@
     </div>
 
     <!-- 시즌 생성/업로드 탭 -->
-    <div id="seasonImport" class="tab-content">
+    <div id="seasonImport" class="tab-content" role="tabpanel" aria-labelledby="adminTabSeasonImport" aria-hidden="true" tabindex="0">
       <div id="importBaseCard" class="card" data-import-card data-default-open="true">
         <div class="card-header">
           <i class="fas fa-file-upload card-icon"></i>
@@ -4503,7 +5092,7 @@
     </div>
 
     <!-- 변수명 관리 탭 -->
-    <div id="variables" class="tab-content">
+    <div id="variables" class="tab-content" role="tabpanel" aria-labelledby="adminTabVariables" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-cogs card-icon"></i>
@@ -4543,7 +5132,7 @@
     </div>
 
     <!-- 수료 판정 탭 -->
-    <div id="graduation" class="tab-content">
+    <div id="graduation" class="tab-content" role="tabpanel" aria-labelledby="adminTabGraduation" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-graduation-cap card-icon"></i>
@@ -4572,7 +5161,7 @@
       </div>
     </div>
 
-    <div id="excused" class="tab-content">
+    <div id="excused" class="tab-content" role="tabpanel" aria-labelledby="adminTabExcused" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-border-all card-icon"></i>
@@ -4602,7 +5191,7 @@
       </div>
     </div>
 
-    <div id="adminUsers" class="tab-content">
+    <div id="adminUsers" class="tab-content" role="tabpanel" aria-labelledby="adminTabAdminUsers" aria-hidden="true" tabindex="0">
       <div class="card">
         <div class="card-header">
           <i class="fas fa-users-cog card-icon"></i>
@@ -4671,7 +5260,7 @@
       </div>
     </div>
     </div>
-  </div>
+  </main>
 
   <footer class="site-footer">
     <div class="site-footer-inner">
@@ -4840,6 +5429,7 @@
   <script src="./scripts/04_api_client.js"></script>
   <script src="./scripts/05_runtime_deps.js"></script>
   <script src="./scripts/06_front_cache.js"></script>
+  <script src="./scripts/07_admin_shell.js"></script>
   <script src="./scripts/10_auth.js"></script>
   <script src="./scripts/20_attendance.js"></script>
   <script src="./scripts/21_dashboard.js"></script>

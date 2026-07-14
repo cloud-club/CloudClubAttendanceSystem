@@ -16,28 +16,34 @@
 5. `04_api_client.js`
 6. `05_runtime_deps.js`
 7. `06_front_cache.js`
-8. `10_auth.js`
-9. `20_attendance.js`
-10. `21_dashboard.js`
-11. `22_schedule.js`
-12. `23_import.js`
-13. `24_variables.js`
-14. `25_graduation_excused.js`
-15. `26_admin_users.js`
-16. `27_qr_links.js`
-17. `90_bootstrap.js`
-18. `99_compat_handlers.js`
+8. `07_admin_shell.js`
+9. `10_auth.js`
+10. `20_attendance.js`
+11. `21_dashboard.js`
+12. `22_location.js`
+13. `22_schedule.js`
+14. `23_import.js`
+15. `24_variables.js`
+16. `25_graduation_excused.js`
+17. `26_admin_users.js`
+18. `27_qr_links.js`
+19. `28_fortune.js`
+20. `90_bootstrap.js`
+21. `99_compat_handlers.js`
 
 ## 파일 책임
+- `07_admin_shell.js`: 컴팩트 상단바, 단일 탭 탐색, 모바일 메뉴, 탭 ARIA 동기화
 - `10_auth.js`: 로그인/세션/권한 게이트
 - `20_attendance.js`: 출석/현황/수동 승인 핵심
 - `21_dashboard.js`: 대시보드 집계/드릴다운/CSV
+- `22_location.js`: 출석 장소 검색·Place ID 확인·위치 선택 상태
 - `22_schedule.js`: 일정 CRUD/캘린더/충돌 처리
 - `23_import.js`: 시즌 업로드 분석/실행/중단
 - `24_variables.js`: 변수 조회/저장/호환성 체크
 - `25_graduation_excused.js`: 수료 판정/유고 처리
 - `26_admin_users.js`: 관리자 계정 CRUD
 - `27_qr_links.js`: QR/URL 로딩 및 복사
+- `28_fortune.js`: 운세 버전 조회·검증·업로드·다운로드
 
 ## 호환성
 - 기존 전역 핸들러 이름(`openTab`, `saveSchedule`, `loadVariables` 등)은 유지됩니다.
