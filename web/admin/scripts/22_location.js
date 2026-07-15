@@ -83,6 +83,15 @@ function setSchedulePlaceStatus(message, isError) {
   status.style.color = isError ? '#fecaca' : '#cbd5e1';
 }
 
+function syncSchedulePlaceSelectorValue() {
+  const selector = scheduleLocationEditorState.selector;
+  if (!selector) return;
+  const selectedText = scheduleLocationEditorState.displayName
+    || scheduleLocationEditorState.formattedAddress
+    || '';
+  selector.value = selectedText;
+}
+
 function renderSchedulePlaceSelection() {
   const text = document.getElementById('schedulePlaceSelectionText');
   const attributionWrap = document.getElementById('schedulePlaceAttribution');
@@ -136,6 +145,7 @@ function applySchedulePlaceDetails(place, expectedPlaceId) {
   scheduleLocationEditorState.location = normalizeSchedulePlaceLocation(place && place.location);
   scheduleLocationEditorState.attributions = Array.isArray(place && place.attributions) ? place.attributions.slice() : [];
   renderSchedulePlaceSelection();
+  syncSchedulePlaceSelectorValue();
   syncSchedulePlaceMapSelection();
   return true;
 }
@@ -175,6 +185,7 @@ async function handleSchedulePlacePredictionSelected(event) {
     scheduleLocationEditorState.attributions = Array.isArray(place.attributions) ? place.attributions.slice() : [];
     scheduleLocationEditorState.policyValid = true;
     renderSchedulePlaceSelection();
+    syncSchedulePlaceSelectorValue();
     syncSchedulePlaceMapSelection();
     setSchedulePlaceStatus('장소가 선택되었습니다. 저장 시 서버에서 위치를 다시 검증합니다.', false);
     updateScheduleCalendarModalPreview();
@@ -204,6 +215,7 @@ async function handleSchedulePlaceMapClick(event) {
     scheduleLocationEditorState.attributions = Array.isArray(place.attributions) ? place.attributions.slice() : [];
     scheduleLocationEditorState.policyValid = true;
     renderSchedulePlaceSelection();
+    syncSchedulePlaceSelectorValue();
     syncSchedulePlaceMapSelection();
     setSchedulePlaceStatus('지도에서 장소를 선택했습니다. 저장 시 서버에서 위치를 다시 검증합니다.', false);
     updateScheduleCalendarModalPreview();
@@ -259,6 +271,7 @@ async function ensureSchedulePlaceSelector() {
       selector.addEventListener('gmp-select', handleSchedulePlacePredictionSelected);
       host.replaceChildren(selector);
       scheduleLocationEditorState.selector = selector;
+      syncSchedulePlaceSelectorValue();
       if (scheduleLocationEditorState.policyValid) {
         setSchedulePlaceStatus('검색 결과에서 실제 장소를 선택해 주세요.', false);
       }
@@ -280,8 +293,10 @@ async function ensureSchedulePlaceSelector() {
 function onScheduleLocationRequiredChanged() {
   const input = document.getElementById('scheduleLocationRequiredInput');
   const fields = document.getElementById('scheduleLocationFields');
+  const policyDetails = document.getElementById('scheduleLocationPolicyDetails');
   scheduleLocationEditorState.locationRequired = !!(input && input.checked);
   if (fields) fields.hidden = !scheduleLocationEditorState.locationRequired;
+  if (policyDetails) policyDetails.hidden = !scheduleLocationEditorState.locationRequired;
   if (scheduleLocationEditorState.locationRequired) {
     Promise.all([ensureSchedulePlaceSelector(), ensureSchedulePlaceMap()]).catch(() => {});
   } else {
@@ -319,6 +334,7 @@ function openScheduleLocationEditor(item) {
   const requiredInput = document.getElementById('scheduleLocationRequiredInput');
   const noteInput = document.getElementById('scheduleLocationNoteInput');
   const fields = document.getElementById('scheduleLocationFields');
+  const policyDetails = document.getElementById('scheduleLocationPolicyDetails');
   scheduleModalPreviouslyFocusedElement = document.activeElement;
   scheduleModalFocusReturnDateKey = String(scheduleCalendarModalState && scheduleCalendarModalState.dateKey || '');
   resetSchedulePlaceSelector();
@@ -333,6 +349,7 @@ function openScheduleLocationEditor(item) {
   if (requiredInput) requiredInput.checked = scheduleLocationEditorState.locationRequired;
   if (noteInput) noteInput.value = String(item && item.locationNote || '');
   if (fields) fields.hidden = !scheduleLocationEditorState.locationRequired;
+  if (policyDetails) policyDetails.hidden = !scheduleLocationEditorState.locationRequired;
   renderSchedulePlaceSelection();
   setSchedulePlaceStatus(
     scheduleLocationEditorState.policyValid ? '' : '저장된 장소 정책이 올바르지 않습니다. 장소를 다시 선택해 저장해 주세요.',

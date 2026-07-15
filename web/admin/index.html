@@ -1348,12 +1348,33 @@
     }
 
     .schedule-location-panel {
+      grid-area: location;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
       min-width: 0;
+      min-height: 0;
       margin-top: 0;
       padding: 12px;
       border: 1px solid rgba(96, 165, 250, 0.3);
       border-radius: 16px;
       background: rgba(15, 23, 42, 0.45);
+    }
+
+    .schedule-location-details-panel {
+      grid-area: details;
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.32);
+    }
+
+    .schedule-location-policy-details {
+      display: grid;
+      gap: 8px;
     }
 
     .schedule-location-toggle {
@@ -1390,7 +1411,9 @@
 
     .schedule-location-fields {
       display: grid;
+      grid-template-rows: auto auto minmax(320px, 1fr);
       gap: 8px;
+      min-height: 0;
       margin-top: 10px;
     }
 
@@ -1410,6 +1433,7 @@
 
     .schedule-place-map-frame {
       overflow: hidden;
+      min-height: 320px;
       border: 1px solid rgba(148, 163, 184, 0.32);
       border-radius: 12px;
       background: rgba(255, 255, 255, 0.06);
@@ -1417,13 +1441,14 @@
 
     .schedule-place-map {
       width: 100%;
-      height: 144px;
+      height: 100%;
+      min-height: 320px;
     }
 
     .schedule-place-map:empty::before {
       content: 'Google 지도를 불러오는 중입니다.';
       display: grid;
-      min-height: 144px;
+      min-height: 320px;
       place-items: center;
       padding: 16px;
       color: #94a3b8;
@@ -1489,7 +1514,7 @@
     }
 
     .schedule-location-note-field {
-      margin-top: 10px;
+      margin-top: 0;
     }
 
     .schedule-location-compact-row {
@@ -1545,7 +1570,11 @@
 
     .schedule-calendar-modal-body {
       display: grid;
+      grid-template-areas:
+        "timing location"
+        "details location";
       grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.35fr);
+      grid-template-rows: auto minmax(0, 1fr);
       gap: 16px;
       min-height: 0;
       padding: 8px 4px 4px 0;
@@ -1569,6 +1598,7 @@
     }
 
     .schedule-calendar-modal-timing {
+      grid-area: timing;
       display: grid;
       align-content: start;
       gap: 12px;
@@ -3334,7 +3364,30 @@
       }
 
       .schedule-calendar-modal-body {
+        grid-template-areas:
+          "timing"
+          "location"
+          "details";
         grid-template-columns: 1fr;
+        grid-template-rows: auto;
+      }
+
+      .schedule-location-panel {
+        min-height: auto;
+      }
+
+      .schedule-location-fields {
+        grid-template-rows: auto auto 240px;
+      }
+
+      .schedule-place-map-frame,
+      .schedule-place-map,
+      .schedule-place-map:empty::before {
+        min-height: 240px;
+      }
+
+      .schedule-place-map {
+        height: 240px;
       }
     }
 
@@ -5721,7 +5774,7 @@
           </div>
           <div id="scheduleCalendarModalPreview" class="schedule-preview">회차 키/오픈 시각 미리보기가 여기에 표시됩니다.</div>
         </section>
-        <section class="schedule-location-panel" aria-label="장소 및 메모 설정">
+        <section class="schedule-location-panel" aria-label="장소 검색 및 지도 설정">
           <label class="schedule-location-toggle" for="scheduleLocationRequiredInput">
             <input id="scheduleLocationRequiredInput" type="checkbox" checked onchange="onScheduleLocationRequiredChanged()">
             <span class="schedule-location-toggle-copy">
@@ -5738,6 +5791,10 @@
             <div class="schedule-place-map-frame">
               <div id="schedulePlaceMap" class="schedule-place-map" role="region" aria-label="Google 장소 선택 지도" aria-describedby="schedulePlaceMapHelp"></div>
             </div>
+          </div>
+        </section>
+        <section class="schedule-location-details-panel" aria-label="선택 장소 및 회차 메모 설정">
+          <div id="scheduleLocationPolicyDetails" class="schedule-location-policy-details">
             <div id="schedulePlaceSelectionSummary" class="schedule-place-summary">
               <span id="schedulePlaceSelectionText">선택된 장소가 없습니다.</span>
               <span id="schedulePlaceAttribution" class="google-maps-attribution-row">

@@ -1665,13 +1665,18 @@ function checkLocationPrivacyAndPolicyUi() {
   assertRegex(adminHtml, /href="\.\.\/privacy\.html"/, '관리자 개인정보 처리 안내 링크가 없습니다.');
   assertRegex(
     adminHtml,
-    /class="schedule-calendar-modal-body"[\s\S]*class="schedule-calendar-modal-timing"[\s\S]*class="schedule-location-panel"/,
-    '일정 모달이 데스크톱 밀도형 시간·장소 2열 구조를 사용하지 않습니다.'
+    /class="schedule-calendar-modal-body"[\s\S]*class="schedule-calendar-modal-timing"[\s\S]*class="schedule-location-panel"[\s\S]*class="schedule-location-details-panel"/,
+    '일정 모달이 시간·큰 지도·좌측 세부 설정 순서의 반응형 구조를 사용하지 않습니다.'
   );
   assertRegex(
     adminHtml,
-    /@media \(max-width: 900px\)[\s\S]*?\.schedule-calendar-modal-body\s*\{[\s\S]*?grid-template-columns:\s*1fr/,
-    '일정 모달의 900px 이하 단일 열 반응형 규칙이 없습니다.'
+    /\.schedule-calendar-modal-body\s*\{[\s\S]*?grid-template-areas:\s*['"]timing location['"]\s*['"]details location['"][\s\S]*?grid-template-rows:\s*auto minmax\(0,\s*1fr\)/,
+    '데스크톱 일정 모달에서 장소 탐색 열이 두 행을 차지하지 않습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /@media \(max-width: 900px\)[\s\S]*?\.schedule-calendar-modal-body\s*\{[\s\S]*?grid-template-areas:\s*['"]timing['"]\s*['"]location['"]\s*['"]details['"][\s\S]*?grid-template-columns:\s*1fr/,
+    '일정 모달의 900px 이하 시간·지도·세부 설정 단일 열 순서가 없습니다.'
   );
   assertRegex(
     adminHtml,
@@ -1695,8 +1700,13 @@ function checkLocationPrivacyAndPolicyUi() {
   );
   assertRegex(
     adminHtml,
-    /\.schedule-place-map\s*\{[\s\S]*?height:\s*144px/,
-    '일정 장소 지도가 한 화면 밀도를 위한 144px 고정 높이를 사용하지 않습니다.'
+    /\.schedule-place-map\s*\{[\s\S]*?height:\s*100%[\s\S]*?min-height:\s*320px/,
+    '일정 장소 지도가 데스크톱 남는 높이를 채우는 큰 선택 표면을 사용하지 않습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /id="scheduleLocationPolicyDetails"[^>]*class="schedule-location-policy-details"/,
+    '장소 선택 결과와 반경을 좌측 세부 설정 패널에서 독립적으로 접을 수 없습니다.'
   );
   assertRegex(
     adminLocationJs,
@@ -1712,6 +1722,16 @@ function checkLocationPrivacyAndPolicyUi() {
     adminLocationJs,
     /function handleSchedulePlaceMapClick\(event\)[\s\S]*?event\.placeId[\s\S]*?fetchFields\(\{ fields: \['id', 'displayName', 'formattedAddress', 'location'\] \}\)/,
     '지도 POI 클릭을 Place ID와 장소 좌표로 변환하는 선택 흐름이 없습니다.'
+  );
+  assertRegex(
+    adminLocationJs,
+    /function syncSchedulePlaceSelectorValue\(\)[\s\S]*?selector\.value\s*=\s*selectedText/,
+    '지도에서 선택한 장소명 또는 주소를 Google 장소 검색 입력값에 반영하지 않습니다.'
+  );
+  assertRegex(
+    adminLocationJs,
+    /function handleSchedulePlaceMapClick\(event\)[\s\S]*?syncSchedulePlaceSelectorValue\(\)/,
+    '지도 POI 선택 뒤 검색 입력값 동기화가 호출되지 않습니다.'
   );
   assertRegex(
     adminLocationJs,
