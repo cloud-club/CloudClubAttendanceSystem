@@ -1399,6 +1399,38 @@
       color-scheme: light;
     }
 
+    .schedule-place-map-help {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 12px;
+      line-height: 1.4;
+      text-wrap: pretty;
+      word-break: keep-all;
+    }
+
+    .schedule-place-map-frame {
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .schedule-place-map {
+      width: 100%;
+      height: 144px;
+    }
+
+    .schedule-place-map:empty::before {
+      content: 'Google 지도를 불러오는 중입니다.';
+      display: grid;
+      min-height: 144px;
+      place-items: center;
+      padding: 16px;
+      color: #94a3b8;
+      font-size: 12px;
+      text-align: center;
+    }
+
     .schedule-place-summary,
     .schedule-place-status {
       padding: 8px 10px;
@@ -1412,7 +1444,10 @@
 
     .schedule-place-summary {
       display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
       gap: 6px;
+      min-height: 44px;
       text-wrap: balance;
       word-break: keep-all;
       overflow-wrap: break-word;
@@ -1485,12 +1520,35 @@
       margin-bottom: 0;
     }
 
+    @media (min-width: 901px) {
+      .schedule-calendar-modal-heading {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr);
+        align-items: baseline;
+        gap: 8px 12px;
+        padding-bottom: 8px;
+      }
+
+      .schedule-calendar-modal-heading h3,
+      .schedule-calendar-modal-heading p {
+        margin: 0;
+      }
+
+      .schedule-calendar-modal-heading p:last-child {
+        overflow: hidden;
+        color: #94a3b8;
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
     .schedule-calendar-modal-body {
       display: grid;
       grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.35fr);
       gap: 16px;
       min-height: 0;
-      padding: 12px 4px 4px 0;
+      padding: 8px 4px 4px 0;
       overflow-y: auto;
       overscroll-behavior: contain;
       scrollbar-width: thin;
@@ -2220,7 +2278,7 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       max-width: 960px;
-      max-height: calc(100dvh - 32px);
+      max-height: calc(100dvh - 16px);
       overflow: hidden;
       padding: 16px;
     }
@@ -2243,7 +2301,7 @@
     }
 
     .modal-panel.schedule-calendar-location-modal .schedule-location-note {
-      min-height: 72px;
+      min-height: 56px;
     }
 
     .modal-panel.schedule-calendar-location-modal .btn {
@@ -3524,7 +3582,7 @@
       }
 
       .modal-panel.schedule-calendar-location-modal .schedule-location-note {
-        min-height: 84px;
+        min-height: 72px;
       }
 
       .modal-panel.schedule-calendar-location-modal .modal-actions {
@@ -5665,16 +5723,20 @@
         </section>
         <section class="schedule-location-panel" aria-label="장소 및 메모 설정">
           <label class="schedule-location-toggle" for="scheduleLocationRequiredInput">
-            <input id="scheduleLocationRequiredInput" type="checkbox" onchange="onScheduleLocationRequiredChanged()">
+            <input id="scheduleLocationRequiredInput" type="checkbox" checked onchange="onScheduleLocationRequiredChanged()">
             <span class="schedule-location-toggle-copy">
               <strong>장소 기반 출석 확인 필수</strong>
-              <span class="schedule-location-toggle-description">지정 장소 500m 안에서만 출석할 수 있습니다.</span>
+              <span class="schedule-location-toggle-description">기본 사용 · 체크를 해제하면 위치 제한 없이 출석합니다.</span>
             </span>
           </label>
           <div id="scheduleLocationFields" class="schedule-location-fields" hidden>
             <div>
-              <span class="form-label">Google 장소 선택</span>
+              <span class="form-label">Google 장소 검색</span>
               <div id="schedulePlaceAutocompleteHost" class="schedule-place-host"></div>
+            </div>
+            <p id="schedulePlaceMapHelp" class="schedule-place-map-help">지도를 이동·확대한 뒤 장소 이름이 표시된 핀을 누르면 세부 위치를 선택할 수 있습니다.</p>
+            <div class="schedule-place-map-frame">
+              <div id="schedulePlaceMap" class="schedule-place-map" role="region" aria-label="Google 장소 선택 지도" aria-describedby="schedulePlaceMapHelp"></div>
             </div>
             <div id="schedulePlaceSelectionSummary" class="schedule-place-summary">
               <span id="schedulePlaceSelectionText">선택된 장소가 없습니다.</span>

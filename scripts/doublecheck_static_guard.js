@@ -1649,6 +1649,8 @@ function checkLocationPrivacyAndPolicyUi() {
   const studentJs = readFile('web/student/student.js');
   const studentHtml = readFile('web/student/latest/index.html');
   const adminHtml = readFile('web/admin/index.html');
+  const adminLocationJs = readFile('web/admin/scripts/22_location.js');
+  const adminRuntimeDepsJs = readFile('web/admin/scripts/05_runtime_deps.js');
   const adminScheduleJs = readFile('web/admin/scripts/22_schedule.js');
   const privacyHtml = readFile('web/privacy.html');
   const termsHtml = readFile('web/terms.html');
@@ -1685,6 +1687,36 @@ function checkLocationPrivacyAndPolicyUi() {
     adminHtml,
     /\.schedule-place-summary\s*\{[\s\S]*?text-wrap:\s*balance[\s\S]*?word-break:\s*keep-all/,
     '모바일 장소 주소의 마지막 토큰 고립을 막는 균형 줄바꿈 규칙이 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /id="schedulePlaceMap"[^>]*class="schedule-place-map"/,
+    '일정 장소를 지도에서 직접 선택할 수 있는 지도 표면이 없습니다.'
+  );
+  assertRegex(
+    adminHtml,
+    /\.schedule-place-map\s*\{[\s\S]*?height:\s*144px/,
+    '일정 장소 지도가 한 화면 밀도를 위한 144px 고정 높이를 사용하지 않습니다.'
+  );
+  assertRegex(
+    adminLocationJs,
+    /scheduleLocationEditorState\.locationRequired\s*=\s*item\s*\?\s*!!item\.locationRequired\s*:\s*true/,
+    '신규 회차의 장소 기반 출석 기본값이 ON이거나 기존 회차 저장값을 보존하지 않습니다.'
+  );
+  assertRegex(
+    adminRuntimeDepsJs,
+    /function ensureGoogleMaps\(\)[\s\S]*?importLibrary\('maps'\)[\s\S]*?importLibrary\('places'\)/,
+    '관리자 지도와 장소 검색 라이브러리를 함께 준비하는 런타임 로더가 없습니다.'
+  );
+  assertRegex(
+    adminLocationJs,
+    /function handleSchedulePlaceMapClick\(event\)[\s\S]*?event\.placeId[\s\S]*?fetchFields\(\{ fields: \['id', 'displayName', 'formattedAddress', 'location'\] \}\)/,
+    '지도 POI 클릭을 Place ID와 장소 좌표로 변환하는 선택 흐름이 없습니다.'
+  );
+  assertRegex(
+    adminLocationJs,
+    /map\.addListener\('click',\s*event\s*=>\s*handleSchedulePlaceMapClick\(event\)\)/,
+    'Google 지도 클릭 이벤트가 장소 선택 핸들러에 연결되지 않았습니다.'
   );
   assertRegex(
     adminHtml,

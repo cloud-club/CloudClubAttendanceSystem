@@ -85,9 +85,9 @@ window.AdminRuntimeDeps = (function createAdminRuntimeDeps(global) {
     return !!(loader && loader.isReady());
   }
 
-  function ensureGoogleMapsPlaces() {
+  function ensureGoogleMapsApi() {
     if (global.google && global.google.maps && typeof global.google.maps.importLibrary === 'function') {
-      return global.google.maps.importLibrary('places');
+      return Promise.resolve(global.google.maps);
     }
     if (googleMapsPromise) return googleMapsPromise;
 
@@ -99,9 +99,9 @@ window.AdminRuntimeDeps = (function createAdminRuntimeDeps(global) {
     googleMapsPromise = new Promise((resolve, reject) => {
       const callbackName = '__ccGoogleMapsReady';
       const script = document.createElement('script');
-      global[callbackName] = async function () {
+      global[callbackName] = function () {
         try {
-          resolve(await global.google.maps.importLibrary('places'));
+          resolve(global.google.maps);
         } catch (error) {
           reject(error);
         } finally {
@@ -120,10 +120,27 @@ window.AdminRuntimeDeps = (function createAdminRuntimeDeps(global) {
     return googleMapsPromise;
   }
 
+  function ensureGoogleMapsPlaces() {
+    return ensureGoogleMapsApi()
+      .then(mapsApi => mapsApi.importLibrary('places'));
+  }
+
+  function ensureGoogleMaps() {
+    return ensureGoogleMapsApi()
+      .then(async mapsApi => {
+        const [mapsLibrary, placesLibrary] = await Promise.all([
+          mapsApi.importLibrary('maps'),
+          mapsApi.importLibrary('places')
+        ]);
+        return { mapsLibrary, placesLibrary };
+      });
+  }
+
   return {
     ensure,
     ensureMany,
     isReady,
+    ensureGoogleMaps,
     ensureGoogleMapsPlaces
   };
 })(window);

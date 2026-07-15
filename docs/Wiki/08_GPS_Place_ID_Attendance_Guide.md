@@ -42,6 +42,7 @@
 이 구성은 Google Maps Platform의 종량제 API를 사용하므로 Billing 연결이 필요하다. 사용량이 SKU별 월간 무료 한도 안이면 청구액은 0원이지만, 무료 전용 상품은 아니며 한도를 넘으면 과금될 수 있다. 2026-07-13 공식 가격 기준으로 현재 호출 표면은 다음과 같다.
 
 - 학생의 `navigator.geolocation`: Google Maps 과금 대상 아님
+- 관리자 일정 모달의 조작형 지도: Dynamic Maps, 월 10,000회 지도 로드 무료
 - 관리자 신규 장소 선택: `displayName`을 포함한 자동완성 세션 종료 요청이 Place Details Enterprise + Atmosphere로 처리될 수 있으며 월 1,000건 무료
 - 기존 장소 편집창 재조회: Place Details Pro, 월 5,000건 무료
 - Apps Script의 `id,location` 조회: Place Details Essentials, 월 10,000건 무료
@@ -128,6 +129,8 @@ capabilities.googlePlacesServerConfigured = true
 
 Apps Script 검증이 끝난 뒤 `Deploy GitHub Pages` workflow를 실행한다. workflow는 다음을 자동 확인한다.
 
+이미 GPS 기능이 운영 중인 상태에서 관리자 장소 선택 UI만 업데이트하는 경우에는 Apps Script 데이터 계약이 바뀌지 않으므로 Apps Script 재배포 없이 Pages만 배포한다. 조작형 지도도 기존 `Maps JavaScript API`와 같은 브라우저 키를 사용하며 별도의 API 활성화나 Secret 추가가 필요하지 않다. 다만 지도 한 번 표시할 때 Dynamic Maps 로드가 집계된다.
+
 - `APPS_SCRIPT_WEB_APP_URL` 형식
 - `GOOGLE_MAPS_BROWSER_API_KEY` 존재
 - `web/shared/env.js` 두 placeholder 치환
@@ -151,12 +154,14 @@ workflow가 성공해도 Maps referrer 제한과 장소 자동완성은 `curl`�
 1. 관리자 로그인
 2. `일정 관리`에서 새 회차 또는 기존 회차 열기
 3. 날짜와 시간 입력
-4. 필요한 회차만 `장소 기반 출석 확인 필수` 선택
-5. Google 장소 검색 결과에서 실제 장소 선택
+4. 신규 회차는 `장소 기반 출석 확인 필수`가 기본으로 켜져 있음을 확인
+5. 장소명·주소를 검색하거나, 지도를 이동·확대해 장소 이름이 표시된 Google 지도 핀을 직접 선택
 6. 학생에게 보여 줄 장소 안내/회차 메모를 선택적으로 입력
 7. `500m` 반경 확인 후 저장
 
-검색어를 타이핑만 하고 결과를 선택하지 않으면 Place ID가 없으므로 저장할 수 없다. 기존 장소 정책이 있는 회차에서 Google Maps 로드가 실패해도 저장된 Place ID는 자동 삭제하지 않는다. 장소를 해제해 저장한 경우에만 `gps=0`으로 바뀐다.
+위치 제한이 필요 없는 회차는 체크를 해제하면 선택된 장소가 제거되고 `gps=0`으로 저장된다. 기존 회차 수정 화면은 과거에 저장한 체크 상태를 그대로 복원한다.
+
+검색어를 타이핑만 하거나 지도에서 장소 이름이 없는 임의 좌표만 누르면 Place ID가 없으므로 저장할 수 없다. 좌표 자체를 저장하지 않는 기존 서버리스 계약을 지키기 위해 지도에서는 Google이 Place ID를 제공하는 장소 핀만 선택 대상으로 사용한다. 정확한 주소가 지도 핀으로 보이지 않으면 검색 결과에서 주소를 선택한다. 기존 장소 정책이 있는 회차에서 Google Maps 로드가 실패해도 저장된 Place ID는 자동 삭제하지 않는다.
 
 ## 7. 학생 사용 흐름
 
