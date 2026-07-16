@@ -124,26 +124,53 @@ test('Given an explicit non-location policy, building produces a versioned but b
   );
 });
 
-test('Given an old admin edit, the locked latest header Note is preserved instead of a stale pre-lock Note', () => {
-  const result = sandbox.resolveScheduleLocationNoteUnderLock(
-    false,
-    'stale note',
-    { locationNote: 'stale note' },
-    { locationNote: 'latest note' }
-  );
+test('Given a structured header Note, event name and location guidance round-trip without leaking the marker', () => {
+  const note = sandbox.buildSessionHeaderNote('OT 및 첫 행사', '강남역 3번 출구\n2층 세미나실');
+  const parsed = sandbox.parseSessionHeaderNote(note);
+
+  assert.strictEqual(note, '[CloudClub 일정 메타 v1]\n행사명: OT 및 첫 행사\n장소안내:\n강남역 3번 출구\n2층 세미나실');
+  assert.strictEqual(parsed.structured, true);
+  assert.strictEqual(parsed.eventName, 'OT 및 첫 행사');
+  assert.strictEqual(parsed.locationNote, '강남역 3번 출구\n2층 세미나실');
+});
+
+test('Given a legacy plain Note, parsing keeps it as location guidance and leaves event name empty', () => {
+  const parsed = sandbox.parseSessionHeaderNote('강남역 3번 출구 앞');
+  assert.strictEqual(parsed.structured, false);
+  assert.strictEqual(parsed.eventName, '');
+  assert.strictEqual(parsed.locationNote, '강남역 3번 출구 앞');
+});
+
+test('Given an old admin edit, the locked latest structured Note is preserved instead of stale metadata', () => {
+  const result = sandbox.resolveScheduleHeaderNoteUnderLock({
+    eventNameProvided: false,
+    requestedEventName: '',
+    locationPolicyProvided: false,
+    requestedLocationNote: '',
+    initialTarget: { headerNoteRaw: 'stale note' },
+    lockedTarget: { headerNoteRaw: 'latest note' }
+  });
   assert.strictEqual(result.valid, true);
-  assert.strictEqual(result.note, 'latest note');
+  assert.strictEqual(result.headerNote, 'latest note');
 });
 
 test('Given an explicit Note edit race, the schedule save fails instead of overwriting another admin change', () => {
-  const result = sandbox.resolveScheduleLocationNoteUnderLock(
-    true,
-    'my note',
-    { locationNote: 'initial note' },
-    { locationNote: 'other admin note' }
-  );
+  const result = sandbox.resolveScheduleHeaderNoteUnderLock({
+    eventNameProvided: true,
+    requestedEventName: '내 행사',
+    locationPolicyProvided: false,
+    requestedLocationNote: '',
+    initialTarget: { headerNoteRaw: 'initial note' },
+    lockedTarget: { headerNoteRaw: 'other admin note' }
+  });
   assert.strictEqual(result.valid, false);
   assert.strictEqual(result.errorCode, 'SCHEDULE_CHANGED_RETRY');
+});
+
+test('Given an event name longer than 80 Unicode code points, validation rejects it without splitting emoji', () => {
+  assert.strictEqual(sandbox.validateScheduleEventName('가'.repeat(80)).valid, true);
+  assert.strictEqual(sandbox.validateScheduleEventName('행사' + '🎉'.repeat(79)).valid, false);
+  assert.strictEqual(sandbox.validateScheduleEventName('첫 행사\n둘째 줄').valid, false);
 });
 
 test('Given malformed required-location metadata, parsing finds the session but fails the policy closed', () => {

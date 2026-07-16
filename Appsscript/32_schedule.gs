@@ -1,18 +1,35 @@
-function resolveScheduleLocationNoteUnderLock(locationPolicyProvided, requestedNote, initialTarget, lockedTarget) {
-  const latestNote = String(lockedTarget && lockedTarget.locationNote || '').trim();
-  if (!locationPolicyProvided) {
-    return { valid: true, note: latestNote };
+function validateScheduleEventName(value) {
+  const eventName = String(value || '').trim();
+  if (/\r|\n|\u0085|\u2028|\u2029/.test(eventName)) {
+    return { valid: false, message: '행사명은 줄바꿈 없이 한 줄로 입력해 주세요.' };
+  }
+  if (Array.from(eventName).length > SCHEDULE_EVENT_NAME_MAX_CODE_POINTS) {
+    return { valid: false, message: `행사명은 ${SCHEDULE_EVENT_NAME_MAX_CODE_POINTS}자 이내로 입력해 주세요.` };
+  }
+  return { valid: true, eventName: eventName };
+}
+
+function resolveScheduleHeaderNoteUnderLock(options) {
+  const opts = options || {};
+  const latestRaw = String(opts.lockedTarget && opts.lockedTarget.headerNoteRaw || '').trim();
+  const isExplicitEdit = !!opts.eventNameProvided || !!opts.locationPolicyProvided;
+  if (!isExplicitEdit) {
+    return { valid: true, headerNote: latestRaw };
   }
 
-  const initialNote = String(initialTarget && initialTarget.locationNote || '').trim();
-  if (initialTarget && latestNote !== initialNote) {
+  const initialRaw = String(opts.initialTarget && opts.initialTarget.headerNoteRaw || '').trim();
+  if (opts.initialTarget && latestRaw !== initialRaw) {
     return {
       valid: false,
       errorCode: 'SCHEDULE_CHANGED_RETRY',
-      message: '회차 메모가 다른 요청에서 변경되었습니다. 새로고침 후 다시 시도해 주세요.'
+      message: '행사명 또는 회차 메모가 다른 요청에서 변경되었습니다. 새로고침 후 다시 시도해 주세요.'
     };
   }
-  return { valid: true, note: String(requestedNote || '').trim() };
+
+  const latest = parseSessionHeaderNote(latestRaw);
+  const eventName = opts.eventNameProvided ? opts.requestedEventName : latest.eventName;
+  const locationNote = opts.locationPolicyProvided ? opts.requestedLocationNote : latest.locationNote;
+  return { valid: true, headerNote: buildSessionHeaderNote(eventName, locationNote) };
 }
 
 function getSheetLink(seasonName) {
@@ -160,6 +177,7 @@ function getScheduleList(seasonName) {
         locationPolicyErrorCode: session.locationPolicyErrorCode,
         googlePlaceId: session.googlePlaceId,
         radiusM: session.radiusM,
+        eventName: session.eventName,
         locationNote: session.locationNote
       };
     });
@@ -199,6 +217,12 @@ function saveSchedule(params) {
     const startAt = String(params.startAt || '').trim();
     const endAt = String(params.endAt || '').trim();
     const locationPolicyProvided = parseBooleanParam(params.locationPolicyPresent);
+    const eventNameProvided = parseBooleanParam(params.eventNameProvided);
+    const eventNameValidation = validateScheduleEventName(params.eventName || '');
+    if (eventNameProvided && !eventNameValidation.valid) {
+      return { success: false, message: eventNameValidation.message };
+    }
+    let eventName = eventNameProvided ? eventNameValidation.eventName : '';
 
     if (!startAt) {
       return { success: false, message: 'startAt 파라미터가 필요합니다.' };
@@ -262,6 +286,9 @@ function saveSchedule(params) {
         : null;
       locationNote = initialTarget.locationNote || '';
     }
+    if (!eventNameProvided && initialTarget) {
+      eventName = initialTarget.eventName || '';
+    }
 
     const newSessionKey = formatSessionKey(startTime);
     const targetDateKey = formatDateKey(startTime);
@@ -296,22 +323,23 @@ function saveSchedule(params) {
           return { success: false, errorCode: 'SCHEDULE_CHANGED_RETRY', message: '회차가 다른 요청에서 변경되었습니다. 새로고침 후 다시 시도해 주세요.' };
         }
 
-        const locationNoteResolution = resolveScheduleLocationNoteUnderLock(
-          locationPolicyProvided,
-          locationNote,
-          initialTarget,
-          target
-        );
-        if (!locationNoteResolution.valid) {
+        const headerNoteResolution = resolveScheduleHeaderNoteUnderLock({
+          eventNameProvided: eventNameProvided,
+          requestedEventName: eventName,
+          locationPolicyProvided: locationPolicyProvided,
+          requestedLocationNote: locationNote,
+          initialTarget: initialTarget,
+          lockedTarget: target
+        });
+        if (!headerNoteResolution.valid) {
           return {
             success: false,
-            errorCode: locationNoteResolution.errorCode,
-            message: locationNoteResolution.message
+            errorCode: headerNoteResolution.errorCode,
+            message: headerNoteResolution.message
           };
         }
-        locationNote = locationNoteResolution.note;
 
-        sheet.getRange(1, target.colIndex + 1).setValue(headerValue).setNote(locationNote);
+        sheet.getRange(1, target.colIndex + 1).setValue(headerValue).setNote(headerNoteResolution.headerNote);
 
         if (sessionKey !== newSessionKey) {
           removeSessionMetaRow(sheet.getName(), sessionKey);
@@ -325,7 +353,7 @@ function saveSchedule(params) {
         });
       } else {
         const insertCol = sheet.getLastColumn() + 1;
-        sheet.getRange(1, insertCol).setValue(headerValue).setNote(locationNote);
+        sheet.getRange(1, insertCol).setValue(headerValue).setNote(buildSessionHeaderNote(eventName, locationNote));
 
         upsertSessionMetaRow(sheet.getName(), newSessionKey, {
           openOffsetMin: variableConfig.attendance_open_offset_min,
@@ -343,6 +371,7 @@ function saveSchedule(params) {
       message: sessionKey ? '일정이 수정되었습니다.' : '일정이 추가되었습니다.',
       seasonAlias: info.seasonAlias,
       sessionKey: newSessionKey,
+      eventName: eventName,
       locationRequired: !!(locationPolicy && locationPolicy.locationRequired),
       radiusM: ATTENDANCE_LOCATION_RADIUS_M
     };

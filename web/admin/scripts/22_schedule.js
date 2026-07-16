@@ -86,6 +86,7 @@ function renderScheduleTable(items) {
     return `
       <tr>
         <td>${escapeHtml(item.sessionKey)}</td>
+        <td>${item.eventName ? escapeHtml(item.eventName) : '-'}</td>
         <td>${escapeHtml(compactStartLabel)}</td>
         <td>${escapeHtml(item.openLabel)}</td>
         <td>${escapeHtml(item.endLabel)}</td>
@@ -107,6 +108,7 @@ function renderScheduleTable(items) {
       <thead>
         <tr>
           <th>회차 키</th>
+          <th>행사명</th>
           <th>시작</th>
           <th>오픈</th>
           <th>마감</th>
@@ -345,6 +347,7 @@ function renderScheduleCalendar() {
     const statusLabel = item
       ? (item.isActive ? '진행중' : (item.isPast ? '종료' : '예정'))
       : '';
+    const eventNameLabel = item && item.eventName ? escapeHtml(item.eventName) : '';
 
     dayCells += `
       <div class="${dayClass}" onclick="selectCalendarDate('${dateKey}')">
@@ -354,6 +357,7 @@ function renderScheduleCalendar() {
         </div>
         ${hasSchedule ? `
           <div class="schedule-calendar-item-time">${timeLabel}</div>
+          ${eventNameLabel ? `<div class="schedule-calendar-item-name">${eventNameLabel}</div>` : ''}
           <div class="schedule-calendar-item-status">${escapeHtml(statusLabel)}</div>
         ` : '<div class="schedule-calendar-item-empty">일정 없음</div>'}
       </div>
@@ -400,11 +404,12 @@ function openScheduleCalendarModalForItem(item, options) {
   const targetDate = document.getElementById('scheduleCalendarModalTargetDate');
   const sessionInfo = document.getElementById('scheduleCalendarModalSessionInfo');
   const dateInput = document.getElementById('scheduleCalendarModalDateInput');
+  const eventNameInput = document.getElementById('scheduleEventNameInput');
   const startInput = document.getElementById('scheduleCalendarModalStartTimeInput');
   const endInput = document.getElementById('scheduleCalendarModalEndInput');
   const saveBtn = document.getElementById('scheduleCalendarModalSaveBtn');
   const deleteBtn = document.getElementById('scheduleCalendarModalDeleteBtn');
-  if (!modal || !title || !targetDate || !sessionInfo || !dateInput || !startInput || !endInput || !saveBtn || !deleteBtn) return;
+  if (!modal || !title || !targetDate || !sessionInfo || !dateInput || !eventNameInput || !startInput || !endInput || !saveBtn || !deleteBtn) return;
 
   scheduleCalendarModalState = {
     dateKey: dateKey,
@@ -424,6 +429,7 @@ function openScheduleCalendarModalForItem(item, options) {
     ? `기존 회차: ${item.sessionKey}`
     : '해당 날짜에 등록된 회차가 없습니다.';
   setScheduleCalendarModalDate(dateKey, { renderCalendar: false, updatePreview: false });
+  eventNameInput.value = String(item && item.eventName || '');
   startInput.value = item ? (item.startHhmm || formatHhmmFromMs(item.startTime)) : getDefaultScheduleStartTime();
   endInput.value = item ? (item.explicitEndAt || suggestScheduleEndTime(startInput.value)) : suggestScheduleEndTime(startInput.value);
   saveBtn.innerHTML = `<i class="fas fa-save"></i> <span>${item ? '일정 수정' : '일정 추가'}</span>`;

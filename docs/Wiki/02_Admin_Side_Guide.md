@@ -1,5 +1,12 @@
 # Admin Side Guide
 
+## 일정 행사명 관리
+
+- 일정 추가·수정 모달의 `행사명 (선택)`에 운영자가 알아보기 쉬운 이름을 입력할 수 있습니다.
+- 행사명은 일정 표와 달력 셀에 표시되고, 출석 가능 회차 안내에도 함께 표시됩니다.
+- 기존 일정도 수정 모달을 열어 행사명을 추가할 수 있습니다.
+- GitHub Pages를 먼저 배포해도 기존 기능은 유지되지만, 행사명 저장은 변경된 Apps Script를 수동 배포한 뒤부터 반영됩니다.
+
 > 문서 링크: [docs/Wiki/02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)
 
 ## 빠른 흐름도

@@ -1,5 +1,22 @@
 # Data And RBAC Reference
 
+## 일정 헤더 Note 메타데이터
+
+회차 열의 1행 값은 날짜·시간·GPS 정책을 유지하고, 1행 셀 Note는 행사명과 장소 안내를 함께 저장합니다.
+
+```text
+[CloudClub 일정 메타 v1]
+행사명: OT 및 첫 행사
+장소안내:
+강남역 3번 출구 앞
+```
+
+- 행사명은 선택값이며 줄바꿈 없이 최대 80 Unicode 문자입니다.
+- 장소 안내는 최대 500자입니다.
+- 과거 일반 Note는 행사명 없는 장소 안내로 읽어 기존 데이터를 보존합니다.
+- 기존 회차를 새 관리자 화면에서 수정하면 구조화 형식으로 저장됩니다.
+- `eventNameProvided`가 없는 구버전 관리자 요청은 기존 행사명을 삭제하지 않습니다.
+
 > 문서 링크: [docs/Wiki/05_Data_And_RBAC_Reference.md](./05_Data_And_RBAC_Reference.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/05_Data_And_RBAC_Reference.md)
 
 ## 빠른 흐름도

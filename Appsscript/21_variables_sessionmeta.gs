@@ -31,6 +31,37 @@ function buildSessionHeader(startTime, endAtText, locationPolicy) {
   return `${baseHeader}|v=${SESSION_LOCATION_POLICY_VERSION}|gps=1|pid=${encodeURIComponent(placeId)}|r=${ATTENDANCE_LOCATION_RADIUS_M}`;
 }
 
+function parseSessionHeaderNote(noteValue) {
+  const raw = String(noteValue || '').trim();
+  if (!raw) {
+    return { structured: false, eventName: '', locationNote: '', raw: '' };
+  }
+
+  const lines = raw.split(/\r\n?|\n|\u0085|\u2028|\u2029/);
+  const structured = lines[0] === SESSION_HEADER_NOTE_MARKER
+    && /^행사명:/.test(lines[1] || '')
+    && lines[2] === '장소안내:';
+  if (!structured) {
+    return { structured: false, eventName: '', locationNote: raw, raw: raw };
+  }
+
+  return {
+    structured: true,
+    eventName: String(lines[1] || '').replace(/^행사명:\s*/, '').trim(),
+    locationNote: lines.slice(3).join('\n').trim(),
+    raw: raw
+  };
+}
+
+function buildSessionHeaderNote(eventName, locationNote) {
+  const normalizedEventName = String(eventName || '').trim();
+  const normalizedLocationNote = String(locationNote || '').trim();
+  if (!normalizedEventName && !normalizedLocationNote) {
+    return '';
+  }
+  return `${SESSION_HEADER_NOTE_MARKER}\n행사명: ${normalizedEventName}\n장소안내:\n${normalizedLocationNote}`.trim();
+}
+
 function ensureVariableSheet(options) {
   const opts = options || {};
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1108,7 +1139,10 @@ function collectSessionsFromSheet(sheet, options) {
     if (!parsed) continue;
 
     parsed.colIndex = j;
-    parsed.locationNote = String(headerNotes[j] || '').trim();
+    const headerNote = parseSessionHeaderNote(headerNotes[j]);
+    parsed.eventName = headerNote.eventName;
+    parsed.locationNote = headerNote.locationNote;
+    parsed.headerNoteRaw = headerNote.raw;
     parsedSessions.push(parsed);
   }
 
@@ -1218,7 +1252,9 @@ function collectSessionsFromSheet(sheet, options) {
       locationPolicyErrorCode: parsed.locationPolicyErrorCode,
       googlePlaceId: parsed.googlePlaceId,
       radiusM: parsed.radiusM,
-      locationNote: parsed.locationNote
+      eventName: parsed.eventName,
+      locationNote: parsed.locationNote,
+      headerNoteRaw: parsed.headerNoteRaw
     };
   });
 }

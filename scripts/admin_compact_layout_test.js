@@ -39,6 +39,8 @@ function extractFunctionSource(source, functionName) {
 const html = readSource('web/admin/index.html');
 const domRefsSource = readSource('web/admin/scripts/03_dom_refs.js');
 const attendanceSource = readSource('web/admin/scripts/20_attendance.js');
+const scheduleSource = readSource('web/admin/scripts/22_schedule.js');
+const locationSource = readSource('web/admin/scripts/22_location.js');
 const shellSource = readSource('web/admin/scripts/07_admin_shell.js', true);
 const privacyHtml = readSource('web/privacy.html');
 const termsHtml = readSource('web/terms.html');
@@ -222,6 +224,19 @@ test('짧은 로그인 화면에서 푸터가 문서 하단에 붙는 flex 계�
   assert.equal(bodyRule, true);
   assert.equal(containerRule, true);
   assert.equal(footerRule, true);
+});
+
+test('일정 모달은 선택 행사명을 수정하고 저장 payload에 명시적으로 포함한다', () => {
+  // Given: 일정 모달과 저장 스크립트가 준비되어 있다.
+  const eventNameInput = getOpeningTags(html, 'input').find((tag) => getAttribute(tag, 'id') === 'scheduleEventNameInput') || '';
+  const openSource = extractFunctionSource(scheduleSource, 'openScheduleCalendarModalForItem');
+  const payloadSource = extractFunctionSource(locationSource, 'getScheduleLocationSavePayload');
+
+  // When/Then: 행사명은 선택 입력이며 기존 값을 복원하고 명시적 제공 플래그와 함께 저장한다.
+  assert.equal(getAttribute(eventNameInput, 'maxlength'), '80');
+  assert.match(openSource, /eventNameInput\.value\s*=\s*String\(item\s*&&\s*item\.eventName/);
+  assert.match(payloadSource, /eventNameProvided\s*:\s*'1'/);
+  assert.match(payloadSource, /eventName\s*:/);
 });
 
 test('출석 보조 조회와 일정 관리 안내가 컴팩트 UI 계약을 유지한다', () => {

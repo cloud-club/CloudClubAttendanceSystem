@@ -360,6 +360,8 @@ function renderCountdown(session) {
   const attendBtn = document.getElementById('attendBtn');
 
   clearInterval(countdownInterval);
+  const eventName = String(session.eventName || session.nextEventName || '').trim();
+  const countdownHeading = (label) => eventName ? `${eventName} · ${label}` : label;
 
   const disableAttend = (label) => {
     isAttendanceActive = false;
@@ -378,7 +380,7 @@ function renderCountdown(session) {
 
         if (remain <= 0) {
           clearInterval(countdownInterval);
-          countdownTitle.textContent = '출석 가능 시간 확인 중...';
+          countdownTitle.textContent = countdownHeading('출석 가능 시간 확인 중...');
           countdownDiv.textContent = '잠시 후 자동 갱신됩니다.';
           disableAttend('<i class="fas fa-clock"></i> <span>오픈 대기</span>');
           setTimeout(() => {
@@ -387,7 +389,7 @@ function renderCountdown(session) {
           return;
         }
 
-        countdownTitle.textContent = '출석 오픈까지 남은 시간';
+        countdownTitle.textContent = countdownHeading('출석 오픈까지 남은 시간');
         countdownDiv.textContent = formatDurationKorean(remain);
       };
 
@@ -397,7 +399,7 @@ function renderCountdown(session) {
       return;
     }
 
-    countdownTitle.textContent = '출석 대기 중';
+    countdownTitle.textContent = countdownHeading('출석 대기 중');
     countdownDiv.textContent = session.message || '지금은 출석 가능한 시간이 아닙니다.';
     disableAttend('<i class="fas fa-times"></i> <span>출석 불가</span>');
     return;
@@ -416,7 +418,7 @@ function renderCountdown(session) {
 
     if (lateDeadline && now > lateDeadline) {
       clearInterval(countdownInterval);
-      countdownTitle.textContent = '출석 시간 종료';
+      countdownTitle.textContent = countdownHeading('출석 시간 종료');
       countdownDiv.textContent = '00분 00초';
       disableAttend('<i class="fas fa-times"></i> <span>출석 마감</span>');
       if (typeof refreshStatusDashboardIfVisible === 'function' && getActiveTabName() === 'status') {
@@ -428,9 +430,9 @@ function renderCountdown(session) {
     let target = lateDeadline;
     if (onTimeDeadline && now <= onTimeDeadline) {
       target = onTimeDeadline;
-      countdownTitle.textContent = '정시 마감까지 남은 시간';
+      countdownTitle.textContent = countdownHeading('정시 마감까지 남은 시간');
     } else {
-      countdownTitle.textContent = '지각 마감까지 남은 시간';
+      countdownTitle.textContent = countdownHeading('지각 마감까지 남은 시간');
     }
 
     const remaining = Math.max(0, target - now);

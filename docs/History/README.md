@@ -27,6 +27,7 @@ flowchart LR
 - 관리자 UI 컴팩트 앱 셸 전면 개선: [033_관리자_UI_컴팩트_앱셸_전면개선_운영기록_2026-07-15.md](./033_관리자_UI_컴팩트_앱셸_전면개선_운영기록_2026-07-15.md)
 - 관리자 로그인·푸터·출석 조회·일정 관리 컴팩트 보정: [034_관리자_로그인_푸터_출석조회_일정관리_컴팩트_보정_운영기록_2026-07-15.md](./034_관리자_로그인_푸터_출석조회_일정관리_컴팩트_보정_운영기록_2026-07-15.md)
 - 학생 페이지 v6.3 컴팩트 대시보드·출석 상세 결정 배경: [student-page-v6.3-compact-dashboard-detail.md](./student-page-v6.3-compact-dashboard-detail.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/student-page-v6.3-compact-dashboard-detail.md). 이 문서는 배경 기록이며 현재 정책은 `docs/Wiki/*`와 `Appsscript/*`, `web/*` 코드를 우선합니다.
+- 일정 행사명 메타데이터 도입: [036_일정_행사명_메타데이터_도입_운영기록_2026-07-16.md](./036_일정_행사명_메타데이터_도입_운영기록_2026-07-16.md)
 - 운세 관리 + 회귀 게이트: [022_운세관리탭_버전형업로드_및_회귀더블체크_운영기록_2026-02-20.md](./022_운세관리탭_버전형업로드_및_회귀더블체크_운영기록_2026-02-20.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/History/022_%EC%9A%B4%EC%84%B8%EA%B4%80%EB%A6%AC%ED%83%AD_%EB%B2%84%EC%A0%84%ED%98%95%EC%97%85%EB%A1%9C%EB%93%9C_%EB%B0%8F_%ED%9A%8C%EA%B7%80%EB%8D%94%EB%B8%94%EC%B2%B4%ED%81%AC_%EC%9A%B4%EC%98%81%EA%B8%B0%EB%A1%9D_2026-02-20.md)
 
 ## 범주별 문서

@@ -740,22 +740,23 @@ function formatDurationKorean(ms) {
 function renderAttendanceLocationPolicy(session) {
   const summary = document.getElementById('sessionVenueSummary');
   if (!summary) return;
+  const eventName = String(session && (session.eventName || session.nextEventName) || '').trim();
   summary.classList.remove('is-error');
   if (session && session.active && session.locationPolicyValid === false) {
-    summary.textContent = '장소 설정을 확인할 수 없어 위치 권한을 요청하지 않습니다. 운영진에게 문의해 주세요.';
+    summary.textContent = `${eventName ? `${eventName} · ` : ''}장소 설정을 확인할 수 없어 위치 권한을 요청하지 않습니다. 운영진에게 문의해 주세요.`;
     summary.classList.add('is-error');
     return;
   }
   if (!session || (!session.active && !session.nextLocationRequired) || (session.active && !session.locationRequired)) {
-    summary.textContent = '';
+    summary.textContent = eventName ? `행사: ${eventName}` : '';
     return;
   }
 
   const radius = Number(session.radiusM || session.nextRadiusM || 500);
   const note = String(session.locationNote || '').trim();
   summary.textContent = note
-    ? `위치 확인 필수 · 지정 장소 ${radius}m 이내 · ${note} · 출석 버튼을 누르면 현재 위치를 한 번 확인하며 좌표는 저장하지 않습니다.`
-    : `위치 확인 필수 · 지정 장소 ${radius}m 이내 · 출석 버튼을 누르면 현재 위치를 한 번 확인하며 좌표는 저장하지 않습니다.`;
+    ? `${eventName ? `행사: ${eventName} · ` : ''}위치 확인 필수 · 지정 장소 ${radius}m 이내 · ${note} · 출석 버튼을 누르면 현재 위치를 한 번 확인하며 좌표는 저장하지 않습니다.`
+    : `${eventName ? `행사: ${eventName} · ` : ''}위치 확인 필수 · 지정 장소 ${radius}m 이내 · 출석 버튼을 누르면 현재 위치를 한 번 확인하며 좌표는 저장하지 않습니다.`;
 }
 
 function setAttendanceLocationStatus(message, tone) {

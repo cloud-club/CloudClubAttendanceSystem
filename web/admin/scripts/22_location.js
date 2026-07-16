@@ -407,8 +407,13 @@ function handleScheduleLocationModalKeydown(event) {
 document.addEventListener('keydown', handleScheduleLocationModalKeydown);
 
 function validateScheduleLocationForm() {
+  const eventNameInput = document.getElementById('scheduleEventNameInput');
+  const eventName = String(eventNameInput && eventNameInput.value || '').trim();
   const noteInput = document.getElementById('scheduleLocationNoteInput');
   const note = String(noteInput && noteInput.value || '').trim();
+  if (Array.from(eventName).length > 80 || /[\r\n\u0085\u2028\u2029]/.test(eventName)) {
+    return { valid: false, message: '행사명은 줄바꿈 없이 80자 이내로 입력해 주세요.' };
+  }
   if (note.length > 500) {
     return { valid: false, message: '장소 안내/회차 메모는 500자 이내로 입력해 주세요.' };
   }
@@ -419,8 +424,11 @@ function validateScheduleLocationForm() {
 }
 
 function getScheduleLocationSavePayload() {
+  const eventNameInput = document.getElementById('scheduleEventNameInput');
   const noteInput = document.getElementById('scheduleLocationNoteInput');
   return {
+    eventNameProvided: '1',
+    eventName: String(eventNameInput && eventNameInput.value || '').trim(),
     locationPolicyPresent: '1',
     locationRequired: scheduleLocationEditorState.locationRequired ? '1' : '0',
     googlePlaceId: scheduleLocationEditorState.locationRequired ? scheduleLocationEditorState.googlePlaceId : '',
