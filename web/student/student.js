@@ -36,6 +36,9 @@ let studentAttendanceDetailInitialized = false;
 let studentAttendanceDetailFocusGeneration = 0;
 let studentAttendanceDetailFocusTimer = null;
 let studentMenuReturnFocus = null;
+let studentScheduleRequest = null;
+let completionPolicyDialogTrigger = null;
+let completionPolicyDialogPreviousBodyOverflow = null;
 const LATEST_SEASON_STORAGE_KEY = 'cloudclub.latestSeasonAlias';
 const STUDENT_ADMIN_TOKEN_STORAGE_KEY = 'cc_student_admin_token';
 const STUDENT_RANKING_CACHE_TTL_MS = 10000;
@@ -48,6 +51,7 @@ const STUDENT_ALLOWED_ACTIONS = {
   ranking: true,
   attendance: true,
   status: true,
+  studentSchedule: true,
   authGoogleConfig: true,
   authGoogleLogin: true,
   authSession: true,
@@ -1114,7 +1118,12 @@ function openTab(tabName) {
   if (tabName !== 'status') resetStudentStatusResult();
   if (tabName !== 'completion') invalidateStudentCompletionRequest();
   if (tabName === 'status' && currentSeason) loadRankings();
-  if (tabName === 'schedule' && currentSeason) loadStudentSchedule();
+  if ((tabName === 'schedule' || tabName === 'completion') && currentSeason) {
+    loadStudentSchedule({
+      renderResult: tabName === 'schedule',
+      showLoading: tabName === 'schedule'
+    });
+  }
 }
 
 let studentSchedulePayload = null;
@@ -1141,29 +1150,63 @@ function renderStudentSchedule(payload) {
   }).join('') : '<p class="info-text">등록된 행사가 없습니다.</p>';
 }
 
-async function loadStudentSchedule() {
+async function loadStudentSchedule(options) {
+  const opts = options || {};
   const wrap = document.getElementById('studentScheduleList');
-  if (wrap) wrap.innerHTML = '<div class="loader"></div>';
+  if (studentSchedulePayload && studentSchedulePayload.success && !opts.forceReload) {
+    if (opts.renderResult !== false) renderStudentSchedule(studentSchedulePayload);
+    return studentSchedulePayload;
+  }
+  if (studentScheduleRequest) {
+    const pendingPayload = await studentScheduleRequest;
+    if (opts.renderResult !== false) renderStudentSchedule(pendingPayload);
+    return pendingPayload;
+  }
+  if (wrap && opts.showLoading !== false) wrap.innerHTML = '<div class="loader"></div>';
+  studentScheduleRequest = callStudentApi('studentSchedule', buildSeasonParams());
   try {
-    studentSchedulePayload = await callStudentApi('studentSchedule', buildSeasonParams());
-    renderStudentSchedule(studentSchedulePayload);
+    studentSchedulePayload = await studentScheduleRequest;
+    if (opts.renderResult !== false) renderStudentSchedule(studentSchedulePayload);
+    return studentSchedulePayload;
   } catch (error) {
     studentSchedulePayload = null;
-    renderStudentSchedule({ success: false, message: 'Apps Script 업데이트 후 행사 일정을 확인할 수 있습니다.' });
+    const failure = { success: false, message: 'Apps Script 업데이트 후 행사 일정을 확인할 수 있습니다.' };
+    if (opts.renderResult !== false) renderStudentSchedule(failure);
+    return failure;
+  } finally {
+    studentScheduleRequest = null;
   }
 }
 
-function openCompletionPolicyDialog() {
-  const dialog = document.getElementById('completionPolicyDialog');
+function renderCompletionPolicyDialogBody(payload) {
   const body = document.getElementById('completionPolicyDialogBody');
-  if (!dialog || !body) return;
-  const policy = studentSchedulePayload && studentSchedulePayload.completionPolicy;
+  if (!body) return;
+  const policy = payload && payload.success && payload.completionPolicy;
   body.innerHTML = policy
     ? `<p>최소 출석 ${Number(policy.requiredAttendanceCount || 0)}회, 지각 ${Number(policy.lateToAbsenceRatio || 1)}회는 결석 1회로 환산합니다.</p><p>첫 행사와 마지막 행사는 필수 참여 회차입니다. 유고는 별도 운영 기준에 따라 처리됩니다.</p>`
-    : '<p>현재 시즌의 정확한 수료 기준은 행사 일정을 불러온 뒤 확인할 수 있습니다. 첫 행사와 마지막 행사는 필수 참여 회차입니다.</p>';
+    : '<p>현재 시즌의 정확한 수료 기준을 불러오지 못했습니다. 첫 행사와 마지막 행사는 필수 참여 회차입니다.</p>';
+}
+
+async function openCompletionPolicyDialog(trigger) {
+  const dialog = document.getElementById('completionPolicyDialog');
+  const body = document.getElementById('completionPolicyDialogBody');
+  const closeButton = document.getElementById('completionPolicyDialogClose');
+  if (!dialog || !body || !closeButton) return;
+  completionPolicyDialogTrigger = trigger && typeof trigger.focus === 'function'
+    ? trigger
+    : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  completionPolicyDialogPreviousBodyOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+  body.innerHTML = '<p>현재 시즌 수료 조건을 불러오는 중입니다.</p>';
   dialog.removeAttribute('inert');
   dialog.setAttribute('aria-hidden', 'false');
   dialog.classList.add('is-open');
+  closeButton.focus();
+
+  const payload = await loadStudentSchedule({ renderResult: false, showLoading: false });
+  if (dialog.getAttribute('aria-hidden') === 'false') {
+    renderCompletionPolicyDialogBody(payload);
+  }
 }
 
 function closeCompletionPolicyDialog() {
@@ -1172,6 +1215,47 @@ function closeCompletionPolicyDialog() {
   dialog.classList.remove('is-open');
   dialog.setAttribute('aria-hidden', 'true');
   dialog.setAttribute('inert', '');
+  if (completionPolicyDialogPreviousBodyOverflow !== null) {
+    document.body.style.overflow = completionPolicyDialogPreviousBodyOverflow;
+    completionPolicyDialogPreviousBodyOverflow = null;
+  }
+  const trigger = completionPolicyDialogTrigger;
+  completionPolicyDialogTrigger = null;
+  if (trigger && trigger.isConnected && typeof trigger.focus === 'function') {
+    trigger.focus();
+  }
+}
+
+function handleCompletionPolicyDialogKeydown(event) {
+  const dialog = document.getElementById('completionPolicyDialog');
+  if (!dialog || dialog.getAttribute('aria-hidden') !== 'false') return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeCompletionPolicyDialog();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusable = Array.from(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]'))
+    .filter(element => !element.disabled && !element.hidden && element.getAttribute('tabindex') !== '-1');
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function initializeCompletionPolicyDialog() {
+  const dialog = document.getElementById('completionPolicyDialog');
+  if (!dialog) return;
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) closeCompletionPolicyDialog();
+  });
+  dialog.addEventListener('keydown', handleCompletionPolicyDialogKeydown);
 }
 
 function initializeStudentNavigation() {
@@ -2248,6 +2332,7 @@ async function initializeStudentPage() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   initializeStudentAttendanceDetailDialog();
+  initializeCompletionPolicyDialog();
   initializeStudentNavigation();
   const seasonResult = await ensureInitialSeasonAlias();
   updateSeasonInfoBadge();

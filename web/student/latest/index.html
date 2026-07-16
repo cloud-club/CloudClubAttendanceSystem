@@ -859,6 +859,53 @@
       font-weight: 500;
     }
 
+    #studentScheduleList .attendance-item {
+      gap: 16px;
+    }
+
+    #studentScheduleList {
+      max-height: none;
+      overflow-y: visible;
+    }
+
+    #studentScheduleList .attendance-date {
+      align-items: center;
+      display: flex;
+      flex: 1 1 auto;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      min-width: 0;
+    }
+
+    #studentScheduleList .attendance-date strong {
+      overflow-wrap: anywhere;
+    }
+
+    #studentScheduleList .attendance-date > span:last-child {
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    #studentScheduleList .attendance-status {
+      color: #cbd5e1;
+      flex: 0 1 44%;
+      gap: 12px;
+      justify-content: flex-end;
+      min-width: 0;
+    }
+
+    #studentScheduleList .attendance-status > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    #studentScheduleList .btn {
+      flex: 0 0 auto;
+      min-height: 44px;
+      white-space: nowrap;
+    }
+
     .attendance-status-group {
       align-items: center;
       display: flex;
@@ -1806,6 +1853,31 @@
         border-radius: 18px;
         padding: 16px;
       }
+
+      #studentScheduleList .attendance-item {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      #studentScheduleList .attendance-date > span:last-child {
+        flex-basis: 100%;
+      }
+
+      #studentScheduleList .attendance-status {
+        align-items: stretch;
+        flex: 1 1 auto;
+        flex-direction: column;
+        width: 100%;
+      }
+
+      #studentScheduleList .attendance-status > span {
+        text-align: left;
+      }
+
+      #studentScheduleList .btn {
+        justify-content: center;
+        width: 100%;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -1999,7 +2071,7 @@
           <i class="fas fa-graduation-cap card-icon"></i>
           <h2 class="card-title">수료 조건 확인</h2>
         </div>
-        <button type="button" class="btn btn-secondary" onclick="openCompletionPolicyDialog()">
+        <button type="button" class="btn btn-secondary" onclick="openCompletionPolicyDialog(this)">
           <i class="fas fa-circle-info"></i>
           <span>출석 조항 확인하기</span>
         </button>
@@ -2039,11 +2111,11 @@
     </div>
   </div>
 
-  <div id="completionPolicyDialog" class="student-attendance-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="completionPolicyDialogTitle" aria-hidden="true" inert>
+  <div id="completionPolicyDialog" class="student-attendance-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="completionPolicyDialogTitle" aria-describedby="completionPolicyDialogBody" aria-hidden="true" inert>
     <section class="student-attendance-detail-panel">
       <div class="student-attendance-detail-heading">
         <h2 id="completionPolicyDialogTitle">Cloud Club 수료 조건</h2>
-        <button type="button" class="student-attendance-detail-close" aria-label="수료 조건 닫기" onclick="closeCompletionPolicyDialog()"><i class="fas fa-xmark"></i></button>
+        <button type="button" id="completionPolicyDialogClose" class="student-attendance-detail-close" aria-label="수료 조건 닫기" onclick="closeCompletionPolicyDialog()"><i class="fas fa-xmark"></i></button>
       </div>
       <div id="completionPolicyDialogBody" class="student-attendance-detail-description">일정을 불러오면 현재 시즌 기준을 표시합니다.</div>
     </section>
@@ -2097,6 +2169,6 @@
   <script src="../../shared/config.js"></script>
   <script src="../../shared/api-jsonp.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="../student.js?v=20260716-ui7"></script>
+  <script src="../student.js?v=20260716-ui8"></script>
 </body>
 </html>

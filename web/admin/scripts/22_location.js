@@ -294,9 +294,11 @@ function onScheduleLocationRequiredChanged() {
   const input = document.getElementById('scheduleLocationRequiredInput');
   const fields = document.getElementById('scheduleLocationFields');
   const policyDetails = document.getElementById('scheduleLocationPolicyDetails');
+  const modalPanel = document.querySelector('#scheduleCalendarModal .schedule-calendar-location-modal');
   scheduleLocationEditorState.locationRequired = !!(input && input.checked);
   if (fields) fields.hidden = !scheduleLocationEditorState.locationRequired;
   if (policyDetails) policyDetails.hidden = !scheduleLocationEditorState.locationRequired;
+  if (modalPanel) modalPanel.classList.toggle('is-location-disabled', !scheduleLocationEditorState.locationRequired);
   if (scheduleLocationEditorState.locationRequired) {
     Promise.all([ensureSchedulePlaceSelector(), ensureSchedulePlaceMap()]).catch(() => {});
   } else {
@@ -335,6 +337,7 @@ function openScheduleLocationEditor(item) {
   const noteInput = document.getElementById('scheduleLocationNoteInput');
   const fields = document.getElementById('scheduleLocationFields');
   const policyDetails = document.getElementById('scheduleLocationPolicyDetails');
+  const modalPanel = document.querySelector('#scheduleCalendarModal .schedule-calendar-location-modal');
   scheduleModalPreviouslyFocusedElement = document.activeElement;
   scheduleModalFocusReturnDateKey = String(scheduleCalendarModalState && scheduleCalendarModalState.dateKey || '');
   resetSchedulePlaceSelector();
@@ -350,6 +353,7 @@ function openScheduleLocationEditor(item) {
   if (noteInput) noteInput.value = String(item && item.locationNote || '');
   if (fields) fields.hidden = !scheduleLocationEditorState.locationRequired;
   if (policyDetails) policyDetails.hidden = !scheduleLocationEditorState.locationRequired;
+  if (modalPanel) modalPanel.classList.toggle('is-location-disabled', !scheduleLocationEditorState.locationRequired);
   renderSchedulePlaceSelection();
   setSchedulePlaceStatus(
     scheduleLocationEditorState.policyValid ? '' : '저장된 장소 정책이 올바르지 않습니다. 장소를 다시 선택해 저장해 주세요.',

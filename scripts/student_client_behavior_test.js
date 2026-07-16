@@ -1635,6 +1635,24 @@ function testCompletionInvalidationWiringContract() {
   assert.match(initializationSource, /input[\s\S]*syncStudentPhoneInputs\(this\.value, this\)[\s\S]*invalidateStudentCompletionRequest\(\)/);
 }
 
+function testStudentScheduleAndPolicyDirectPathContract() {
+  const navigationSource = extractFunction('openTab');
+  const loadSource = extractFunction('loadStudentSchedule');
+  const policyDialogSource = extractFunction('openCompletionPolicyDialog');
+  const closeDialogSource = extractFunction('closeCompletionPolicyDialog');
+  const policyKeydownSource = extractFunction('handleCompletionPolicyDialogKeydown');
+
+  assert.match(studentSource, /studentSchedule\s*:\s*true/);
+  assert.match(navigationSource, /tabName\s*===\s*'schedule'\s*\|\|\s*tabName\s*===\s*'completion'/);
+  assert.match(loadSource, /studentScheduleRequest[\s\S]*callStudentApi\('studentSchedule'/);
+  assert.match(policyDialogSource, /await\s+loadStudentSchedule\(\{\s*renderResult:\s*false/);
+  assert.match(policyDialogSource, /document\.body\.style\.overflow\s*=\s*'hidden'/);
+  assert.match(closeDialogSource, /completionPolicyDialogTrigger[\s\S]*\.focus\(\)/);
+  assert.match(policyKeydownSource, /event\.key\s*===\s*'Escape'[\s\S]*event\.key\s*!==\s*'Tab'/);
+  assert.match(studentHtmlSource, /#studentScheduleList\s*\{[^}]*max-height\s*:\s*none[^}]*overflow-y\s*:\s*visible/s);
+  assert.match(studentHtmlSource, /id="completionPolicyDialog"[^>]*aria-describedby="completionPolicyDialogBody"/);
+}
+
 (async () => {
   await testAdminExcusePrefillUsesOnlySafePublicReason();
   console.log('PASS admin excused modal prefills only the safe public reason in source and rollback bundle');
@@ -1702,6 +1720,8 @@ function testCompletionInvalidationWiringContract() {
   console.log('PASS completion tab transitions invalidate pending response ownership');
   testCompletionInvalidationWiringContract();
   console.log('PASS completion input and tab paths explicitly invalidate request ownership');
+  testStudentScheduleAndPolicyDirectPathContract();
+  console.log('PASS schedule and completion tabs share one policy load path with modal focus safety');
   console.log('All student client behavior tests passed.');
 })().catch((error) => {
   console.error(error.stack || error.message || error);

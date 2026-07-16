@@ -8,7 +8,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const studentV63ApiVersion = '2026.07.14-v6.3';
 const studentV63ReasonCapability = 'studentAttendanceReasonV1';
 const studentV63ReasonRuntimeCheck = 'extractStudentDisplayReason';
-const studentV63CacheBust = '../student.js?v=20260716-ui7';
+const studentV63CacheBust = '../student.js?v=20260716-ui8';
 const studentStudyDisclaimer = '이 화면에는 스터디 출석이 반영되지 않습니다. 최종 수료 여부는 스터디 출석률에 따라 달라질 수 있습니다.';
 const studentV63ManualHeading = '학생 v6.3 수동 동기화 파일';
 const studentV63ManualFiles = [
@@ -23,7 +23,7 @@ const studentV63PostDeployChecks = [
   'apiInfo.capabilities.studentAttendanceReasonV1 = true',
   'apiInfo.runtimeChecks.extractStudentDisplayReason = true'
 ];
-const adminExcuseDisclosure = '입력한 사유는 학생 출석 현황에 공개됩니다. 최대 300자까지 입력할 수 있습니다.';
+const adminExcuseDisclosure = '입력한 사유는 관리자 운영 메모로만 저장합니다. <span class="excuse-disclosure-private-boundary">학생에게는 유고 상태만 표시합니다.</span> 최대 입력 길이는 300자입니다.';
 const studentV63CurrentPolicySnippets = [
   '현재 학생 기능 식별 계약은 2026.07.14-v6.3, studentAttendanceReasonV1=true, extractStudentDisplayReason=true입니다.',
   '기존 status와 insights를 유지하고 선택적 안전 필드 details[].displayReason만 additive로 추가합니다.',
@@ -672,7 +672,7 @@ function checkStudentV63PrivacyAndOperatorWarning() {
   [
     '시행일 2026-07-14',
     '요청한 전화번호의 본인 출석 현황',
-    '현재 출석 상태와 정확히 일치하는 공개 prefix',
+    '현재 출석·지각·결석 상태와 정확히 일치하는 공개 prefix',
     '최대 300자',
     '과거에 저장된 값과 앞으로 저장될 값',
     '원본 셀 Note',
@@ -691,9 +691,10 @@ function checkStudentV63PrivacyAndOperatorWarning() {
   assertRegex(
     adminHtml,
     new RegExp(`<p id="excuseModalDisclosureText" role="note">${escapeRegex(adminExcuseDisclosure)}<\\/p>`),
-    '관리자 유고 사유 공개 경고가 독립적인 role=note로 유지되지 않습니다.'
+    '관리자 유고 메모 비공개 안내가 독립적인 role=note로 유지되지 않습니다.'
   );
-  assertRegex(adminHtml, /학생 공개 유고 사유[\s\S]*?<textarea[^>]*maxlength="300"[^>]*aria-describedby="excuseModalTargetText excuseModalDisclosureText"/, '관리자 공개 사유 라벨, 300자 제한, 설명 연결이 누락되었습니다.');
+  assertRegex(adminHtml, /\.excuse-disclosure-private-boundary\s*\{[^}]*white-space\s*:\s*nowrap/s, '학생 유고 비공개 문장의 의미 단위 줄바꿈 보호가 누락되었습니다.');
+  assertRegex(adminHtml, /관리자 전용 유고 메모[\s\S]*?<textarea[^>]*maxlength="300"[^>]*aria-describedby="excuseModalTargetText excuseModalDisclosureText"/, '관리자 전용 유고 메모 라벨, 300자 제한, 설명 연결이 누락되었습니다.');
 
   const sourceFunction = extractNamedFunction(adminExcuseSource, 'openExcuseModal', '분할 관리자 소스');
   const rollbackFunction = extractNamedFunction(adminRollbackBundle, 'openExcuseModal', '관리자 롤백 bundle');
@@ -726,7 +727,7 @@ function checkStudentV63PrivacyAndOperatorWarning() {
 
 function checkStudentV63DesignAndUserDocs() {
   // Given the compact dashboard/detail design, when contributors read design, user, or QA guidance,
-  // then the exact three-tab, responsive, dialog, and study-disclaimer contracts must agree.
+  // then the exact four-tab, responsive, dialog, and study-disclaimer contracts must agree.
   const design = readFile('DESIGN.md');
   const userGuide = readFile('docs/Wiki/01_User_Side_Guide.md');
   const regressionGate = readFile('docs/Wiki/06_Doublecheck_Regression_Gate.md');
@@ -736,7 +737,7 @@ function checkStudentV63DesignAndUserDocs() {
     }
   });
   [
-    '출석하기 → 출석 현황 → 수료 조건 확인',
+    '출석하기 → 출석 현황 → 행사 일정 → 수료 조건 확인',
     '1200px',
     '769px',
     'role="dialog"',
@@ -744,7 +745,7 @@ function checkStudentV63DesignAndUserDocs() {
   ].forEach(snippet => {
     if (!design.includes(snippet)) throw new Error(`DESIGN의 학생 컴팩트 dashboard/detail 계약 누락: ${snippet}`);
   });
-  ['3개 탭', '사유가 있는 행만', 'Escape', '포커스'].forEach(snippet => {
+  ['4개 탭', '사유가 있는 행만', 'Escape', '포커스'].forEach(snippet => {
     if (!userGuide.includes(snippet)) throw new Error(`사용자 가이드의 학생 사유/접근성 설명 누락: ${snippet}`);
   });
 }
@@ -829,6 +830,12 @@ function checkStudentV63History() {
 function checkStudentFourTabNavigation() {
   const studentHtml = readFile('web/student/latest/index.html');
   const studentJs = readFile('web/student/student.js');
+
+  assertRegex(
+    studentHtml,
+    /#studentScheduleList \.attendance-status\s*\{[^}]*color\s*:\s*#cbd5e1/s,
+    '학생 일정 장소 문구의 본문 대비 색상이 누락되었습니다.'
+  );
 
   ['attend', 'status', 'schedule', 'completion'].forEach((tabName) => {
     assertRegex(
@@ -1185,18 +1192,18 @@ function checkStudentLayoutCharacterization(studentHtml = readFile('web/student/
   const desktopTabOrder = startTags
     .filter(tag => tag.tagName === 'button' && classTokens(tag.attributes).includes('tab-button'))
     .map(tag => tag.attributes['data-student-tab'])
-    .filter(tabName => ['attend', 'status', 'completion'].includes(tabName));
-  if (JSON.stringify(desktopTabOrder) !== JSON.stringify(['attend', 'status', 'completion'])) {
+    .filter(tabName => ['attend', 'status', 'schedule', 'completion'].includes(tabName));
+  if (JSON.stringify(desktopTabOrder) !== JSON.stringify(['attend', 'status', 'schedule', 'completion'])) {
     throw new Error(`학생 데스크톱 탭 순서가 변경되었습니다: ${desktopTabOrder.join(' -> ')}`);
   }
 
   const panelIds = startTags
     .filter(tag => tag.tagName === 'div'
-      && ['attend', 'status', 'completion'].includes(tag.attributes.id)
+      && ['attend', 'status', 'schedule', 'completion'].includes(tag.attributes.id)
       && classTokens(tag.attributes).includes('tab-panel')
       && tag.attributes.role === 'tabpanel')
     .map(tag => tag.attributes.id);
-  if (JSON.stringify(panelIds) !== JSON.stringify(['attend', 'status', 'completion'])) {
+  if (JSON.stringify(panelIds) !== JSON.stringify(['attend', 'status', 'schedule', 'completion'])) {
     throw new Error(`학생 tab-panel 계약이 변경되었습니다: ${panelIds.join(' -> ')}`);
   }
 

@@ -39,6 +39,7 @@ function extractFunctionSource(source, functionName) {
 const html = readSource('web/admin/index.html');
 const domRefsSource = readSource('web/admin/scripts/03_dom_refs.js');
 const attendanceSource = readSource('web/admin/scripts/20_attendance.js');
+const dashboardSource = readSource('web/admin/scripts/21_dashboard.js');
 const scheduleSource = readSource('web/admin/scripts/22_schedule.js');
 const locationSource = readSource('web/admin/scripts/22_location.js');
 const shellSource = readSource('web/admin/scripts/07_admin_shell.js', true);
@@ -237,6 +238,11 @@ test('일정 모달은 선택 행사명을 수정하고 저장 payload에 명시
   assert.match(openSource, /eventNameInput\.value\s*=\s*String\(item\s*&&\s*item\.eventName/);
   assert.match(payloadSource, /eventNameProvided\s*:\s*'1'/);
   assert.match(payloadSource, /eventName\s*:/);
+  assert.match(html, /\.schedule-location-fields\[hidden\],[\s\S]*\.schedule-location-policy-details\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important/s);
+  assert.match(html, /\.schedule-calendar-location-modal\.is-location-disabled\s+\.schedule-calendar-modal-body\s*\{[\s\S]*"details details"/s);
+  assert.match(locationSource, /modalPanel\.classList\.toggle\('is-location-disabled',\s*!scheduleLocationEditorState\.locationRequired\)/);
+  assert.match(html, /@media\s*\(max-width:\s*480px\)\s*\{[\s\S]*\.schedule-calendar-grid\s*\{[^}]*overflow-x\s*:\s*auto/s);
+  assert.match(html, /\.schedule-calendar-weekdays,[\s\S]*\.schedule-calendar-days\s*\{[^}]*min-width\s*:\s*700px/s);
 });
 
 test('출석 보조 조회와 일정 관리 안내가 컴팩트 UI 계약을 유지한다', () => {
@@ -261,4 +267,22 @@ test('출석 보조 조회와 일정 관리 안내가 컴팩트 UI 계약을 유
   assert.match(scheduleSource, /function\s+formatScheduleListDateTime\s*\(/);
   assert.match(scheduleSource, /GPS 500m/);
   assert.match(scheduleSource, /직접 종료/);
+});
+
+test('공용 출석일 확인 모달은 긴 시즌에서도 화면 안에서 탐색 가능하다', () => {
+  const modalTag = getOpeningTags(html, 'div').find((tag) => getAttribute(tag, 'id') === 'dashboardMemberHistoryModal') || '';
+  const showSource = extractFunctionSource(dashboardSource, 'showAttendanceDashboardMemberHistoryModal');
+  const closeSource = extractFunctionSource(dashboardSource, 'closeAttendanceDashboardMemberHistoryModal');
+  const keydownSource = extractFunctionSource(dashboardSource, 'handleAttendanceDashboardMemberHistoryModalKeydown');
+
+  assert.equal(getAttribute(modalTag, 'role'), 'dialog');
+  assert.equal(getAttribute(modalTag, 'aria-modal'), 'true');
+  assert.equal(getAttribute(modalTag, 'aria-labelledby'), 'dashboardMemberHistoryModalTitle');
+  assert.equal(getAttribute(modalTag, 'aria-describedby'), 'dashboardMemberHistoryModalSummary');
+  assert.match(html, /\.dashboard-member-history-modal\s*\{[^}]*grid-template-rows\s*:\s*auto auto minmax\(0, 1fr\) auto[^}]*max-height\s*:\s*calc\(100dvh - 32px\)[^}]*overflow\s*:\s*hidden/s);
+  assert.match(html, /\.dashboard-member-history-modal \.dashboard-table-wrap\s*\{[^}]*overflow\s*:\s*auto/s);
+  assert.match(showSource, /document\.body\.style\.overflow\s*=\s*'hidden'[\s\S]*closeButton\.focus\(\)/);
+  assert.match(closeSource, /attendanceDashboardMemberHistoryReturnFocus[\s\S]*\.focus\(\)/);
+  assert.match(keydownSource, /event\.key\s*===\s*'Escape'[\s\S]*event\.key\s*!==\s*'Tab'/);
+  assert.doesNotMatch(html, /TODO\(member_role\)/);
 });

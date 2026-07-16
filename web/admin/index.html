@@ -1336,6 +1336,15 @@
       font-weight: 700;
     }
 
+    .schedule-calendar-item-name {
+      color: #f8fafc;
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.35;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
     .schedule-calendar-item-status {
       display: inline-flex;
       align-self: flex-start;
@@ -1431,6 +1440,27 @@
     .schedule-location-policy-details {
       display: grid;
       gap: 8px;
+    }
+
+    .schedule-location-fields[hidden],
+    .schedule-location-policy-details[hidden] {
+      display: none !important;
+    }
+
+    @media (min-width: 901px) {
+      .modal-panel.schedule-calendar-location-modal.is-location-disabled .schedule-calendar-modal-body {
+        grid-template-areas:
+          "timing location"
+          "details details";
+        grid-template-rows: auto auto;
+        align-content: start;
+      }
+
+      .modal-panel.schedule-calendar-location-modal.is-location-disabled .schedule-location-panel {
+        grid-template-rows: auto;
+        align-content: start;
+        align-self: start;
+      }
     }
 
     .schedule-location-toggle {
@@ -2338,6 +2368,15 @@
       font-size: 13px;
     }
 
+    #excuseModalDisclosureText {
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    .excuse-disclosure-private-boundary {
+      white-space: nowrap;
+    }
+
     .modal-panel textarea {
       width: 100%;
       min-height: 120px;
@@ -3031,7 +3070,16 @@
     }
 
     .dashboard-member-history-modal {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      max-height: calc(100dvh - 32px);
       max-width: 760px;
+      overflow: hidden;
+    }
+
+    .dashboard-member-history-modal .dashboard-table-wrap {
+      min-height: 0;
+      overflow: auto;
     }
 
     .dashboard-member-history-summary {
@@ -3681,6 +3729,29 @@
       .manual-member-actions {
         grid-column: 2;
         align-items: flex-start;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .schedule-calendar-grid {
+        overflow-x: auto;
+        padding-bottom: 8px;
+        overscroll-behavior-inline: contain;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+      }
+
+      .schedule-calendar-weekdays,
+      .schedule-calendar-days {
+        min-width: 700px;
+      }
+
+      .schedule-calendar-day {
+        min-height: 104px;
+      }
+
+      .schedule-calendar-day-head {
+        gap: 4px;
       }
     }
 
@@ -4993,7 +5064,7 @@
           <h2 class="card-title">출석 현황 대시보드</h2>
           <i class="fas fa-chevron-down dashboard-collapsible-chevron" aria-hidden="true"></i>
         </summary>
-        <p class="info-text">필터 기준이 KPI/차트/드릴다운/순위에 함께 반영됩니다. 회원 직군(현직자/학생)은 데이터 준비 후 확장 예정입니다. <code>TODO(member_role)</code></p>
+        <p class="info-text">필터 기준이 KPI/차트/드릴다운/순위에 함께 반영됩니다. 회원 직군(현직자/학생) 필터는 데이터 준비 후 확장 예정입니다.</p>
 
         <div class="dashboard-toolbar">
           <div class="dashboard-preset-row">
@@ -5780,8 +5851,8 @@
     <div class="modal-panel">
       <h3>유고 사유 입력</h3>
       <p id="excuseModalTargetText">선택한 회원과 회차를 확인해 주세요.</p>
-      <p id="excuseModalDisclosureText" role="note">입력한 사유는 학생 출석 현황에 공개됩니다. 최대 300자까지 입력할 수 있습니다.</p>
-      <label for="excuseCommentInput">학생 공개 유고 사유</label>
+      <p id="excuseModalDisclosureText" role="note">입력한 사유는 관리자 운영 메모로만 저장합니다. <span class="excuse-disclosure-private-boundary">학생에게는 유고 상태만 표시합니다.</span> 최대 입력 길이는 300자입니다.</p>
+      <label for="excuseCommentInput">관리자 전용 유고 메모</label>
       <textarea id="excuseCommentInput" maxlength="300" aria-describedby="excuseModalTargetText excuseModalDisclosureText" placeholder="예: 공결(학과 행사 참여)"></textarea>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeExcuseModal()">취소</button>
@@ -5903,7 +5974,7 @@
 
   <div id="excusedMatrixNotePreview" class="excused-matrix-note-preview" role="tooltip" hidden></div>
 
-  <div id="dashboardMemberHistoryModal" class="modal-backdrop">
+  <div id="dashboardMemberHistoryModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="dashboardMemberHistoryModalTitle" aria-describedby="dashboardMemberHistoryModalSummary" onkeydown="handleAttendanceDashboardMemberHistoryModalKeydown(event)" onclick="if (event.target === this) closeAttendanceDashboardMemberHistoryModal()">
     <div class="modal-panel dashboard-member-history-modal">
       <h3 id="dashboardMemberHistoryModalTitle">출석일 확인</h3>
       <p id="dashboardMemberHistoryModalSummary">전체 시즌 회차를 표시합니다.</p>
@@ -5911,7 +5982,7 @@
         <p class="info-text">표시할 출석 기록이 없습니다.</p>
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeAttendanceDashboardMemberHistoryModal()">닫기</button>
+        <button type="button" id="dashboardMemberHistoryModalClose" class="btn btn-secondary" onclick="closeAttendanceDashboardMemberHistoryModal()">닫기</button>
       </div>
     </div>
   </div>

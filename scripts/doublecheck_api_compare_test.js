@@ -290,7 +290,7 @@ try {
   assert.match(entryApiSource, /extractStudentDisplayReason: typeof extractStudentDisplayReason === 'function'/);
   assert.match(entryApiSource, /studentAttendanceReasonV1: true/);
   assert.match(adminSource, /id="excuseCommentInput"[^>]*maxlength="300"/);
-  assert.match(adminSource, /학생 출석 현황에 공개됩니다/);
+  assert.match(adminSource, /관리자 운영 메모로만 저장합니다\.[\s\S]*학생에게는 유고 상태만 표시합니다/);
 
   console.log('PASS status optional displayReason and v6.3 deployment-integrity compare contracts');
 } finally {

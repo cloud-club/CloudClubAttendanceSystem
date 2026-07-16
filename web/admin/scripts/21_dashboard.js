@@ -2342,12 +2342,59 @@ function isAttendanceDashboardMemberHistoryRequestActive(memberKey) {
   );
 }
 
+function showAttendanceDashboardMemberHistoryModal() {
+  const modal = document.getElementById('dashboardMemberHistoryModal');
+  const closeButton = document.getElementById('dashboardMemberHistoryModalClose');
+  if (!modal) return;
+  if (modal.style.display !== 'flex') {
+    attendanceDashboardMemberHistoryReturnFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    attendanceDashboardMemberHistoryPreviousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  modal.style.display = 'flex';
+  if (closeButton) setTimeout(() => closeButton.focus(), 0);
+}
+
 function closeAttendanceDashboardMemberHistoryModal() {
   const modal = document.getElementById('dashboardMemberHistoryModal');
   if (modal) {
     modal.style.display = 'none';
   }
   attendanceDashboardMemberHistoryModalState = null;
+  if (attendanceDashboardMemberHistoryPreviousBodyOverflow !== null) {
+    document.body.style.overflow = attendanceDashboardMemberHistoryPreviousBodyOverflow;
+    attendanceDashboardMemberHistoryPreviousBodyOverflow = null;
+  }
+  const returnFocus = attendanceDashboardMemberHistoryReturnFocus;
+  attendanceDashboardMemberHistoryReturnFocus = null;
+  if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+    returnFocus.focus();
+  }
+}
+
+function handleAttendanceDashboardMemberHistoryModalKeydown(event) {
+  const modal = document.getElementById('dashboardMemberHistoryModal');
+  if (!modal || modal.style.display !== 'flex') return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeAttendanceDashboardMemberHistoryModal();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusable = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]'))
+    .filter(element => !element.disabled && !element.hidden && element.getAttribute('tabindex') !== '-1');
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
@@ -2364,7 +2411,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
   if (!payload || !payload.success) {
     summary.textContent = payload && payload.message ? payload.message : '출석 기록을 불러오지 못했습니다.';
     body.innerHTML = '<p class="info-text">표시할 출석 기록이 없습니다.</p>';
-    modal.style.display = 'flex';
+    showAttendanceDashboardMemberHistoryModal();
     return;
   }
 
@@ -2374,7 +2421,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
 
   if (rows.length === 0) {
     body.innerHTML = '<p class="info-text">현재 필터에 포함된 회차 데이터가 없습니다.</p>';
-    modal.style.display = 'flex';
+    showAttendanceDashboardMemberHistoryModal();
     return;
   }
 
@@ -2411,7 +2458,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
-  modal.style.display = 'flex';
+  showAttendanceDashboardMemberHistoryModal();
 }
 
 async function openAdminAttendanceHistory(encodedMemberKey, encodedName, encodedSeasonLabel) {
@@ -2433,7 +2480,7 @@ async function openAdminAttendanceHistory(encodedMemberKey, encodedName, encoded
   title.textContent = `출석일 확인: ${(memberInfo.seasonLabel || '-')} ${(memberInfo.name || memberKey)}`.trim();
   summary.textContent = '전체 시즌 출석 기록을 불러오는 중입니다.';
   body.innerHTML = '<p class="info-text">출석 기록을 불러오는 중입니다...</p>';
-  modal.style.display = 'flex';
+  showAttendanceDashboardMemberHistoryModal();
 
   const cacheKey = buildAttendanceDashboardMemberHistoryCacheKey(memberKey);
   const cached = attendanceDashboardMemberHistoryCache[cacheKey];
