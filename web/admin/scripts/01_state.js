@@ -35,6 +35,7 @@ let scheduleCalendarModalState = null;
 let excusedSearchKeyword = '';
 let excusedAbsentOnly = false;
 let graduationMatrixRenderToken = 0;
+let excusedMatrixNotePreviewByKey = {};
 let variableApiInfo = null;
 let variableTabBlocked = false;
 let variableAutoNormalizedOnce = false;

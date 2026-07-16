@@ -1036,6 +1036,7 @@ function getGraduationReport(seasonName) {
         const isRequired = requiredCheckBySession(requiredPositions, sessions, session.sessionKey);
         return {
           sessionKey: session.sessionKey,
+          eventName: session.eventName || '',
           date: formatDateTimeMinute(session.startTime),
           isRequired: isRequired,
           openTime: session.openTime.getTime(),

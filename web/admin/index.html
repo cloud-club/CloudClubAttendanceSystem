@@ -638,6 +638,31 @@
       padding-top: 16px;
       border-top: 1px solid rgba(148, 163, 184, 0.2);
     }
+
+    .matrix-session-event-name {
+      display: block;
+      margin-top: 4px;
+      color: #bfdbfe;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: normal;
+    }
+
+    .excused-matrix-note-preview {
+      position: fixed;
+      z-index: 1200;
+      width: min(280px, calc(100vw - 24px));
+      padding: 12px;
+      border: 1px solid rgba(96, 165, 250, 0.42);
+      border-radius: 12px;
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.96);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+      pointer-events: none;
+    }
+
+    .excused-matrix-note-preview span { display: block; margin-top: 4px; color: #93c5fd; }
+    .excused-matrix-note-preview p { margin: 8px 0 0; white-space: pre-wrap; }
     
     /* Status Messages */
     #result, #statusResult {
@@ -5875,6 +5900,8 @@
       </div>
     </div>
   </div>
+
+  <div id="excusedMatrixNotePreview" class="excused-matrix-note-preview" role="tooltip" hidden></div>
 
   <div id="dashboardMemberHistoryModal" class="modal-backdrop">
     <div class="modal-panel dashboard-member-history-modal">

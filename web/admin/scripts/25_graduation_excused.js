@@ -291,6 +291,30 @@ function syncExcusedFilterUi() {
   }
 }
 
+function prepareExcusedMatrixNotePreviews(members, sessions) {
+  const previews = {};
+
+  (members || []).forEach(member => {
+    const detailMap = {};
+    (member.details || []).forEach(detail => {
+      detailMap[detail.sessionKey] = detail;
+    });
+
+    (sessions || []).forEach(session => {
+      const detail = detailMap[session.sessionKey] || { status: 'future', note: '' };
+      const previewKey = encodeURIComponent(`${member.phone || ''}::${session.sessionKey || ''}`);
+      previews[previewKey] = {
+        eventName: session.eventName || '',
+        sessionKey: session.sessionKey,
+        status: detail.status || 'future',
+        note: detail.note || ''
+      };
+    });
+  });
+
+  excusedMatrixNotePreviewByKey = previews;
+}
+
 function buildGraduationMatrixRowHtml(member, sessions) {
   const detailMap = {};
   (member.details || []).forEach(detail => {
@@ -302,6 +326,7 @@ function buildGraduationMatrixRowHtml(member, sessions) {
     const status = detail.status || 'future';
     const label = getMatrixCellLabel(status);
     const disabled = status === 'future' ? 'disabled' : '';
+    const previewKey = encodeURIComponent(`${member.phone || ''}::${session.sessionKey || ''}`);
 
     return `
       <td>
@@ -314,7 +339,11 @@ function buildGraduationMatrixRowHtml(member, sessions) {
           data-session-date="${escapeHtml(session.date)}"
           data-status="${escapeHtml(status)}"
           data-public-reason="${escapeHtml(detail.displayReason || '')}"
+          data-preview-key="${previewKey}"
           onclick="onMatrixCellClick(event)"
+          onmouseenter="showExcusedMatrixNotePreview(event)"
+          onmousemove="moveExcusedMatrixNotePreview(event)"
+          onmouseleave="hideExcusedMatrixNotePreview()"
           ${disabled}
         >${label}</button>
       </td>
@@ -344,6 +373,7 @@ function renderGraduationMatrix(report) {
   const sessions = report.sessions || [];
   const allMembers = getSortedGraduationMembers(report);
   const members = getFilteredExcusedMembers(report);
+  prepareExcusedMatrixNotePreviews(members, sessions);
 
   syncExcusedFilterUi();
   if (meta) {
@@ -357,7 +387,7 @@ function renderGraduationMatrix(report) {
 
   const headCells = sessions.map(session => {
     const requiredMark = session.isRequired ? ' *' : '';
-    return `<th>${escapeHtml(session.sessionKey)}${requiredMark}</th>`;
+    return `<th>${escapeHtml(session.sessionKey)}${requiredMark}${session.eventName ? `<span class="matrix-session-event-name">${escapeHtml(session.eventName)}</span>` : ''}</th>`;
   }).join('');
   const useStickyColumn = members.length <= MATRIX_STICKY_ROW_LIMIT;
   const tableClass = useStickyColumn ? 'matrix-table' : 'matrix-table matrix-no-sticky';
@@ -404,6 +434,29 @@ const scheduleExcusedMatrixRender = debounce(() => {
     renderGraduationMatrix(graduationReportCache);
   }
 }, 250);
+
+function showExcusedMatrixNotePreview(event) {
+  const card = document.getElementById('excusedMatrixNotePreview');
+  const target = event && event.currentTarget;
+  if (!card || !target) return;
+  const preview = excusedMatrixNotePreviewByKey[String(target.dataset.previewKey || '')];
+  if (!preview) return;
+  card.innerHTML = `<strong>${escapeHtml(preview.eventName || preview.sessionKey || '회차')}</strong><span>${escapeHtml(getMatrixCellLabel(preview.status))}</span><p>${escapeHtml(preview.note || '기록된 메모가 없습니다.')}</p>`;
+  card.hidden = false;
+  moveExcusedMatrixNotePreview(event);
+}
+
+function moveExcusedMatrixNotePreview(event) {
+  const card = document.getElementById('excusedMatrixNotePreview');
+  if (!card || card.hidden || !event) return;
+  card.style.left = `${Math.max(12, Math.min(window.innerWidth - 296, event.clientX + 14))}px`;
+  card.style.top = `${Math.max(12, Math.min(window.innerHeight - 180, event.clientY + 14))}px`;
+}
+
+function hideExcusedMatrixNotePreview() {
+  const card = document.getElementById('excusedMatrixNotePreview');
+  if (card) card.hidden = true;
+}
 
 async function loadGraduationReport(options) {
   const opts = options || {};

@@ -17,6 +17,10 @@
 - `행사명과 함께 보기`는 기본 꺼짐입니다. 켜면 행사별 출석률, 상태 분포, 평균 출석 시간 추이의 축에 `회차 · 행사명`을 표시합니다.
 - 전화번호 조회 결과는 출석 현황 조회 카드 안에서 컴팩트하게 확장됩니다.
 
+## 유고 처리 매트릭스 미리보기
+
+매트릭스 회차 헤더는 회차 키 아래 행사명을 함께 표시합니다. 출석·지각·결석·유고 셀에 마우스를 올리면 상태와 해당 시트 Note가 작은 카드로 나타납니다. 클릭은 기존 유고 처리 모달을 여는 동작을 그대로 유지합니다.
+
 > 문서 링크: [docs/Wiki/02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)
 
 ## 빠른 흐름도
