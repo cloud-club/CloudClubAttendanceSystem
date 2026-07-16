@@ -602,7 +602,7 @@ function runStatusReasonFixture(noteText, lateDeadline, options) {
   };
 }
 
-test('Given a target member public reason, status reads one bounded note row and adds only displayReason', () => {
+test('Given an excused member note, public status omits the reason at the API boundary', () => {
   // Given / When
   const historicalFixture = runStatusReasonFixture('유고 사유: 공결');
   const futureFixture = runStatusReasonFixture('유고 사유: 사전 공결', new Date('2099-01-01T10:20:00Z'));
@@ -610,9 +610,9 @@ test('Given a target member public reason, status reads one bounded note row and
   // Then
   assert.strictEqual(historicalFixture.notesSpy.reads, 1);
   assert.deepStrictEqual(historicalFixture.notesSpy.range, [2, 3, 1, 1]);
-  assert.strictEqual(historicalFixture.result.data.details[0].displayReason, '공결');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(historicalFixture.result.data.details[0], 'displayReason'), false);
   assert.strictEqual(futureFixture.notesSpy.reads, 1);
-  assert.strictEqual(futureFixture.result.data.details[0].displayReason, '사전 공결');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(futureFixture.result.data.details[0], 'displayReason'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(historicalFixture.result.data.details[0], 'note'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(historicalFixture.result.data.details[0], 'rawNote'), false);
 });
@@ -649,7 +649,7 @@ test('Given sparse session columns, status reads their bounded span once and map
   assert.deepStrictEqual(fixture.notesSpy.range, [2, 3, 1, 3]);
   assert.deepStrictEqual(
     Array.from(fixture.result.data.details, detail => detail.displayReason),
-    ['첫 사유', '둘째 사유']
+    [undefined, undefined]
   );
 });
 

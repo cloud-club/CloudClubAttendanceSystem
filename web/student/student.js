@@ -1632,7 +1632,7 @@ function getStudentAttendanceStatusMeta(type) {
 
 function sanitizeStudentAttendanceDetails(details) {
   const allowedTypes = ['future', 'on_time', 'late', 'excused', 'absent'];
-  const reasonAllowedTypes = ['on_time', 'late', 'excused', 'absent'];
+  const reasonAllowedTypes = ['on_time', 'late', 'absent'];
   const list = Array.isArray(details) ? details : [];
 
   return list.map(detail => {
@@ -1953,10 +1953,10 @@ function handleStatusResponse(response) {
                 <span class="metric-value">${counts.future}회</span>
               </div>
             </div>
-            <details class="status-details">
-              <summary>회차별 출석 상세</summary>
+            <section class="status-details" aria-labelledby="studentStatusDetailHeading">
+              <h3 id="studentStatusDetailHeading">회차별 출석 상세</h3>
               <div class="attendance-details">${renderAttendanceDetails(details)}</div>
-            </details>
+            </section>
           </section>
         </div>
       </div>

@@ -863,10 +863,12 @@ function getAttendanceStatusFromSheet(phoneNumber, sheet, seasonAlias) {
       attendTime: attended ? (cellValue ? String(cellValue) : null) : null,
       isPast: isPast
     };
-    const displayReason = extractStudentDisplayReason(
-      targetMemberNotes[session.colIndex - targetMemberNoteStartColIndex],
-      status
-    );
+    const displayReason = status === 'excused'
+      ? ''
+      : extractStudentDisplayReason(
+        targetMemberNotes[session.colIndex - targetMemberNoteStartColIndex],
+        status
+      );
     if (displayReason) {
       detail.displayReason = displayReason;
     }

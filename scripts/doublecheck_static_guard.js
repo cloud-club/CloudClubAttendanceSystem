@@ -28,7 +28,7 @@ const studentV63CurrentPolicySnippets = [
   '현재 학생 기능 식별 계약은 2026.07.14-v6.3, studentAttendanceReasonV1=true, extractStudentDisplayReason=true입니다.',
   '기존 status와 insights를 유지하고 선택적 안전 필드 details[].displayReason만 additive로 추가합니다.',
   'Pages-first 배포에서도 구버전 Apps Script의 기존 기능은 유지되고, 사유가 없거나 legacy인 행은 비대화형으로 남습니다.',
-  '공개 사유는 Note의 선두 공개 영역에서만 읽으며, 첫 번째 비어 있지 않은 비일치·내부 줄을 만나면 중단하므로 뒤의 일치 prefix는 공개하지 않습니다.',
+  '공개 사유는 출석·지각·결석 Note의 선두 공개 영역에서만 읽으며, 유고는 사유를 공개하지 않습니다. 첫 번째 비어 있지 않은 비일치·내부 줄을 만나면 중단하므로 뒤의 일치 prefix는 공개하지 않습니다.',
   'Apps Script 배포는 운영자만 수행하며, 레포는 현재 외부 콘솔 상태를 단정하지 않습니다.',
   '문제가 생기면 Pages는 직전 artifact로, Apps Script는 운영자가 직전 정상 배포 버전으로 롤백합니다.'
 ];
@@ -948,7 +948,7 @@ function checkStudentStatusFirstViewportComposition() {
 
   assertRegex(
     studentJs,
-    /class="status-dashboard-layout"[\s\S]*?class="status-dashboard-group status-comparison-group"[\s\S]*?renderStatusComparison\(comparison, displayRate\)[\s\S]*?class="status-dashboard-group status-count-group"[\s\S]*?class="metric-grid count-grid status-count-grid"[\s\S]*?<details class="status-details">/,
+    /class="status-dashboard-layout"[\s\S]*?class="status-dashboard-group status-comparison-group"[\s\S]*?renderStatusComparison\(comparison, displayRate\)[\s\S]*?class="status-dashboard-group status-count-group"[\s\S]*?class="metric-grid count-grid status-count-grid"[\s\S]*?<section class="status-details"/,
     '학생 현황의 비교·횟수 그룹 병렬 composition이 누락되었습니다.'
   );
 

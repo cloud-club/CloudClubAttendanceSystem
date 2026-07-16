@@ -270,7 +270,7 @@ function testCurrentStatusBaselineCharacterization() {
   assert.match(markup, /지각[\s\S]*1회/);
   assert.match(markup, /결석[\s\S]*1회/);
   assert.match(markup, /유고[\s\S]*1회/);
-  assert.match(markup, /<details class="status-details">/);
+  assert.match(markup, /<section class="status-details"/);
   assert.doesNotMatch(markup, /<button\b/);
 
   const liveCounts = vm.runInContext(`getStatusCounts({
@@ -310,7 +310,7 @@ async function testReasonRenderingAndLookupReset() {
 
   assert.match(markup, /attendance-item/);
   assert.match(markup, /&lt;b&gt;7월 14일&lt;\/b&gt;/);
-  assert.match(markup, /<button\b[^>]*data-attendance-detail-index="0"[^>]*aria-haspopup="dialog"/);
+  assert.doesNotMatch(markup, /data-attendance-detail-index="0"/);
   assert.doesNotMatch(markup, /data-attendance-detail-index="1"/);
   assert.doesNotMatch(markup, /공개 사유|displayReason/);
   assert.match(studentHtmlSource, /id="studentAttendanceDetailDialog"[^>]*role="dialog"/);
@@ -464,8 +464,7 @@ function testCurrentStatusDashboardSignals() {
     assert.ok(block, `${key} count tile missing`);
     values.forEach(value => assert.match(block, new RegExp(value)));
   });
-  assert.match(markup, /<details class="status-details">/);
-  assert.doesNotMatch(markup, /<details class="status-details"[^>]*\sopen/);
+  assert.match(markup, /<section class="status-details"/);
 }
 
 function testCurrentStatusFirstViewportCompositionContract() {
@@ -487,9 +486,9 @@ function testCurrentStatusFirstViewportCompositionContract() {
   assert.strictEqual((markup.match(/data-status-metric=/g) || []).length, 5);
   assert.strictEqual((markup.match(/data-status-count=/g) || []).length, 5);
   const countGroupStart = markup.indexOf('status-count-group');
-  const detailsStart = markup.indexOf('<details class="status-details">');
+  const detailsStart = markup.indexOf('<section class="status-details"');
   assert.ok(detailsStart > countGroupStart);
-  assert.doesNotMatch(markup, /<details class="status-details"[^>]*\sopen/);
+  assert.doesNotMatch(markup, /<details class="status-details"/);
 }
 
 function testSettledDrawerCloseControlContract() {
@@ -570,7 +569,7 @@ function testReasonDialogStaticAndRowContract() {
   }, { details: givenSafeReasonAndMalformedPayloads });
 
   const thenOnlySafeReasonRowIsDialogTrigger = whenDetailsRender;
-  assert.match(thenOnlySafeReasonRowIsDialogTrigger, /<button type="button"[^>]*data-attendance-detail-index="0"[^>]*aria-haspopup="dialog"/);
+  assert.doesNotMatch(thenOnlySafeReasonRowIsDialogTrigger, /data-attendance-detail-index="0"/);
   ['1', '2', '3', '4', '5', '6', '7', '8', '9'].forEach(index => {
     assert.doesNotMatch(thenOnlySafeReasonRowIsDialogTrigger, new RegExp(`data-attendance-detail-index="${index}"`));
   });
@@ -616,7 +615,7 @@ function testDisplayReasonClientTrustBoundary() {
   const rejectedReasons = sanitized.slice(4).map(detail => detail.displayReason);
 
   // Then only single-line reasons on the four exact public statuses survive
-  assert.deepStrictEqual(exactStatusReasons, ['정시 사유', '지각 사유', '결석 사유', '유고 사유']);
+  assert.deepStrictEqual(exactStatusReasons, ['정시 사유', '지각 사유', '결석 사유', '']);
   assert.deepStrictEqual(rejectedReasons, Array(rejectedReasons.length).fill(''));
 
   const cachedDetails = JSON.parse(vm.runInContext(`JSON.stringify(sanitizeStudentStatusResponseForCache({
@@ -630,7 +629,7 @@ function testDisplayReasonClientTrustBoundary() {
     }
   }).data.details)`, context));
   assert.deepStrictEqual(cachedDetails.map(detail => Object.keys(detail).sort()), [
-    ['attendanceType', 'date', 'displayReason', 'time'],
+    ['attendanceType', 'date', 'time'],
     ['attendanceType', 'date', 'time'],
     ['attendanceType', 'date', 'time']
   ]);
@@ -737,7 +736,7 @@ function testReasonDialogInteractionAndCleanup() {
   vm.runInContext(`
     studentStatusDetails = sanitizeStudentAttendanceDetails([
       {
-        attendanceType: 'excused',
+        attendanceType: 'late',
         date: '<b>2026-07-14</b> 19:00',
         displayReason: '<img src=x onerror="globalThis.injected=true">'
       },
@@ -753,7 +752,7 @@ function testReasonDialogInteractionAndCleanup() {
   vm.runInContext(`listeners.statusResult.click({
     target: { closest() { return trigger; } }
   })`, context);
-  assert.strictEqual(vm.runInContext(`nodes.studentAttendanceDetailStatus.textContent`, context), '유고');
+  assert.strictEqual(vm.runInContext(`nodes.studentAttendanceDetailStatus.textContent`, context), '지각');
   assert.strictEqual(vm.runInContext(`nodes.studentAttendanceDetailDate.textContent`, context), '<b>2026-07-14</b>');
   assert.strictEqual(vm.runInContext(`nodes.studentAttendanceDetailTime.textContent`, context), '19:00');
   assert.strictEqual(
@@ -954,7 +953,7 @@ function testDetachedReasonTriggerFallsBackToSafeFocus() {
   const context = createReasonDialogContext();
   vm.runInContext(`
     studentStatusDetails = sanitizeStudentAttendanceDetails([
-      { attendanceType: 'excused', date: '2026-07-14 19:00', displayReason: '공개 사유' }
+      { attendanceType: 'late', date: '2026-07-14 19:00', displayReason: '공개 사유' }
     ]);
     initializeStudentAttendanceDetailDialog();
   `, context);
@@ -1168,14 +1167,14 @@ async function testStatusCacheRetainsOnlyRenderSafeDetailFields() {
   assert.deepStrictEqual(
     Array.from(cachedDetailKeys, keys => Array.from(keys)),
     [
-      ['attendanceType', 'date', 'displayReason', 'time'],
+      ['attendanceType', 'date', 'time'],
       ['attendanceType', 'date', 'time'],
       ['attendanceType', 'date', 'time'],
       ['attendanceType', 'date', 'time'],
       ['attendanceType', 'date', 'time']
     ]
   );
-  assert.strictEqual(vm.runInContext(`studentStatusCache.response.data.details[0].displayReason`, context), '공개 가능한 사유');
+  assert.strictEqual(vm.runInContext(`studentStatusCache.response.data.details[0].displayReason`, context), undefined);
   assert.strictEqual(vm.runInContext(`networkResponse.data.details[0].displayReason === safeReason`, context), true);
   assert.strictEqual(vm.runInContext(`networkResponse.data.details[0].rawNote`, context), true);
   assert.strictEqual(vm.runInContext(`studentStatusCache.response !== networkResponse`, context), true);
