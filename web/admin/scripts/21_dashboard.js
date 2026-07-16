@@ -2242,10 +2242,6 @@ function renderAttendanceDashboardDrilldown(payload) {
 function buildAttendanceDashboardMemberHistoryCacheKey(memberKey) {
   return [
     getSelectedSeasonAlias() || '-',
-    attendanceDashboardState.group || 'all',
-    attendanceDashboardState.dateFrom || '-',
-    attendanceDashboardState.dateTo || '-',
-    (attendanceDashboardState.sessionKeys || []).slice().sort().join('|') || '-',
     String(memberKey || '').trim()
   ].join('::');
 }
@@ -2358,7 +2354,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
 
   const stat = payload.summary || {};
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
-  summary.textContent = `현재 대시보드 필터 기준 회차 / 출석 ${stat.attendedCount || 0}회 / 지각 ${stat.lateCount || 0}회 / 결석 ${stat.absentCount || 0}회 / 유고 ${stat.excusedCount || 0}회 / 미확정 ${stat.pendingCount || 0}회`;
+  summary.textContent = `전체 시즌 기준 / 출석 ${stat.attendedCount || 0}회 / 지각 ${stat.lateCount || 0}회 / 결석 ${stat.absentCount || 0}회 / 유고 ${stat.excusedCount || 0}회 / 미확정 ${stat.pendingCount || 0}회`;
 
   if (rows.length === 0) {
     body.innerHTML = '<p class="info-text">현재 필터에 포함된 회차 데이터가 없습니다.</p>';
@@ -2374,6 +2370,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
     return `
       <tr>
         <td>${escapeHtml(row.sessionKey || '-')}</td>
+        <td>${escapeHtml(row.eventName || '-')}</td>
         <td>${escapeHtml(row.date || '-')}</td>
         <td>${getDashboardStatusChipMarkup(row.status || 'future')}</td>
         <td>
@@ -2389,6 +2386,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
       <thead>
         <tr>
           <th>회차</th>
+          <th>행사명</th>
           <th>일시</th>
           <th>상태</th>
           <th>출석시각</th>
@@ -2400,7 +2398,7 @@ function renderAttendanceDashboardMemberHistoryModal(payload, memberInfo) {
   modal.style.display = 'flex';
 }
 
-async function openAttendanceDashboardMemberHistoryModal(encodedMemberKey) {
+async function openAdminAttendanceHistory(encodedMemberKey, encodedName, encodedSeasonLabel) {
   const memberKey = decodeURIComponent(String(encodedMemberKey || ''));
   if (!memberKey) return;
 
@@ -2410,14 +2408,14 @@ async function openAttendanceDashboardMemberHistoryModal(encodedMemberKey) {
   const body = document.getElementById('dashboardMemberHistoryModalBody');
   const memberInfo = getAttendanceDashboardQuickFilterMemberByKey(memberKey) || {
     memberKey,
-    name: memberKey,
-    seasonLabel: '-'
+    name: decodeURIComponent(String(encodedName || '')) || memberKey,
+    seasonLabel: decodeURIComponent(String(encodedSeasonLabel || '')) || '-'
   };
   if (!modal || !title || !summary || !body) return;
 
   attendanceDashboardMemberHistoryModalState = { memberKey };
   title.textContent = `출석일 확인: ${(memberInfo.seasonLabel || '-')} ${(memberInfo.name || memberKey)}`.trim();
-  summary.textContent = '현재 대시보드 필터 기준 출석 기록을 불러오는 중입니다.';
+  summary.textContent = '전체 시즌 출석 기록을 불러오는 중입니다.';
   body.innerHTML = '<p class="info-text">출석 기록을 불러오는 중입니다...</p>';
   modal.style.display = 'flex';
 
@@ -2436,12 +2434,12 @@ async function openAttendanceDashboardMemberHistoryModal(encodedMemberKey) {
       return;
     }
 
-    const params = Object.assign({
+    const params = {
       adminToken: adminToken,
       season: season,
       drillType: 'member',
       key: memberKey
-    }, getAttendanceDashboardApiFilterParams());
+    };
 
     const response = await CloudClubApi.call('attendanceDashboardDrilldown', params);
     attendanceDashboardMemberHistoryCache[cacheKey] = {
@@ -2458,6 +2456,24 @@ async function openAttendanceDashboardMemberHistoryModal(encodedMemberKey) {
       message: getDisplayErrorMessage(error, '출석 기록 조회 실패')
     }, memberInfo);
   }
+}
+
+function openAttendanceDashboardMemberHistoryModal(encodedMemberKey) {
+  return openAdminAttendanceHistory(encodedMemberKey, '', '');
+}
+
+function openAdminAttendanceHistoryFromRanking(encodedName, encodedSeasonLabel) {
+  const name = decodeURIComponent(String(encodedName || ''));
+  const seasonLabel = decodeURIComponent(String(encodedSeasonLabel || ''));
+  const member = getAttendanceDashboardQuickFilterMembers().find(item => {
+    return String(item && item.name || '') === name
+      && String(item && item.seasonLabel || '') === seasonLabel;
+  });
+  if (!member) {
+    showToast('<i class="fas fa-circle-exclamation"></i> 대시보드를 새로고침한 뒤 다시 시도해 주세요.', false);
+    return;
+  }
+  openAdminAttendanceHistory(encodeURIComponent(member.memberKey || ''), encodedName, encodedSeasonLabel);
 }
 
 function buildMemberTrendCacheKey() {

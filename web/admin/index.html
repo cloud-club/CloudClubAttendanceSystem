@@ -607,6 +607,26 @@
       background: linear-gradient(45deg, #4b5563, #6b7280);
       box-shadow: 0 6px 20px rgba(107, 114, 128, 0.4);
     }
+
+    .table-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 32px;
+      padding: 4px 8px;
+      border: 1px solid rgba(96, 165, 250, 0.32);
+      border-radius: 8px;
+      color: #bfdbfe;
+      background: rgba(96, 165, 250, 0.08);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .table-link-btn:hover,
+    .table-link-btn:focus-visible {
+      border-color: rgba(96, 165, 250, 0.72);
+      background: rgba(96, 165, 250, 0.16);
+    }
     
     /* Status Messages */
     #result, #statusResult {
@@ -5843,7 +5863,7 @@
   <div id="dashboardMemberHistoryModal" class="modal-backdrop">
     <div class="modal-panel dashboard-member-history-modal">
       <h3 id="dashboardMemberHistoryModalTitle">출석일 확인</h3>
-      <p id="dashboardMemberHistoryModalSummary">현재 대시보드 필터 기준 회차만 표시합니다.</p>
+      <p id="dashboardMemberHistoryModalSummary">전체 시즌 회차를 표시합니다.</p>
       <div class="dashboard-table-wrap" id="dashboardMemberHistoryModalBody">
         <p class="info-text">표시할 출석 기록이 없습니다.</p>
       </div>

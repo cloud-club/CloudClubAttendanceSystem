@@ -7,6 +7,10 @@
 - 기존 일정도 수정 모달을 열어 행사명을 추가할 수 있습니다.
 - GitHub Pages를 먼저 배포해도 기존 기능은 유지되지만, 행사명 저장은 변경된 Apps Script를 수동 배포한 뒤부터 반영됩니다.
 
+## 공용 출석일 확인
+
+관리자 화면의 출석하기 회원 목록, 출석현황 그래프 드릴다운·순위, 유고 처리 회원 셀, 수료 판정 회원 셀은 같은 `출석일 확인` 모달을 사용합니다. 이 모달은 대시보드의 현재 필터와 관계없이 선택한 시즌 전체 회차를 보여 주며 행사명, 날짜, 출석 상태, 출석 시각, 관리자 Note를 함께 표시합니다.
+
 > 문서 링크: [docs/Wiki/02_Admin_Side_Guide.md](./02_Admin_Side_Guide.md) | [GitHub](https://github.com/cloud-club/CloudClubAttendanceSystem/blob/gh-pages/docs/Wiki/02_Admin_Side_Guide.md)
 
 ## 빠른 흐름도

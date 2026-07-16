@@ -98,7 +98,10 @@ function renderGraduationTable(report) {
   const visibleMembers = members.slice(0, graduationVisibleCount);
   const rows = visibleMembers.map(member => `
     <tr>
-      <td><span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>${escapeHtml(member.name)}</td>
+      <td>
+        <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>${escapeHtml(member.name)}
+        <button type="button" class="table-link-btn" onclick="openAdminAttendanceHistory('${encodeURIComponent(member.phone || '')}', '${encodeURIComponent(member.name || '')}', '${encodeURIComponent(member.seasonLabel || member.grade || '-')}')">출석일 확인</button>
+      </td>
       <td>${escapeHtml(member.phone)}</td>
       <td>${member.attendanceRate}%</td>
       <td>${member.attendedCount}</td>
@@ -323,6 +326,7 @@ function buildGraduationMatrixRowHtml(member, sessions) {
       <td class="sticky-col">
         <span class="grade-badge">${escapeHtml(member.seasonLabel || member.grade || '-')}</span>${escapeHtml(member.name)}<br>
         <span style="color:#93bbfc; font-size:11px;">${escapeHtml(member.phone)}</span>
+        <button type="button" class="table-link-btn" onclick="openAdminAttendanceHistory('${encodeURIComponent(member.phone || '')}', '${encodeURIComponent(member.name || '')}', '${encodeURIComponent(member.seasonLabel || member.grade || '-')}')">출석일 확인</button>
       </td>
       ${cells}
     </tr>

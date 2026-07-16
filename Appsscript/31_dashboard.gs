@@ -683,6 +683,7 @@ function getAttendanceDashboardDrilldown(params) {
 
         rows.push({
           sessionKey: session.sessionKey,
+          eventName: session.eventName || '',
           date: formatDateTimeMinute(session.startTime),
           status: status,
           attendTime: attendTime,

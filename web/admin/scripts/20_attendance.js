@@ -206,7 +206,11 @@ function displayRankings(response) {
     tableHTML += `
       <tr>
         <td>${rankDisplay}</td>
-        <td><span class="grade-badge">${escapeHtml(item.seasonLabel || item.grade || '-')}</span>${escapeHtml(item.name)}</td>
+        <td>
+          <button type="button" class="table-link-btn" onclick="openAdminAttendanceHistoryFromRanking('${encodeURIComponent(item.name || '')}', '${encodeURIComponent(item.seasonLabel || item.grade || '-')}')">
+            <span class="grade-badge">${escapeHtml(item.seasonLabel || item.grade || '-')}</span>${escapeHtml(item.name)}
+          </button>
+        </td>
         <td><span class="highlight-text">${item.attendanceRate}%</span></td>
         <td>${item.attendedCount}/${item.totalSessions}</td>
         <td>${avgTimeDisplay}</td>
@@ -1249,6 +1253,12 @@ function buildManualMemberRowHtml(member) {
         </div>
       </div>
       <div class="manual-member-actions">
+        <button type="button"
+                class="manual-member-comment-toggle"
+                onclick="openAdminAttendanceHistory('${encodedPhone}', '${encodeURIComponent(member.name || '')}', '${encodeURIComponent(member.seasonLabel || member.grade || '-')}')"
+                aria-label="${escapeHtml(member.name)} 출석일 확인">
+          출석일 확인
+        </button>
         <button type="button"
                 class="manual-member-comment-toggle"
                 onclick="toggleManualMemberComment('${encodedPhone}')"
