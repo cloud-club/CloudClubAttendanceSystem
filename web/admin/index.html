@@ -627,6 +627,17 @@
       border-color: rgba(96, 165, 250, 0.72);
       background: rgba(96, 165, 250, 0.16);
     }
+
+    .dashboard-collapsible-summary { list-style: none; cursor: pointer; }
+    .dashboard-collapsible-summary::-webkit-details-marker { display: none; }
+    .dashboard-collapsible-chevron { margin-left: auto; transition: transform 180ms ease; }
+    .dashboard-collapsible:not([open]) .dashboard-collapsible-chevron { transform: rotate(-90deg); }
+    .status-inline-result {
+      display: none;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+    }
     
     /* Status Messages */
     #result, #statusResult {
@@ -4951,11 +4962,12 @@
     
     <!-- 출석현황 탭 -->
     <div id="status" class="tab-content" role="tabpanel" aria-labelledby="adminTabStatus" aria-hidden="true" tabindex="0">
-      <div class="card">
-        <div class="card-header">
+      <details class="card dashboard-collapsible" open>
+        <summary class="card-header dashboard-collapsible-summary">
           <i class="fas fa-chart-pie card-icon"></i>
           <h2 class="card-title">출석 현황 대시보드</h2>
-        </div>
+          <i class="fas fa-chevron-down dashboard-collapsible-chevron" aria-hidden="true"></i>
+        </summary>
         <p class="info-text">필터 기준이 KPI/차트/드릴다운/순위에 함께 반영됩니다. 회원 직군(현직자/학생)은 데이터 준비 후 확장 예정입니다. <code>TODO(member_role)</code></p>
 
         <div class="dashboard-toolbar">
@@ -5083,6 +5095,10 @@
               </button>
             </div>
           </div>
+          <label class="manual-filter-checkbox" for="dashboardShowEventNamesInput">
+            <input id="dashboardShowEventNamesInput" type="checkbox" onchange="toggleAttendanceDashboardEventNames(this.checked)">
+            행사명과 함께 보기
+          </label>
           <p class="dashboard-meta-text" id="dashboardMetaText">필터를 적용하면 대시보드가 갱신됩니다.</p>
         </div>
 
@@ -5175,7 +5191,7 @@
             <p class="info-text">활성 그래프 조각이 없습니다. 상태 비율은 랭킹, 나머지 3개 그래프는 멤버 목록으로 바로 확인할 수 있습니다.</p>
           </div>
         </div>
-      </div>
+      </details>
 
       <div class="status-secondary-row">
         <div class="card status-lookup-card">
@@ -5201,6 +5217,7 @@
               <span>조회</span>
             </button>
           </form>
+          <div id="statusResult" class="status-inline-result" aria-live="polite"></div>
         </div>
 
         <!-- 출석률 순위 대시보드 -->
@@ -5216,7 +5233,6 @@
         </div>
       </div>
 
-      <div id="statusResult"></div>
     </div>
 
     <!-- 일정 관리 탭 -->

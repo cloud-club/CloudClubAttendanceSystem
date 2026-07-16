@@ -464,6 +464,7 @@ function getAttendanceDashboardSummary(params) {
         statusSessionKeys: statusSessionKeys,
         availableSessions: sessions.map(session => ({
           sessionKey: session.sessionKey,
+          eventName: session.eventName || '',
           date: formatDateTimeMinute(session.startTime),
           dateKey: formatDateKey(session.startTime),
           isClosed: session.lateDeadline <= now,

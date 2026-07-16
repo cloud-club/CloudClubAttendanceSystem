@@ -788,7 +788,7 @@ function handleStatusResponse(response) {
     });
 
     statusResult.innerHTML = `
-      <div class="card">
+      <div class="status-inline-summary">
         <div class="attendance-info">
           <h3><span class="grade-badge">${escapeHtml(data.seasonLabel || data.grade || '-')}</span>${escapeHtml(data.name)}님 출석 현황</h3>
           <div class="attendance-stats">

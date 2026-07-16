@@ -1923,7 +1923,7 @@ function renderAttendanceDashboardEventRateChart(payload) {
     return;
   }
 
-  const labels = rows.map(row => row.sessionKey);
+  const labels = rows.map(row => formatAttendanceDashboardSessionAxisLabel(row.sessionKey));
   const rates = rows.map(row => Number(row.attendanceRate || 0));
   const chartType = attendanceDashboardState.chartType || 'bar';
 
@@ -2009,7 +2009,7 @@ function renderAttendanceDashboardEventStatusChart(payload) {
     return;
   }
 
-  const labels = rows.map(row => row.sessionKey);
+  const labels = rows.map(row => formatAttendanceDashboardSessionAxisLabel(row.sessionKey));
   const datasets = [
     { label: '출석', statusKey: 'on_time', data: rows.map(r => Number(r.onTimeCount || 0)), backgroundColor: 'rgba(74, 222, 128, 0.75)', borderColor: '#4ade80', borderWidth: 1, stack: 'status' },
     { label: '지각', statusKey: 'late', data: rows.map(r => Number(r.lateCount || 0)), backgroundColor: 'rgba(251, 191, 36, 0.75)', borderColor: '#fbbf24', borderWidth: 1, stack: 'status' },
@@ -2283,6 +2283,22 @@ function getAttendanceDashboardSessionMetaByKey(sessionKey, payload) {
     ? sourcePayload.meta.availableSessions
     : [];
   return availableSessions.find(item => String(item && item.sessionKey || '').trim() === targetKey) || null;
+}
+
+function formatAttendanceDashboardSessionAxisLabel(sessionKey) {
+  const key = String(sessionKey || '').trim();
+  if (!attendanceDashboardShowEventNames) return key;
+  const meta = getAttendanceDashboardSessionMetaByKey(key);
+  const eventName = String(meta && meta.eventName || '').trim();
+  return eventName ? `${key} · ${eventName}` : key;
+}
+
+function toggleAttendanceDashboardEventNames(enabled) {
+  attendanceDashboardShowEventNames = !!enabled;
+  if (!attendanceDashboardPayload) return;
+  renderAttendanceDashboardEventRateChart(attendanceDashboardPayload);
+  renderAttendanceDashboardEventStatusChart(attendanceDashboardPayload);
+  renderAttendanceDashboardMemberTrendChart();
 }
 
 function buildAttendanceDashboardEventStatusFilter(sessionKey, statusKey, matchedCount) {
@@ -2560,7 +2576,7 @@ async function renderAttendanceDashboardMemberTrendChart() {
   }
 
   const rows = series.rows || [];
-  const labels = rows.map(row => row.sessionKey);
+  const labels = rows.map(row => formatAttendanceDashboardSessionAxisLabel(row.sessionKey));
   const datasets = [{
     label: getAttendanceDashboardMemberTrendLabel(),
     data: rows.map(row => (

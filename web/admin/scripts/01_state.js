@@ -97,6 +97,7 @@ let attendanceDashboardSessionPickerLastOptionsRef = null;
 let attendanceDashboardMemberPickerLastOptionsRef = null;
 let attendanceDashboardLastRenderSignature = '';
 let attendanceDashboardPendingMemberTrendRender = false;
+let attendanceDashboardShowEventNames = false;
 let attendanceDashboardRefreshInterval = null;
 let attendanceDashboardEventStatusRequestSeq = 0;
 let attendanceDashboardState = {
