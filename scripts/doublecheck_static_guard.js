@@ -8,7 +8,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const studentV63ApiVersion = '2026.07.14-v6.3';
 const studentV63ReasonCapability = 'studentAttendanceReasonV1';
 const studentV63ReasonRuntimeCheck = 'extractStudentDisplayReason';
-const studentV63CacheBust = '../student.js?v=20260714-ui6';
+const studentV63CacheBust = '../student.js?v=20260716-ui7';
 const studentStudyDisclaimer = '이 화면에는 스터디 출석이 반영되지 않습니다. 최종 수료 여부는 스터디 출석률에 따라 달라질 수 있습니다.';
 const studentV63ManualHeading = '학생 v6.3 수동 동기화 파일';
 const studentV63ManualFiles = [
@@ -826,11 +826,11 @@ function checkStudentV63History() {
   });
 }
 
-function checkStudentThreeTabNavigation() {
+function checkStudentFourTabNavigation() {
   const studentHtml = readFile('web/student/latest/index.html');
   const studentJs = readFile('web/student/student.js');
 
-  ['attend', 'status', 'completion'].forEach((tabName) => {
+  ['attend', 'status', 'schedule', 'completion'].forEach((tabName) => {
     assertRegex(
       studentHtml,
       new RegExp(`role="tab"[^>]*data-student-tab="${tabName}"`),
@@ -1400,7 +1400,7 @@ function checkStudentLayoutStructuralFixtures() {
   const primaryGrid = findHtmlElementByClass(source, 'div', 'attendance-primary-grid');
   const actionCard = findHtmlElementByClass(primaryGrid.outerHtml, 'div', 'attendance-action-card').outerHtml;
   const statusResult = findHtmlElementByClass(source, 'div', 'compact-result-region');
-  const reasonDialog = findHtmlElementByClass(source, 'div', 'student-attendance-detail-dialog');
+  const reasonDialog = findHtmlElementById(source, 'studentAttendanceDetailDialog');
   if (!/\bid=["']statusResult["']/.test(statusResult.openingTag)) {
     throw new Error('mutation fixture용 statusResult를 찾지 못했습니다.');
   }
@@ -1798,7 +1798,7 @@ const checks = [
   ['학생 v6.3 디자인·사용 문서', checkStudentV63DesignAndUserDocs],
   ['학생 v6.3 수동 동기화 handoff', checkStudentV63ManualHandoff],
   ['학생 v6.3 History', checkStudentV63History],
-  ['학생 3탭·모바일 메뉴 wiring', checkStudentThreeTabNavigation],
+  ['학생 4탭·모바일 메뉴 wiring', checkStudentFourTabNavigation],
   ['학생 데스크톱 탭 44px 대상', checkStudentDesktopTabTouchTarget],
   ['학생 현황 첫 화면 병렬 구성', checkStudentStatusFirstViewportComposition],
   ['학생 drawer 닫기 버튼 표면', checkStudentDrawerCloseControlSurface],

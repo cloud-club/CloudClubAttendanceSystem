@@ -210,6 +210,42 @@ function getScheduleList(seasonName) {
   }
 }
 
+function getStudentSchedule(seasonName) {
+  try {
+    const info = getRequestedSeasonSheetInfo(seasonName);
+    const variableConfig = getVariableConfig();
+    const sessions = collectSessionsFromSheet(info.sheet, { variableConfig: variableConfig, createMissingMeta: false });
+    const requiredPositions = parseRequiredSessionPositions(variableConfig.required_session_positions);
+
+    return {
+      success: true,
+      seasonAlias: info.seasonAlias,
+      items: sessions.map((session, index) => ({
+        sessionKey: session.sessionKey,
+        eventName: session.eventName || '',
+        date: formatDateTimeMinute(session.startTime),
+        endTime: formatDateTimeMinute(session.lateDeadline),
+        locationRequired: !!session.locationRequired,
+        locationNote: session.locationNote || '',
+        mapsUrl: session.googlePlaceId
+          ? `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(session.googlePlaceId)}`
+          : '',
+        requiredPosition: index === 0 && requiredPositions.indexOf('first') >= 0
+          ? 'first'
+          : (index === sessions.length - 1 && requiredPositions.indexOf('last') >= 0 ? 'last' : '')
+      })),
+      completionPolicy: {
+        requiredAttendanceCount: Math.max(0, Number(variableConfig.required_attendance_count || 0)),
+        lateToAbsenceRatio: Math.max(1, Number(variableConfig.late_to_absence_ratio || 1)),
+        maxAbsenceEquivalent: variableConfig.max_absence_equivalent,
+        requiredSessionPositions: requiredPositions
+      }
+    };
+  } catch (error) {
+    return { success: false, message: error.message || '학생 일정 조회 중 오류가 발생했습니다.' };
+  }
+}
+
 function saveSchedule(params) {
   try {
     const info = getRequestedSeasonSheetInfo(params.season || '');

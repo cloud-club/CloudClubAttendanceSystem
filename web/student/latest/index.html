@@ -1871,6 +1871,10 @@
           <i class="fas fa-chart-line" aria-hidden="true"></i>
           <span>출석 현황</span>
         </button>
+        <button type="button" class="mobile-drawer-button" data-student-tab="schedule">
+          <i class="fas fa-calendar-days" aria-hidden="true"></i>
+          <span>행사 일정</span>
+        </button>
         <button type="button" class="mobile-drawer-button" data-student-tab="completion">
           <i class="fas fa-graduation-cap" aria-hidden="true"></i>
           <span>수료 조건 확인</span>
@@ -1886,6 +1890,10 @@
       <button type="button" id="studentTabStatus" class="tab-button" role="tab" aria-selected="false" aria-controls="status" data-student-tab="status" tabindex="-1">
         <i class="fas fa-chart-line"></i>
         <span>출석 현황</span>
+      </button>
+      <button type="button" id="studentTabSchedule" class="tab-button" role="tab" aria-selected="false" aria-controls="schedule" data-student-tab="schedule" tabindex="-1">
+        <i class="fas fa-calendar-days"></i>
+        <span>행사 일정</span>
       </button>
       <button type="button" id="studentTabCompletion" class="tab-button" role="tab" aria-selected="false" aria-controls="completion" data-student-tab="completion" tabindex="-1">
         <i class="fas fa-graduation-cap"></i>
@@ -1974,12 +1982,27 @@
       </div>
     </div>
 
+    <div id="schedule" class="tab-content tab-panel" role="tabpanel" aria-labelledby="studentTabSchedule" aria-hidden="true">
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-calendar-days card-icon"></i>
+          <h2 class="card-title">행사 일정 및 위치</h2>
+        </div>
+        <p class="info-text">첫 행사와 마지막 행사는 수료 필수 회차로 표시됩니다.</p>
+        <div id="studentScheduleList" class="attendance-details"><p class="info-text">탭을 열면 일정을 불러옵니다.</p></div>
+      </div>
+    </div>
+
     <div id="completion" class="tab-content tab-panel" role="tabpanel" aria-labelledby="studentTabCompletion" aria-hidden="true">
       <div class="card compact-query-card">
         <div class="card-header">
           <i class="fas fa-graduation-cap card-icon"></i>
           <h2 class="card-title">수료 조건 확인</h2>
         </div>
+        <button type="button" class="btn btn-secondary" onclick="openCompletionPolicyDialog()">
+          <i class="fas fa-circle-info"></i>
+          <span>출석 조항 확인하기</span>
+        </button>
         <form class="compact-query-form" onsubmit="checkCompletionStatus(event)" style="text-align: center;">
           <div class="form-group compact-query-field">
             <label for="completionPhoneInput" class="form-label">전화번호 입력</label>
@@ -2014,6 +2037,16 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="completionPolicyDialog" class="student-attendance-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="completionPolicyDialogTitle" aria-hidden="true" inert>
+    <section class="student-attendance-detail-panel">
+      <div class="student-attendance-detail-heading">
+        <h2 id="completionPolicyDialogTitle">Cloud Club 수료 조건</h2>
+        <button type="button" class="student-attendance-detail-close" aria-label="수료 조건 닫기" onclick="closeCompletionPolicyDialog()"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div id="completionPolicyDialogBody" class="student-attendance-detail-description">일정을 불러오면 현재 시즌 기준을 표시합니다.</div>
+    </section>
   </div>
 
   <div id="studentAttendanceDetailDialog"
@@ -2064,6 +2097,6 @@
   <script src="../../shared/config.js"></script>
   <script src="../../shared/api-jsonp.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="../student.js?v=20260714-ui6"></script>
+  <script src="../student.js?v=20260716-ui7"></script>
 </body>
 </html>

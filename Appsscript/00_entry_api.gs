@@ -228,6 +228,11 @@ function handleApiRequest(params) {
         data = getSeasonAttendanceRanking(resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
         break;
 
+      case 'studentSchedule':
+        assertRuntimeIntegrity();
+        data = getStudentSchedule(resolvePublicSeasonAccess(params, ensureAdmin).seasonAlias);
+        break;
+
       case 'latestSeason':
         data = getLatestSeasonInfo();
         break;
@@ -533,6 +538,7 @@ function getApiInfo() {
       locationHeaderPolicyV1: true,
       studentInsightsV1: true,
       studentAttendanceReasonV1: true,
+      studentScheduleV1: true,
       googlePlacesServerConfigured: isGooglePlacesServerConfigured()
     },
     scriptTimeZone: Session.getScriptTimeZone(),

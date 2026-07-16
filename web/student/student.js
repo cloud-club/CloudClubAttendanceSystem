@@ -1114,6 +1114,64 @@ function openTab(tabName) {
   if (tabName !== 'status') resetStudentStatusResult();
   if (tabName !== 'completion') invalidateStudentCompletionRequest();
   if (tabName === 'status' && currentSeason) loadRankings();
+  if (tabName === 'schedule' && currentSeason) loadStudentSchedule();
+}
+
+let studentSchedulePayload = null;
+
+function renderStudentSchedule(payload) {
+  const wrap = document.getElementById('studentScheduleList');
+  if (!wrap) return;
+  if (!payload || !payload.success) {
+    wrap.innerHTML = `<div class="upgrade-notice">${escapeHtml(payload && payload.message || 'Apps Script 업데이트 후 행사 일정을 확인할 수 있습니다.')}</div>`;
+    return;
+  }
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  wrap.innerHTML = items.length ? items.map(item => {
+    const requiredLabel = item.requiredPosition === 'first'
+      ? '<span class="grade-badge">첫 행사 · 필수</span>'
+      : (item.requiredPosition === 'last' ? '<span class="grade-badge">마지막 행사 · 필수</span>' : '');
+    const mapLink = item.mapsUrl
+      ? `<a class="btn btn-secondary" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener noreferrer">지도에서 위치 확인</a>`
+      : '';
+    return `<article class="attendance-item">
+      <div class="attendance-date">${requiredLabel}<strong>${escapeHtml(item.eventName || item.sessionKey || '행사')}</strong><span>${escapeHtml(item.date || '-')}</span></div>
+      <div class="attendance-status future"><span>${escapeHtml(item.locationNote || (item.locationRequired ? '지정 장소' : '위치 제한 없음'))}</span>${mapLink}</div>
+    </article>`;
+  }).join('') : '<p class="info-text">등록된 행사가 없습니다.</p>';
+}
+
+async function loadStudentSchedule() {
+  const wrap = document.getElementById('studentScheduleList');
+  if (wrap) wrap.innerHTML = '<div class="loader"></div>';
+  try {
+    studentSchedulePayload = await callStudentApi('studentSchedule', buildSeasonParams());
+    renderStudentSchedule(studentSchedulePayload);
+  } catch (error) {
+    studentSchedulePayload = null;
+    renderStudentSchedule({ success: false, message: 'Apps Script 업데이트 후 행사 일정을 확인할 수 있습니다.' });
+  }
+}
+
+function openCompletionPolicyDialog() {
+  const dialog = document.getElementById('completionPolicyDialog');
+  const body = document.getElementById('completionPolicyDialogBody');
+  if (!dialog || !body) return;
+  const policy = studentSchedulePayload && studentSchedulePayload.completionPolicy;
+  body.innerHTML = policy
+    ? `<p>최소 출석 ${Number(policy.requiredAttendanceCount || 0)}회, 지각 ${Number(policy.lateToAbsenceRatio || 1)}회는 결석 1회로 환산합니다.</p><p>첫 행사와 마지막 행사는 필수 참여 회차입니다. 유고는 별도 운영 기준에 따라 처리됩니다.</p>`
+    : '<p>현재 시즌의 정확한 수료 기준은 행사 일정을 불러온 뒤 확인할 수 있습니다. 첫 행사와 마지막 행사는 필수 참여 회차입니다.</p>';
+  dialog.removeAttribute('inert');
+  dialog.setAttribute('aria-hidden', 'false');
+  dialog.classList.add('is-open');
+}
+
+function closeCompletionPolicyDialog() {
+  const dialog = document.getElementById('completionPolicyDialog');
+  if (!dialog) return;
+  dialog.classList.remove('is-open');
+  dialog.setAttribute('aria-hidden', 'true');
+  dialog.setAttribute('inert', '');
 }
 
 function initializeStudentNavigation() {
